@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useTenant } from '../contexts/TenantContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Building2, Store, ArrowRight } from 'lucide-react';
-import { companiesApi, shopsApi, segmentsApi } from '../lib/api';
-import { Segment } from '../../shared/types';
+import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
+import { Segment, Company } from '../../shared/types';
 
 export default function Onboarding() {
   const { refreshCompany, refreshShops } = useTenant();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -18,10 +20,12 @@ export default function Onboarding() {
     cnpj: '',
   });
 
+  const [createdCompany, setCreatedCompany] = useState<Company | null>(null);
+
   const [shopData, setShopData] = useState({
     name: '',
     slug: '',
-    segment_id: 0,
+    segment_id: '',
     phone: '',
     address: '',
   });
@@ -34,14 +38,30 @@ export default function Onboarding() {
 
   const handleCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
+    
     setError('');
     setLoading(true);
 
     try {
-      await companiesApi.create(companyData);
+      const company = await companiesApi.create({
+        ...companyData,
+        owner_id: user.id,
+        plan_status: 'trial',
+        plan_type: 'empresarial'
+      }) as Company;
+      
+      setCreatedCompany(company);
+
+      await authApi.updateProfile(user.id, {
+        company_id: company.id,
+        role: 'dono'
+      });
+
       await refreshCompany();
       setStep(2);
     } catch (err: any) {
+      console.error(err);
       setError(err.message || 'Erro ao criar empresa');
     } finally {
       setLoading(false);
@@ -50,14 +70,23 @@ export default function Onboarding() {
 
   const handleShopSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!createdCompany || !user) return;
+
     setError('');
     setLoading(true);
 
     try {
-      await shopsApi.create(shopData);
+      await shopsApi.create({
+        ...shopData,
+        company_id: createdCompany.id,
+        manager_id: user.id,
+        is_active: true
+      });
+      
       await refreshShops();
       navigate('/dashboard');
     } catch (err: any) {
+      console.error(err);
       setError(err.message || 'Erro ao criar unidade');
     } finally {
       setLoading(false);
@@ -77,7 +106,6 @@ export default function Onboarding() {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
-          {/* Progress */}
           <div className="flex items-center justify-center mb-8">
             <div className={`flex items-center ${step === 1 ? 'text-purple-400' : 'text-green-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 1 ? 'bg-purple-500' : 'bg-green-500'}`}>
@@ -96,7 +124,6 @@ export default function Onboarding() {
             </div>
           </div>
 
-          {/* Step 1: Company */}
           {step === 1 && (
             <div>
               <div className="flex items-center justify-center mb-6">
@@ -163,7 +190,6 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* Step 2: Shop */}
           {step === 2 && (
             <div>
               <div className="flex items-center justify-center mb-6">
@@ -192,7 +218,7 @@ export default function Onboarding() {
                   </label>
                   <select
                     value={shopData.segment_id}
-                    onChange={(e) => setShopData({ ...shopData, segment_id: parseInt(e.target.value) })}
+                    onChange={(e) => setShopData({ ...shopData, segment_id: e.target.value })}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                     required
                   >

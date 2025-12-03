@@ -1,56 +1,41 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../../shared/types';
-import { authApi } from '../lib/api';
+import { pb } from '../lib/pocketbase';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (data: {
-    email: string;
-    password: string;
-    name: string;
-    phone?: string;
-    role: 'dono' | 'staff' | 'cliente';
-  }) => Promise<void>;
+  register: (data: any) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(pb.authStore.model as User | null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Verificar se há um token salvo
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      authApi
-        .getMe()
-        .then((userData) => {
-          setUser(userData as User);
-        })
-        .catch(() => {
-          localStorage.removeItem('auth_token');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
-      setLoading(false);
-    }
+    const unsubscribe = pb.authStore.onChange((_token, model) => {
+      setUser(model as User | null);
+    });
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await authApi.login(email, password);
-    localStorage.setItem('auth_token', response.token);
-    setUser(response.user);
+    setLoading(true);
+    try {
+      await pb.collection('users').authWithPassword(email, password);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = () => {
-    localStorage.removeItem('auth_token');
-    setUser(null);
+    pb.authStore.clear();
   };
 
   const register = async (data: {
@@ -59,10 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name: string;
     phone?: string;
     role: 'dono' | 'staff' | 'cliente';
+    passwordConfirm: string;
   }) => {
-    const response: any = await authApi.register(data);
-    localStorage.setItem('auth_token', response.token);
-    setUser(response.user);
+    setLoading(true);
+    try {
+      await pb.collection('users').create({
+        ...data,
+        emailVisibility: true,
+      });
+      await pb.collection('users').authWithPassword(data.email, data.password);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -1,139 +1,93 @@
-// API client for backend communication
+import { pb } from './pocketbase';
+import { Company, Shop, Service, Segment } from '../../shared/types';
 
-const API_BASE = '/api';
-
-export class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
-async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const token = localStorage.getItem('auth_token');
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  if (options.headers) {
-    Object.assign(headers, options.headers);
-  }
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
-    throw new ApiError(response.status, error.error || 'Erro na requisição');
-  }
-
-  return response.json();
-}
-
-// Auth
 export const authApi = {
-  register: (data: {
-    email: string;
-    password: string;
-    name: string;
-    phone?: string;
-    role: 'dono' | 'staff' | 'cliente';
-  }) => fetchApi('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  logout: () => {
+    pb.authStore.clear();
+  },
+  
+  register: async (data: any) => {
+    return await pb.collection('users').create(data);
+  },
 
-  login: (email: string, password: string) =>
-    fetchApi<{ user: any; token: string }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }),
+  login: async (email: string, password: string) => {
+    return await pb.collection('users').authWithPassword(email, password);
+  },
 
-  getMe: () => fetchApi('/auth/me'),
+  updateProfile: async (id: string, data: any) => {
+    return await pb.collection('users').update(id, data);
+  }
 };
 
-// Companies
 export const companiesApi = {
-  create: (data: { legal_name: string; cnpj: string }) =>
-    fetchApi('/companies', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  create: async (data: Partial<Company>) => {
+    return await pb.collection('companies').create(data);
+  },
 
-  list: () => fetchApi('/companies'),
+  list: async () => {
+    return await pb.collection('companies').getFullList<Company>();
+  },
 
-  getById: (id: number) => fetchApi(`/companies/${id}`),
+  getById: async (id: string) => {
+    return await pb.collection('companies').getOne<Company>(id);
+  },
+  
+  update: async (id: string, data: Partial<Company>) => {
+    return await pb.collection('companies').update<Company>(id, data);
+  }
 };
 
-// Shops
 export const shopsApi = {
-  create: (data: {
-    name: string;
-    slug: string;
-    segment_id: number;
-    address?: string;
-    phone?: string;
-    description?: string;
-  }) =>
-    fetchApi('/shops', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  create: async (data: Partial<Shop>) => {
+    return await pb.collection('shops').create(data);
+  },
 
-  list: () => fetchApi('/shops'),
+  list: async () => {
+    return await pb.collection('shops').getFullList<Shop>();
+  },
 
-  getById: (id: number) => fetchApi(`/shops/${id}`),
+  getById: async (id: string) => {
+    return await pb.collection('shops').getOne<Shop>(id);
+  },
 
-  update: (id: number, data: any) =>
-    fetchApi(`/shops/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  update: async (id: string, data: Partial<Shop>) => {
+    return await pb.collection('shops').update<Shop>(id, data);
+  },
 };
 
-// Services
 export const servicesApi = {
-  create: (data: {
-    name: string;
-    description?: string;
-    price: number;
-    duration: number;
-    category?: string;
-    shop_id: number;
-  }) =>
-    fetchApi('/services', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
+  create: async (data: Partial<Service>) => {
+    return await pb.collection('services').create(data);
+  },
 
-  listByShop: (shopId: number) => fetchApi(`/services/shop/${shopId}`),
+  listByShop: async (shopId: string) => {
+    return await pb.collection('services').getFullList<Service>({
+      filter: `shop_id = "${shopId}"`,
+      sort: 'name'
+    });
+  },
 
-  getById: (id: number) => fetchApi(`/services/${id}`),
+  getById: async (id: string) => {
+    return await pb.collection('services').getOne<Service>(id);
+  },
 
-  update: (id: number, data: any) =>
-    fetchApi(`/services/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
+  update: async (id: string, data: Partial<Service>) => {
+    return await pb.collection('services').update<Service>(id, data);
+  },
 
-  delete: (id: number) =>
-    fetchApi(`/services/${id}`, {
-      method: 'DELETE',
-    }),
+  delete: async (id: string) => {
+    return await pb.collection('services').update(id, { is_active: false });
+  },
 };
 
-// Segments
 export const segmentsApi = {
-  list: () => fetchApi('/segments'),
-  getBySlug: (slug: string) => fetchApi(`/segments/${slug}`),
+  list: async () => {
+    return await pb.collection('segments').getFullList<Segment>({
+      sort: 'name'
+    });
+  },
+  
+  getBySlug: async (slug: string) => {
+    return await pb.collection('segments').getFirstListItem<Segment>(`slug="${slug}"`);
+  },
 };

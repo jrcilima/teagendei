@@ -1,93 +1,80 @@
-// Tipos compartilhados entre frontend e backend
+// Tipos adaptados para o PocketBase (IDs são strings, campos de data são strings ISO)
 
-export interface Company {
-  id: number;
+export interface BaseModel {
+  id: string;
+  created: string;
+  updated: string;
+}
+
+export interface Company extends BaseModel {
   legal_name: string;
   cnpj: string;
   plan_status: 'trial' | 'active' | 'suspended' | 'canceled';
   plan_type: 'empresarial';
   trial_ends?: string;
-  owner_id?: number;
-  created_at: string;
-  updated_at: string;
+  owner_id?: string;
 }
 
-export interface Segment {
-  id: number;
+export interface Segment extends BaseModel {
   name: string;
   slug: string;
   icon_url?: string;
-  theme_colors: string; // JSON
-  terminology: string; // JSON
-  created_at: string;
-  updated_at: string;
+  theme_colors: any; // JSON object no PB
+  terminology: any; // JSON object no PB
 }
 
-export interface Shop {
-  id: number;
+export interface Shop extends BaseModel {
   name: string;
   slug: string;
-  company_id: number;
-  segment_id: number;
-  manager_id?: number;
+  company_id: string;
+  segment_id: string;
+  manager_id?: string;
   logo_url?: string;
   address?: string;
   phone?: string;
   description?: string;
-  business_hours?: string; // JSON
-  accepted_methods?: string; // JSON
+  business_hours?: any; // JSON
+  accepted_methods?: any; // JSON
   pix_key?: string;
   pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria';
   min_advance_time: number;
   max_advance_time: number;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
 }
 
-export interface User {
-  id: number;
+export interface User extends BaseModel {
   email: string;
-  password_hash: string;
   name: string;
   phone?: string;
-  avatar_url?: string;
+  avatar?: string;
   role: 'dono' | 'staff' | 'cliente';
-  company_id?: number;
-  shop_id?: number;
+  company_id?: string;
+  shop_id?: string;
   is_active: boolean;
-  email_verified: boolean;
-  created_at: string;
-  updated_at: string;
+  emailVisibility: boolean;
+  verified: boolean;
 }
 
-export interface Service {
-  id: number;
+export interface Service extends BaseModel {
   name: string;
   description?: string;
   price: number;
   duration: number;
   category?: string;
   is_active: boolean;
-  shop_id: number;
+  shop_id: string;
   required_staff: number;
   buffer_time: number;
-  created_at: string;
-  updated_at: string;
 }
 
-export interface StaffService {
-  id: number;
-  staff_id: number;
-  service_id: number;
+export interface StaffService extends BaseModel {
+  staff_id: string;
+  service_id: string;
   is_active: boolean;
   special_price?: number;
-  created_at: string;
-  updated_at: string;
 }
 
-export interface Appointment {
-  id: number;
+export interface Appointment extends BaseModel {
   start_time: string;
   end_time: string;
   status: 'agendado' | 'confirmado' | 'em_andamento' | 'concluido' | 'cancelado' | 'faltou';
@@ -95,83 +82,51 @@ export interface Appointment {
   payment_method?: 'pix' | 'dinheiro' | 'cartao';
   total_amount: number;
   notes?: string;
-  client_id: number;
-  staff_id: number;
-  service_id: number;
-  shop_id: number;
-  company_id: number;
+  client_id: string;
+  staff_id: string;
+  service_id: string;
+  shop_id: string;
+  company_id: string;
   reminder_sent: boolean;
   confirmation_sent: boolean;
   cancellation_reason?: string;
-  created_at: string;
-  updated_at: string;
+  expand?: {
+    client_id?: User;
+    staff_id?: User;
+    service_id?: Service;
+    shop_id?: Shop;
+  };
 }
 
-export interface BlockedSlot {
-  id: number;
+export interface BlockedSlot extends BaseModel {
   start_time: string;
   end_time: string;
   reason: 'folga' | 'feriado' | 'manutencao' | 'evento';
-  staff_id?: number;
-  shop_id: number;
-  recurring?: string; // JSON
-  created_at: string;
-  updated_at: string;
+  staff_id?: string;
+  shop_id: string;
+  recurring?: any; // JSON
 }
 
-export interface FinancialTransaction {
-  id: number;
+export interface FinancialTransaction extends BaseModel {
   transaction_id: string;
   amount: number;
   type: 'pagamento' | 'reembolso' | 'taxa';
   status: 'pendente' | 'concluido' | 'falhou';
   method?: 'pix' | 'cartao' | 'dinheiro';
   pix_code?: string;
-  metadata?: string; // JSON
-  appointment_id?: number;
-  shop_id: number;
-  client_id: number;
-  created_at: string;
-  updated_at: string;
+  metadata?: any; // JSON
+  appointment_id?: string;
+  shop_id: string;
+  client_id: string;
 }
 
-export interface Notification {
-  id: number;
+export interface Notification extends BaseModel {
   type: 'whatsapp' | 'email' | 'sms' | 'push';
   recipient: string;
   subject?: string;
-  content?: string; // JSON
+  content?: any; // JSON
   status: 'enviado' | 'falhou' | 'pendente';
   sent_at?: string;
   related_id?: string;
   channel?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-// Tipos para temas
-export interface ThemeColors {
-  primary: string;
-  secondary: string;
-  accent: string;
-}
-
-export interface Terminology {
-  professional: string;
-  service: string;
-  client: string;
-}
-
-// Tipos para autenticação
-export interface AuthUser extends User {
-  token?: string;
-}
-
-// Tipos para horários de funcionamento
-export interface BusinessHours {
-  [key: string]: {
-    open: string;
-    close: string;
-    is_open: boolean;
-  };
 }

@@ -26,8 +26,8 @@ export default function Register() {
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('A senha deve ter pelo menos 6 caracteres');
+    if (formData.password.length < 8) {
+      setError('A senha deve ter pelo menos 8 caracteres');
       return;
     }
 
@@ -37,12 +37,12 @@ export default function Register() {
       await register({
         email: formData.email,
         password: formData.password,
+        passwordConfirm: formData.confirmPassword,
         name: formData.name,
         phone: formData.phone || undefined,
         role: formData.role,
       });
       
-      // Redirecionar baseado no role
       if (formData.role === 'dono') {
         navigate('/onboarding');
       } else if (formData.role === 'cliente') {
@@ -51,7 +51,8 @@ export default function Register() {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao criar conta');
+      console.error(err);
+      setError(err.message || 'Erro ao criar conta. Verifique os dados.');
     } finally {
       setLoading(false);
     }
@@ -150,7 +151,7 @@ export default function Register() {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 required
               />
             </div>

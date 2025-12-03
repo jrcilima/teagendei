@@ -21,9 +21,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
 
   const refreshCompany = async () => {
-    if (!user?.company_id) return;
+    if (!user) return;
     try {
-      const companies: any = await companiesApi.list();
+      const companies = await companiesApi.list();
       if (companies.length > 0) {
         setCompany(companies[0]);
       }
@@ -33,12 +33,11 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshShops = async () => {
-    if (!user?.company_id) return;
+    if (!user) return;
     try {
-      const shopsList: any = await shopsApi.list();
+      const shopsList = await shopsApi.list();
       setShops(shopsList);
       
-      // Auto-selecionar a primeira shop se nenhuma estiver selecionada
       if (shopsList.length > 0 && !selectedShop) {
         setSelectedShop(shopsList[0]);
       }
@@ -48,7 +47,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (user?.company_id) {
+    if (user) {
       refreshCompany();
       refreshShops();
     } else {
