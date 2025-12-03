@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -20,9 +20,13 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err: any) {
-  // O PocketBase retorna 'isAbort' se cancelado, ou data com detalhes
-  console.error(err);
-  setError(err?.message || 'Erro ao fazer login. Verifique suas credenciais.');
+      console.error(err);
+      // Friendly error handling
+      if (err?.status === 400) {
+        setError('Email ou senha incorretos.');
+      } else {
+        setError('Ocorreu um erro ao fazer login. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -39,7 +43,7 @@ export default function Login() {
           </div>
           
           <h1 className="text-3xl font-bold text-white text-center mb-2">
-            Bem-vindo ao Teagendei
+            Bem-vindo
           </h1>
           <p className="text-gray-300 text-center mb-8">
             Entre com suas credenciais para continuar
@@ -47,7 +51,8 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm">
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
                 {error}
               </div>
             )}
@@ -103,10 +108,6 @@ export default function Login() {
             </p>
           </div>
         </div>
-
-        <p className="text-gray-400 text-center mt-8 text-sm">
-          Plataforma SaaS para gestão de agendamentos
-        </p>
       </div>
     </div>
   );

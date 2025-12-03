@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Store, ArrowRight } from 'lucide-react';
+import { Building2, Store, ArrowRight, Loader2 } from 'lucide-react';
 import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
 import { Segment, Company } from '../../shared/types';
 
@@ -31,9 +31,10 @@ export default function Onboarding() {
   });
 
   useEffect(() => {
+    // Fetch segments on load
     segmentsApi.list().then((data: any) => {
       setSegments(data);
-    });
+    }).catch(console.error);
   }, []);
 
   const handleCompanySubmit = async (e: React.FormEvent) => {
@@ -44,6 +45,7 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
+      // Create company
       const company = await companiesApi.create({
         ...companyData,
         owner_id: user.id,
@@ -53,16 +55,18 @@ export default function Onboarding() {
       
       setCreatedCompany(company);
 
+      // Update user profile to link company
       await authApi.updateProfile(user.id, {
         company_id: company.id,
         role: 'dono'
       });
 
+      // Update context
       await refreshCompany();
       setStep(2);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Erro ao criar empresa');
+      setError(err.message || 'Erro ao criar empresa. Verifique os dados.');
     } finally {
       setLoading(false);
     }
@@ -87,7 +91,7 @@ export default function Onboarding() {
       navigate('/dashboard');
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Erro ao criar unidade');
+      setError(err.message || 'Erro ao criar unidade. Tente um slug diferente.');
     } finally {
       setLoading(false);
     }
@@ -108,7 +112,7 @@ export default function Onboarding() {
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
           <div className="flex items-center justify-center mb-8">
             <div className={`flex items-center ${step === 1 ? 'text-purple-400' : 'text-green-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 1 ? 'bg-purple-500' : 'bg-green-500'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 1 ? 'bg-purple-500 text-white' : 'bg-green-500 text-white'}`}>
                 {step === 1 ? '1' : '✓'}
               </div>
               <span className="ml-2 font-medium">Empresa</span>
@@ -117,7 +121,7 @@ export default function Onboarding() {
             <div className="w-20 h-0.5 bg-white/20 mx-4"></div>
             
             <div className={`flex items-center ${step === 2 ? 'text-purple-400' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 2 ? 'bg-purple-500' : 'bg-white/20'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 2 ? 'bg-purple-500 text-white' : 'bg-white/20 text-gray-500'}`}>
                 2
               </div>
               <span className="ml-2 font-medium">Unidade</span>
@@ -183,8 +187,7 @@ export default function Onboarding() {
                   disabled={loading}
                   className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {loading ? 'Criando...' : 'Continuar'}
-                  <ArrowRight className="w-5 h-5" />
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Continuar <ArrowRight className="w-5 h-5" /></>}
                 </button>
               </form>
             </div>
@@ -201,30 +204,27 @@ export default function Onboarding() {
               <h2 className="text-2xl font-bold text-white text-center mb-2">
                 Cadastre sua Primeira Unidade
               </h2>
-              <p className="text-gray-300 text-center mb-8">
-                Agora vamos configurar seu estabelecimento
-              </p>
-
+              
               <form onSubmit={handleShopSubmit} className="space-y-6">
                 {error && (
                   <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm">
                     {error}
                   </div>
                 )}
-
-                <div>
+                
+                 <div>
                   <label className="block text-sm font-medium text-gray-200 mb-2">
                     Segmento
                   </label>
                   <select
                     value={shopData.segment_id}
                     onChange={(e) => setShopData({ ...shopData, segment_id: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 [&>option]:text-black"
                     required
                   >
                     <option value="">Selecione...</option>
                     {segments.map(segment => (
-                      <option key={segment.id} value={segment.id} className="bg-slate-800">
+                      <option key={segment.id} value={segment.id}>
                         {segment.name}
                       </option>
                     ))}
@@ -295,13 +295,13 @@ export default function Onboarding() {
                     placeholder="Rua Exemplo, 123 - Bairro"
                   />
                 </div>
-
+                 
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all disabled:opacity-50"
                 >
-                  {loading ? 'Criando...' : 'Finalizar Cadastro'}
+                  {loading ? 'Finalizando...' : 'Finalizar Cadastro'}
                 </button>
               </form>
             </div>

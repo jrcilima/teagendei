@@ -1,4 +1,4 @@
-import { Link } from 'react-router';
+import { Link } from 'react-router-dom';
 import { Calendar, Users, TrendingUp, Sparkles, CheckCircle, ArrowRight } from 'lucide-react';
 
 export default function Home() {
@@ -153,7 +153,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Benefits Section */}
+      {/* Benefits Section - CheckCircle is used here */}
       <div className="py-24 bg-white/5 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
