@@ -20,7 +20,9 @@ export default function Login() {
       await login(email, password);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login');
+  // O PocketBase retorna 'isAbort' se cancelado, ou data com detalhes
+  console.error(err);
+  setError(err?.message || 'Erro ao fazer login. Verifique suas credenciais.');
     } finally {
       setLoading(false);
     }

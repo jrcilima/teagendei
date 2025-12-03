@@ -1,8 +1,10 @@
 import PocketBase from 'pocketbase';
 
-// URL do servidor PocketBase.
-// Em desenvolvimento local: http://127.0.0.1:8090
-export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090');
+// URL do servidor PocketBase
+// Tenta ler do arquivo .env, se não encontrar, usa o seu IP direto
+const serverUrl = import.meta.env.VITE_POCKETBASE_URL || 'http://136.248.77.97:8090';
 
-// Desativar cancelamento automático para evitar erros em React Strict Mode
+export const pb = new PocketBase(serverUrl);
+
+// Desativar cancelamento automático para evitar erros em React Strict Mode durante o desenvolvimento
 pb.autoCancellation(false);
