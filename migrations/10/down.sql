@@ -1,7 +1,0 @@
-
-DROP INDEX idx_financial_transactions_client_id;
-DROP INDEX idx_financial_transactions_shop_id;
-DROP INDEX idx_financial_transactions_appointment_id;
-DROP INDEX idx_financial_transactions_status;
-DROP INDEX idx_financial_transactions_transaction_id;
-DROP TABLE financial_transactions;
