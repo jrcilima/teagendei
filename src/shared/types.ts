@@ -43,9 +43,11 @@ export interface Shop extends BaseModel {
 }
 
 export interface User extends BaseModel {
+  id: string;
   email: string;
   name: string;
   phone?: string;
+  password_hash: string;
   avatar?: string;
   role: 'dono' | 'staff' | 'cliente';
   company_id?: string;

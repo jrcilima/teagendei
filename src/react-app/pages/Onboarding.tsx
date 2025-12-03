@@ -49,7 +49,7 @@ export default function Onboarding() {
         owner_id: user.id,
         plan_status: 'trial',
         plan_type: 'empresarial'
-      }) as Company;
+      }) as unknown as Company;
       
       setCreatedCompany(company);
 

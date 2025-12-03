@@ -1,3 +1,6 @@
+import { webcrypto as crypto } from 'crypto';
+import { TextEncoder } from 'util';
+
 // Simplified auth without external dependencies
 export async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -12,7 +15,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return passwordHash === hash;
 }
 
-export function generateToken(userId: number): string {
+export function generateToken(userId: string): string {
   const payload = {
     userId,
     exp: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
@@ -32,7 +35,13 @@ export function verifyToken(token: string): { userId: number } | null {
   }
 }
 
-export function getUserFromRequest(request: Request): { userId: number } | null {
+type MinimalRequest = {
+  headers: {
+    get(name: string): string | null;
+  };
+};
+
+export function getUserFromRequest(request: MinimalRequest): { userId: number } | null {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
@@ -41,3 +50,11 @@ export function getUserFromRequest(request: Request): { userId: number } | null 
   const token = authHeader.substring(7);
   return verifyToken(token);
 }
+function btoa(arg0: string): string {
+  throw new Error('Function not implemented.');
+}
+
+function atob(token: string): string {
+  throw new Error('Function not implemented.');
+}
+

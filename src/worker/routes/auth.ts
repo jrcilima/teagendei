@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { hashPassword, verifyPassword, generateToken } from '../auth';
 import * as queries from '../db/queries';
 
-const auth = new Hono<{ Bindings: Env }>();
+const auth = new Hono<{ Bindings: { DB: any } }>();
 
 // Schema de validação
 const registerSchema = z.object({
@@ -122,3 +122,7 @@ auth.get('/me', async (c) => {
 });
 
 export default auth;
+function atob(token: string): string {
+  throw new Error('Function not implemented.');
+}
+

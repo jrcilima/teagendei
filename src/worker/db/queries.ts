@@ -163,18 +163,3 @@ export async function getAllSegments(db: D1Database): Promise<Segment[]> {
 export async function findSegmentBySlug(db: D1Database, slug: string): Promise<Segment | null> {
   return queryOne<Segment>(db, 'SELECT * FROM segments WHERE slug = ?', [slug]);
 }
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    name TEXT NOT NULL,
-    phone TEXT,
-    role TEXT NOT NULL CHECK(role IN ('dono', 'staff', 'cliente')),
-    company_id INTEGER,
-    shop_id INTEGER,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (company_id) REFERENCES companies(id),
-    FOREIGN KEY (shop_id) REFERENCES shops(id)
-);
