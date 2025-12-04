@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Store, ArrowRight, Loader2 } from 'lucide-react';
+import { Building2, Store, ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
 import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
 import { Segment, Company } from '../../shared/types';
 
@@ -45,7 +45,8 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
-      // Create company
+      console.log("Tentando criar empresa com dados:", { ...companyData, owner_id: user.id });
+      
       const company = await companiesApi.create({
         ...companyData,
         owner_id: user.id,
@@ -55,18 +56,32 @@ export default function Onboarding() {
       
       setCreatedCompany(company);
 
-      // Update user profile to link company
+      console.log("Empresa criada, atualizando usuário...");
       await authApi.updateProfile(user.id, {
         company_id: company.id,
         role: 'dono'
       });
 
-      // Update context
       await refreshCompany();
       setStep(2);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Erro ao criar empresa. Verifique os dados.');
+      console.error("Erro detalhado ao criar empresa:", err);
+      // Tratamento de erro detalhado do PocketBase
+      if (err.status === 403) {
+        setError('Permissão negada (403). Verifique as "API Rules" da coleção "companies" no PocketBase.');
+      } else if (err.status === 400) {
+        // Erro de validação (ex: CNPJ duplicado)
+        const data = err.data?.data;
+        if (data?.cnpj) {
+          setError(`Erro no CNPJ: ${data.cnpj.message}`);
+        } else if (data?.legal_name) {
+          setError(`Erro na Razão Social: ${data.legal_name.message}`);
+        } else {
+          setError('Dados inválidos. Verifique se os campos estão corretos.');
+        }
+      } else {
+        setError(err.message || 'Erro desconhecido ao criar empresa.');
+      }
     } finally {
       setLoading(false);
     }
@@ -80,6 +95,8 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
+      console.log("Tentando criar unidade com dados:", { ...shopData, company_id: createdCompany.id });
+
       await shopsApi.create({
         ...shopData,
         company_id: createdCompany.id,
@@ -90,8 +107,19 @@ export default function Onboarding() {
       await refreshShops();
       navigate('/dashboard');
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Erro ao criar unidade. Tente um slug diferente.');
+      console.error("Erro detalhado ao criar unidade:", err);
+      if (err.status === 403) {
+        setError('Permissão negada (403). Verifique as "API Rules" da coleção "shops".');
+      } else if (err.status === 400) {
+        const data = err.data?.data;
+        if (data?.slug) {
+          setError(`Erro na URL (slug): ${data.slug.message}. Tente outro nome.`);
+        } else {
+          setError('Dados da unidade inválidos.');
+        }
+      } else {
+        setError(err.message || 'Erro ao criar unidade.');
+      }
     } finally {
       setLoading(false);
     }
@@ -145,8 +173,9 @@ export default function Onboarding() {
 
               <form onSubmit={handleCompanySubmit} className="space-y-6">
                 {error && (
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm">
-                    {error}
+                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>{error}</span>
                   </div>
                 )}
 
@@ -207,8 +236,9 @@ export default function Onboarding() {
               
               <form onSubmit={handleShopSubmit} className="space-y-6">
                 {error && (
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm">
-                    {error}
+                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm flex items-start gap-2">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>{error}</span>
                   </div>
                 )}
                 
