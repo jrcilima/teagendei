@@ -2,10 +2,9 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
 import { Shop, Service, User, Appointment } from '../../shared/types';
-import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, CalendarX, Clock } from 'lucide-react';
+import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, CalendarX, Clock, CreditCard, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-// Tipos auxiliares para o horário
 type DaySchedule = {
   open: boolean;
   start: string;
@@ -16,7 +15,6 @@ type BusinessHours = {
   [key: string]: DaySchedule;
 };
 
-// Mapa para converter Date.getDay() (0-6) para as chaves do nosso JSON
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 export default function BookingPage() {
@@ -28,22 +26,24 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<User[]>([]);
   
-  const [step, setStep] = useState(1); // 1: Serviço, 2: Profissional, 3: Data/Hora, 4: Confirmar
+  const [step, setStep] = useState(1); 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   
-  // Data inicial: Hoje
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   
-  // Estado para armazenar agendamentos já existentes no dia selecionado
+  // Novos campos para garantir que o payload esteja completo
+  const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'cartao'>('dinheiro'); 
+  const [notes, setNotes] = useState('');
+
   const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
-  // 1. Carregar dados da loja
+  // 1. Carregar dados
   useEffect(() => {
     if (!slug) return;
     const loadData = async () => {
@@ -51,16 +51,12 @@ export default function BookingPage() {
         const shopData = await shopsApi.getBySlug(slug);
         setShop(shopData);
         
-        // Carrega serviços e staff em paralelo
         const [servicesData, staffData] = await Promise.all([
           servicesApi.listByShop(shopData.id),
           usersApi.listStaffByShop(shopData.id)
         ]);
         
-        // Filtra apenas serviços ativos
         setServices(servicesData.filter(s => s.is_active));
-        
-        // Filtra staff que "atende clientes" (is_professional = true)
         setStaff(staffData.filter(u => u.is_professional));
 
       } catch (error) {
@@ -73,24 +69,19 @@ export default function BookingPage() {
     loadData();
   }, [slug]);
 
-  // 2. Carregar agendamentos existentes quando mudar a data, loja ou profissional
+  // 2. Carregar agendamentos existentes
   useEffect(() => {
     if (!shop || !selectedDate || step !== 3) return;
 
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
-        // Busca agendamentos do dia para verificar conflitos
-        // Usamos try/catch para evitar que erro 404 (lista vazia) quebre a tela
         const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate)) || [];
-        
-        // Garante que é array e filtra cancelados
         const activeAppts = Array.isArray(appts) ? appts.filter(a => a.status !== 'cancelado') : [];
-        
         setExistingAppointments(activeAppts);
       } catch (err) {
-        console.warn("Erro ao buscar disponibilidade (pode ser lista vazia):", err);
-        setExistingAppointments([]); // Assume livre se falhar a busca
+        console.warn("Erro ao buscar disponibilidade:", err);
+        setExistingAppointments([]); 
       } finally {
         setSlotsLoading(false);
       }
@@ -99,67 +90,53 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
-
-  // 3. Calcular Slots Disponíveis (com bloqueio)
+  // 3. Calcular Slots
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
-    // Cria data baseada na string YYYY-MM-DD para pegar o dia da semana correto
     const [y, m, d] = selectedDate.split('-').map(Number);
-    // Mês em JS é 0-indexado
     const dateObj = new Date(y, m - 1, d);
-    
-    const dayOfWeek = dateObj.getDay(); // 0 (Dom) a 6 (Sab)
+    const dayOfWeek = dateObj.getDay(); 
     const dayKey = DAY_KEYS[dayOfWeek];
 
     const businessHours = shop.business_hours as BusinessHours;
     
-    // Se não tiver configuração ou estiver fechado no dia
     if (!businessHours || !businessHours[dayKey] || !businessHours[dayKey].open) {
-      return []; // Fechado
+      return []; 
     }
 
     const { start, end } = businessHours[dayKey];
     const slots: string[] = [];
     
-    // Converter horários para minutos do dia (ex: "09:00" -> 540)
     const [startHour, startMin] = start.split(':').map(Number);
     const [endHour, endMin] = end.split(':').map(Number);
     
     let currentMinutes = startHour * 60 + startMin;
     const closeMinutes = endHour * 60 + endMin;
-    const interval = 30; // Usando slots fixos de 30 min para padronização
+    const interval = 30; 
 
-    // Data atual para validar horários passados
     const now = new Date();
     const isToday = selectedDate === now.toISOString().split('T')[0];
     const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
 
     while (currentMinutes + selectedService.duration <= closeMinutes) {
-      // Se for hoje, não mostrar horários passados (+15 min de buffer)
       if (isToday && currentMinutes < (currentMinutesNow + 15)) {
         currentMinutes += interval;
         continue;
       }
 
-      // Slot candidato
       const slotStart = currentMinutes;
       const slotEnd = currentMinutes + selectedService.duration;
 
-      // Verifica colisão com agendamentos existentes
       const isBlocked = existingAppointments.some(appt => {
-        // Se selecionou um profissional específico, só verifica conflitos dele
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
-        // Converter datas do agendamento para minutos do dia
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
 
-        // Ajuste de fuso horário simples: pega hora/minuto local da data recebida
         const apptStartMinutes = apptStart.getHours() * 60 + apptStart.getMinutes();
         const apptEndMinutes = apptEnd.getHours() * 60 + apptEnd.getMinutes();
 
-        // Lógica de Colisão: (StartA < EndB) e (EndA > StartB)
         return (slotStart < apptEndMinutes) && (slotEnd > apptStartMinutes);
       });
 
@@ -183,24 +160,21 @@ export default function BookingPage() {
       return;
     }
     
-    if (!shop || !selectedService || !selectedStaff || !selectedTime) return;
+    if (!shop?.id || !selectedService?.id || !selectedStaff?.id || !selectedTime || !user.id) { 
+      alert("Erro: Dados incompletos. Verifique se selecionou tudo."); 
+      return; 
+    }
 
     setBookingLoading(true);
     try {
-      // Construção Manual da Data para garantir integridade (Evita problemas de UTC/Fuso)
-      
-      // 1. String de Início: "YYYY-MM-DD HH:mm:ss"
       const startString = `${selectedDate} ${selectedTime}:00`;
       
-      // 2. Cálculo da Data Final
       const [year, month, day] = selectedDate.split('-').map(Number);
       const [hours, minutes] = selectedTime.split(':').map(Number);
       
-      // Usamos UTC apenas para somar minutos sem erros de virada de dia/horário de verão
       const baseDate = new Date(Date.UTC(year, month - 1, day, hours, minutes));
       const endDate = new Date(baseDate.getTime() + selectedService.duration * 60000);
 
-      // 3. String de Fim: "YYYY-MM-DD HH:mm:ss"
       const endYear = endDate.getUTCFullYear();
       const endMonth = String(endDate.getUTCMonth() + 1).padStart(2, '0');
       const endDay = String(endDate.getUTCDate()).padStart(2, '0');
@@ -209,28 +183,43 @@ export default function BookingPage() {
       
       const endString = `${endYear}-${endMonth}-${endDay} ${endHour}:${endMin}:00`;
 
-      console.log("Enviando:", { start: startString, end: endString });
-
-      await appointmentsApi.create({
+      // CORREÇÃO: Tipagem explícita para garantir compatibilidade com a interface Appointment
+      const payload: Partial<Appointment> = {
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startString, // Envia string exata
-        end_time: endString,     // Envia string exata
-        status: 'agendado',
-        payment_status: 'nao_pago',
-        total_amount: selectedService.price,
+        start_time: startString,
+        end_time: endString,
+        status: 'agendado', // Literal string correta
+        payment_status: 'nao_pago', // Literal string correta
+        total_amount: Number(selectedService.price),
+        payment_method: paymentMethod,
+        notes: notes,
         reminder_sent: false,
         confirmation_sent: false
-      });
+      };
+
+      console.log("Enviando payload:", payload); 
+
+      await appointmentsApi.create(payload);
 
       alert("Agendamento realizado com sucesso!");
       navigate('/client');
     } catch (error: any) {
-      console.error("Erro ao agendar:", error);
-      const message = error?.data?.message || error?.message || "Erro desconhecido.";
-      alert(`Não foi possível agendar. Detalhes: ${message}`);
+      console.error("Erro PocketBase:", error);
+      
+      let errorMessage = error?.message || "Erro desconhecido.";
+      if (error?.data?.data) {
+        const fieldErrors = Object.entries(error.data.data)
+          .map(([key, val]: any) => `• ${key}: ${val.message}`)
+          .join('\n');
+        if (fieldErrors) errorMessage = `Erro nos seguintes campos:\n${fieldErrors}`;
+      } else if (error?.status === 403) {
+        errorMessage = "Permissão negada (403). Verifique se você está logado ou se as regras do banco permitem criar agendamentos.";
+      }
+
+      alert(`Falha ao agendar:\n${errorMessage}`);
     } finally {
       setBookingLoading(false);
     }
@@ -248,14 +237,13 @@ export default function BookingPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-gray-800">Loja não encontrada</h1>
-        <p className="text-gray-500">Verifique o endereço digitado.</p>
       </div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header da Loja */}
+      {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-4">
@@ -277,7 +265,7 @@ export default function BookingPage() {
 
       <div className="max-w-2xl mx-auto p-4">
         
-        {/* Passo 1: Selecionar Serviço */}
+        {/* Passo 1: Serviço */}
         {step === 1 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -287,7 +275,7 @@ export default function BookingPage() {
             
             {services.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-                <p className="text-gray-500">Nenhum serviço disponível no momento.</p>
+                <p className="text-gray-500">Nenhum serviço disponível.</p>
               </div>
             ) : (
               services.map(service => (
@@ -325,7 +313,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 2: Selecionar Profissional */}
+        {/* Passo 2: Profissional */}
         {step === 2 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -437,7 +425,7 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 4: Confirmação */}
+        {/* Passo 4: Confirmação com Campos Extras */}
         {step === 4 && selectedService && selectedStaff && (
           <div className="space-y-6 animate-fade-in">
              <div className="text-center mb-6">
@@ -445,31 +433,60 @@ export default function BookingPage() {
                  <CheckCircle className="w-8 h-8 text-green-600" />
                </div>
                <h2 className="text-2xl font-bold text-gray-900">Quase lá!</h2>
-               <p className="text-gray-500">Confira os dados antes de confirmar</p>
+               <p className="text-gray-500">Finalize seu agendamento</p>
              </div>
 
              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-purple-600"></div>
                 
-                <div className="flex justify-between border-b border-gray-100 pb-4">
-                  <span className="text-gray-500">Serviço</span>
-                  <span className="font-medium text-gray-900">{selectedService.name}</span>
+                {/* Resumo do Agendamento */}
+                <div className="space-y-3 pb-4 border-b border-gray-100">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Serviço</span>
+                    <span className="font-medium text-gray-900 text-right">{selectedService.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Profissional</span>
+                    <span className="font-medium text-gray-900 text-right">{selectedStaff.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Data/Hora</span>
+                    <span className="font-medium text-gray-900 text-right capitalize">
+                      {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })} às {selectedTime}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between border-b border-gray-100 pb-4">
-                  <span className="text-gray-500">Profissional</span>
-                  <span className="font-medium text-gray-900">{selectedStaff.name}</span>
+
+                {/* Campos Extras de Pagamento e Notas */}
+                <div className="space-y-4 pt-2">
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                       <CreditCard className="w-4 h-4 text-purple-600" /> Forma de Pagamento
+                     </label>
+                     <select 
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value as 'dinheiro' | 'pix' | 'cartao')}
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50"
+                     >
+                        <option value="dinheiro">Dinheiro / Pix na Loja</option>
+                        <option value="cartao">Cartão de Crédito/Débito</option>
+                     </select>
+                   </div>
+
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                       <FileText className="w-4 h-4 text-purple-600" /> Observações (Opcional)
+                     </label>
+                     <textarea 
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        placeholder="Ex: Tenho alergia a tal produto..."
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none resize-none h-20 bg-gray-50"
+                     />
+                   </div>
                 </div>
-                <div className="flex justify-between border-b border-gray-100 pb-4">
-                  <span className="text-gray-500">Data</span>
-                  <span className="font-medium text-gray-900 capitalize">
-                    {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-gray-100 pb-4">
-                  <span className="text-gray-500">Horário</span>
-                  <span className="font-medium text-gray-900">{selectedTime}</span>
-                </div>
-                <div className="flex justify-between pt-2">
+
+                <div className="flex justify-between pt-4 border-t border-gray-100">
                   <span className="text-gray-900 font-bold text-lg">Total</span>
                   <span className="text-purple-600 font-bold text-xl">R$ {selectedService.price.toFixed(2)}</span>
                 </div>
