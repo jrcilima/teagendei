@@ -1,42 +1,83 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
-import { servicesApi } from '../lib/api';
-import { Service } from '../../shared/types';
-import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react';
+import { servicesApi, categoriesApi } from '../lib/api';
+import { Service, Category } from '../../shared/types';
+import { ArrowLeft, Loader2, Save, Trash2, Plus } from 'lucide-react';
 
 export default function ServiceForm() {
-  const { id } = useParams(); // Se tiver ID, é edição
+  const { id } = useParams();
   const navigate = useNavigate();
   const { selectedShop } = useTenant();
   
   const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(!!id);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
 
   const [formData, setFormData] = useState<Partial<Service>>({
     name: '',
     description: '',
     price: 0,
     duration: 30,
-    category: '',
+    category_id: '',
     is_active: true,
     required_staff: 1,
     buffer_time: 0
   });
 
-  // Carregar dados se for edição
   useEffect(() => {
-    if (id) {
-      servicesApi.getById(id)
-        .then((data) => setFormData(data))
-        .catch((err) => {
-          console.error(err);
-          setError('Erro ao carregar serviço.');
-        })
-        .finally(() => setInitialLoading(false));
+    if (!selectedShop) return;
+
+    const loadData = async () => {
+      try {
+        // 1. Carrega categorias da loja
+        // Cast forçado aqui para corrigir o erro de tipo "RecordModel | Category"
+        const cats = await categoriesApi.listByShop(selectedShop.id) as unknown as Category[];
+        setCategories(cats);
+
+        // 2. Se for edição, carrega o serviço
+        if (id) {
+          const service = await servicesApi.getById(id);
+          setFormData({
+            ...service,
+            // Garante que category_id seja uma string, mesmo se vier nulo
+            category_id: service.category_id || ''
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        setError('Erro ao carregar dados.');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    loadData();
+  }, [id, selectedShop]);
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim() || !selectedShop) return;
+    
+    try {
+      // Cast forçado aqui também
+      const newCat = await categoriesApi.create({
+        name: newCategoryName,
+        shop_id: selectedShop.id
+      }) as unknown as Category;
+
+      setCategories([...categories, newCat]);
+      setFormData({ ...formData, category_id: newCat.id });
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao criar categoria.');
     }
-  }, [id]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,14 +206,55 @@ export default function ServiceForm() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Categoria <span className="text-gray-400 font-normal">(Opcional)</span></label>
-              <input
-                type="text"
-                value={formData.category}
-                onChange={e => setFormData({...formData, category: e.target.value})}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-shadow"
-                placeholder="Ex: Cabelo, Barba, Química"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Categoria</label>
+              
+              {!showNewCategoryInput ? (
+                <div className="flex gap-2">
+                  <select
+                    value={formData.category_id || ''}
+                    onChange={e => setFormData({...formData, category_id: e.target.value})}
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-shadow bg-white"
+                  >
+                    <option value="">Sem Categoria</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCategoryInput(true)}
+                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                    title="Nova Categoria"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCategoryName}
+                    onChange={e => setNewCategoryName(e.target.value)}
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-shadow"
+                    placeholder="Nome da nova categoria"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCreateCategory}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Criar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCategoryInput(false)}
+                    className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>

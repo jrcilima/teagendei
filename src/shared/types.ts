@@ -1,5 +1,6 @@
 // Tipos adaptados para o PocketBase (IDs são strings, campos de data são strings ISO)
 
+
 export interface BaseModel {
   id: string;
   created: string;
@@ -14,6 +15,20 @@ export interface Company extends BaseModel {
   trial_ends?: string;
   owner_id?: string;
 }
+
+export interface BaseModel {
+  id: string;
+  created: string;
+  updated: string;
+  collectionId: string;
+  collectionName: string;
+}
+
+export interface Category extends BaseModel {
+  name: string;
+  shop_id: string;
+}
+
 
 export interface Segment extends BaseModel {
   name: string;
@@ -78,11 +93,14 @@ export interface Service extends BaseModel {
   description?: string;
   price: number;
   duration: number;
-  category?: string;
+  category_id?: string; // ID da categoria
   is_active: boolean;
   shop_id: string;
   required_staff: number;
   buffer_time: number;
+  expand?: {
+    category_id?: Category; // Objeto completo da categoria
+  };
 }
 
 export interface StaffService extends BaseModel {

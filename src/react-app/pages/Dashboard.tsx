@@ -294,7 +294,7 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-600 mt-1">{service.description}</p>
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                           <span>⏱️ {service.duration} min</span>
-                          {service.category && <span>📁 {service.category}</span>}
+                          {service.category_id && <span>📁 {service.category_id}</span>}
                         </div>
                       </div>
                       <div className="text-right">

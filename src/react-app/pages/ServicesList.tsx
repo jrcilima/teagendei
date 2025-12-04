@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { servicesApi } from '../lib/api';
 import { Service } from '../../shared/types';
-// REMOVIDO: DollarSign (e mantidos os que são usados: Clock, Plus, Edit2, Trash2, ArrowLeft, Loader2, AlertCircle)
 import { Plus, Edit2, Trash2, Clock, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 export default function ServicesList() {
@@ -34,7 +33,6 @@ export default function ServicesList() {
     if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
     try {
       await servicesApi.delete(id);
-      // Recarrega a lista após excluir (ou filtra o estado localmente)
       setServices(services.filter(s => s.id !== id));
     } catch (err) {
       console.error(err);
@@ -53,7 +51,6 @@ export default function ServicesList() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="p-2 hover:bg-gray-200 rounded-full transition-colors">
@@ -74,7 +71,6 @@ export default function ServicesList() {
           </Link>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
@@ -131,9 +127,10 @@ export default function ServicesList() {
                     <Clock className="w-3 h-3" />
                     {service.duration} min
                   </span>
-                  {service.category && (
+                  {/* Mostra o nome da categoria vindo do expand */}
+                  {service.expand?.category_id && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
-                      {service.category}
+                      {service.expand.category_id.name}
                     </span>
                   )}
                 </div>

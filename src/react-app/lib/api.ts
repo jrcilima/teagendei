@@ -1,5 +1,5 @@
 import { pb } from './pocketbase';
-import { Company, Shop, Service, Segment, Appointment, User } from '../../shared/types';
+import { Company, Shop, Service, Segment, Appointment, User, Category } from '../../shared/types';
 
 export const authApi = {
   logout: () => {
@@ -59,6 +59,19 @@ export const shopsApi = {
   },
 };
 
+export const categoriesApi = {
+  listByShop: async (shopId: string) => {
+    return await pb.collection('categories').getFullList<Category>({
+      filter: `shop_id = "${shopId}"`,
+      sort: 'name'
+    });
+  },
+
+  create: async (data: Partial<Category>) => {
+    return await pb.collection('categories').create(data);
+  }
+};
+
 export const servicesApi = {
   create: async (data: Partial<Service>) => {
     return await pb.collection('services').create(data);
@@ -67,7 +80,8 @@ export const servicesApi = {
   listByShop: async (shopId: string) => {
     return await pb.collection('services').getFullList<Service>({
       filter: `shop_id = "${shopId}"`,
-      sort: 'name'
+      sort: 'name',
+      expand: 'category_id' // Traz o nome da categoria
     });
   },
 
@@ -159,7 +173,6 @@ export const appointmentsApi = {
 };
 
 export const usersApi = {
-  // Lista Staff (Dono ou Barbeiro) de uma loja
   listStaffByShop: async (shopId: string) => {
     try {
       return await pb.collection('users').getFullList<User>({
@@ -176,7 +189,6 @@ export const usersApi = {
     return await pb.collection('users').getOne<User>(id);
   },
 
-  // Criação de funcionário
   createStaff: async (data: any) => {
     return await pb.collection('users').create({
       ...data,
