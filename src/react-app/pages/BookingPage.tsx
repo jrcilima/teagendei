@@ -17,6 +17,7 @@ type BusinessHours = {
   [key: string]: DaySchedule;
 };
 
+// Mapa para converter Date.getDay() (0-6) para as chaves do nosso JSON
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 export default function BookingPage() {
@@ -28,10 +29,11 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<User[]>([]);
   
-  const [step, setStep] = useState(1); 
+  const [step, setStep] = useState(1); // 1: Serviço, 2: Profissional, 3: Data/Hora, 4: Confirmar
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   
+  // Data inicial: Hoje
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   
@@ -50,12 +52,16 @@ export default function BookingPage() {
         const shopData = await shopsApi.getBySlug(slug);
         setShop(shopData);
         
+        // Carrega serviços e staff em paralelo
         const [servicesData, staffData] = await Promise.all([
           servicesApi.listByShop(shopData.id),
           usersApi.listStaffByShop(shopData.id)
         ]);
         
+        // Filtra apenas serviços ativos
         setServices(servicesData.filter(s => s.is_active));
+        
+        // Filtra staff que "atende clientes" (is_professional = true)
         setStaff(staffData.filter(u => u.is_professional));
 
       } catch (error) {
@@ -75,11 +81,18 @@ export default function BookingPage() {
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
-        const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate));
-        const activeAppts = appts.filter(a => a.status !== 'cancelado');
+        // Se a busca falhar (ex: erro 403 de permissão ou 404), assumimos agenda vazia
+        // para não travar a tela, mas logamos o erro.
+        const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate)) || [];
+        
+        // Filtra apenas os que não estão cancelados
+        // Verifica se é um array antes de filtrar
+        const activeAppts = Array.isArray(appts) ? appts.filter(a => a.status !== 'cancelado') : [];
+        
         setExistingAppointments(activeAppts);
       } catch (err) {
-        console.error(err);
+        console.error("Erro ao buscar disponibilidade (assumindo livre):", err);
+        setExistingAppointments([]); // Fallback seguro: nenhum agendamento bloqueando
       } finally {
         setSlotsLoading(false);
       }
@@ -93,58 +106,76 @@ export default function BookingPage() {
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
-    const dateObj = new Date(selectedDate + 'T00:00:00');
-    const dayOfWeek = dateObj.getDay(); 
+    // Garantir que a data está no formato correto e não tem problemas de fuso horário local vs UTC na criação
+    // Criamos a data "meio-dia" para evitar problemas de timezone virando o dia
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const dateObj = new Date(year, month - 1, day, 12, 0, 0); 
+    
+    const dayOfWeek = dateObj.getDay(); // 0 (Dom) a 6 (Sab)
     const dayKey = DAY_KEYS[dayOfWeek];
 
     const businessHours = shop.business_hours as BusinessHours;
     
+    // Se não tiver configuração ou estiver fechado no dia
     if (!businessHours || !businessHours[dayKey] || !businessHours[dayKey].open) {
-      return []; 
+      return []; // Fechado
     }
 
     const { start, end } = businessHours[dayKey];
     const slots: string[] = [];
     
+    // Converter "09:00" para minutos do dia (ex: 540)
     const [startHour, startMin] = start.split(':').map(Number);
     const [endHour, endMin] = end.split(':').map(Number);
     
     let currentMinutes = startHour * 60 + startMin;
     const closeMinutes = endHour * 60 + endMin;
-    const serviceDuration = selectedService.duration;
+    const interval = selectedService?.duration || 30; // Usa duração do serviço ou 30min padrão
 
+    // Data atual para validar horários passados
     const now = new Date();
     const isToday = selectedDate === now.toISOString().split('T')[0];
     const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
 
-    while (currentMinutes + serviceDuration <= closeMinutes) {
-      if (isToday && currentMinutes < currentMinutesNow) {
-        currentMinutes += serviceDuration; 
+    while (currentMinutes + interval <= closeMinutes) {
+      // Se for hoje, não mostrar horários passados (+ buffer de 15 min para não agendar "agora mesmo")
+      if (isToday && currentMinutes < (currentMinutesNow + 15)) {
+        currentMinutes += interval; // ou 30 se o passo for fixo
         continue;
       }
 
+      const h = Math.floor(currentMinutes / 60);
+      const m = currentMinutes % 60;
+      const timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      
+      // Definição do horário de início e fim deste slot candidato em minutos
       const slotStart = currentMinutes;
-      const slotEnd = currentMinutes + serviceDuration;
+      const slotEnd = currentMinutes + interval;
 
+      // Bloqueio 2: Choque com agendamentos existentes
       const isBlocked = existingAppointments.some(appt => {
+        // Se o usuário escolheu um profissional específico, ignora agendamentos de outros
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
+        // Converter string ISO do banco para objeto Date
         const apptStart = new Date(appt.start_time);
-        const apptEnd = new Date(appt.end_time);
+        const apptEnd = new Date(appt.end_time); // Assumindo que temos end_time no banco
 
+        // Converter agendamento do banco para minutos do dia para comparar
         const apptStartMinutes = apptStart.getHours() * 60 + apptStart.getMinutes();
         const apptEndMinutes = apptEnd.getHours() * 60 + apptEnd.getMinutes();
 
+        // Lógica de Colisão: (SlotStart < ApptEnd) E (SlotEnd > ApptStart)
+        // Ex: Slot 14:00-14:30 (840-870) vs Appt 14:00-15:00 (840-900) -> 840 < 900 AND 870 > 840 -> TRUE (Bloqueado)
         return (slotStart < apptEndMinutes) && (slotEnd > apptStartMinutes);
       });
 
       if (!isBlocked) {
-        const h = Math.floor(currentMinutes / 60);
-        const m = currentMinutes % 60;
-        const timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
         slots.push(timeString);
       }
       
+      // Incremento: define de quanto em quanto tempo os slots aparecem. 
+      // Usando 30 min fixo para padronizar a grade
       currentMinutes += 30; 
     }
 
@@ -153,6 +184,7 @@ export default function BookingPage() {
 
   const handleBooking = async () => {
     if (!user) {
+      // Salva o estado atual para voltar depois do login (futura melhoria)
       alert("Você precisa fazer login ou criar uma conta para agendar.");
       navigate('/login');
       return;
@@ -162,20 +194,32 @@ export default function BookingPage() {
 
     setBookingLoading(true);
     try {
+      // Construir data completa
       const [hours, minutes] = selectedTime.split(':').map(Number);
-      const startTime = new Date(selectedDate);
-      startTime.setHours(hours, minutes, 0, 0); 
       
+      // Cria data local corretamente
+      const [year, month, day] = selectedDate.split('-').map(Number);
+      const startTime = new Date(year, month - 1, day, hours, minutes, 0);
+      
+      // Data fim
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + selectedService.duration);
+
+      // Converter para ISO string (UTC) para o banco
+      // O PocketBase espera UTC. .toISOString() converte local -> UTC automaticamente.
+      // Isso é o correto se o servidor e cliente estiverem alinhados, mas para simplificar visualização:
+      // Se o PB estiver rodando local, ele pode esperar tempo local se não for data strict.
+      // A forma mais segura é enviar o ISO string normal:
+      const startIso = startTime.toISOString().replace('T', ' ').substring(0, 19);
+      const endIso = endTime.toISOString().replace('T', ' ').substring(0, 19);
 
       await appointmentsApi.create({
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startTime.toISOString().replace('T', ' ').substring(0, 19),
-        end_time: endTime.toISOString().replace('T', ' ').substring(0, 19),
+        start_time: startIso, // Formato PocketBase
+        end_time: endIso,     // Formato PocketBase
         status: 'agendado',
         payment_status: 'nao_pago',
         total_amount: selectedService.price,
@@ -187,7 +231,7 @@ export default function BookingPage() {
       navigate('/client');
     } catch (error) {
       console.error(error);
-      alert("Erro ao realizar agendamento. O horário pode ter sido ocupado.");
+      alert("Erro ao realizar agendamento. Tente novamente.");
     } finally {
       setBookingLoading(false);
     }
