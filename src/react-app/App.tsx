@@ -9,7 +9,10 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import OnboardingPage from "./pages/Onboarding";
 import DashboardPage from "./pages/Dashboard";
-import ClientDashboard from "./pages/ClientDashboard"; // Importar a nova página
+import ClientDashboard from "./pages/ClientDashboard";
+// NOVAS IMPORTAÇÕES
+import ServicesList from "./pages/ServicesList";
+import ServiceForm from "./pages/ServiceForm";
 
 export default function App() {
   return (
@@ -22,7 +25,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 
-            {/* Protected Routes */}
+            {/* Protected Routes - Dono */}
             <Route
               path="/onboarding"
               element={
@@ -32,7 +35,7 @@ export default function App() {
               }
             />
             
-            {/* Dashboard do Dono/Staff */}
+            {/* Protected Routes - Staff e Dono */}
             <Route
               path="/dashboard"
               element={
@@ -41,8 +44,34 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            
+            {/* ROTAS DE SERVIÇOS (ADICIONADAS) */}
+            <Route
+              path="/services"
+              element={
+                <ProtectedRoute allowedRoles={['dono', 'staff']}>
+                  <ServicesList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/services/new"
+              element={
+                <ProtectedRoute allowedRoles={['dono', 'staff']}>
+                  <ServiceForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/services/:id"
+              element={
+                <ProtectedRoute allowedRoles={['dono', 'staff']}>
+                  <ServiceForm />
+                </ProtectedRoute>
+              }
+            />
 
-            {/* Dashboard do Cliente (NOVA ROTA) */}
+            {/* Dashboard do Cliente */}
             <Route
               path="/client"
               element={
