@@ -1,5 +1,5 @@
 import { pb } from './pocketbase';
-import { Company, Shop, Service, Segment } from '../../shared/types';
+import { Company, Shop, Service, Segment, Appointment, User } from '../../shared/types';
 
 export const authApi = {
   logout: () => {
@@ -90,4 +90,33 @@ export const segmentsApi = {
   getBySlug: async (slug: string) => {
     return await pb.collection('segments').getFirstListItem<Segment>(`slug="${slug}"`);
   },
+};
+
+// NOVAS FUNÇÕES PARA O DASHBOARD
+
+export const appointmentsApi = {
+  // Lista agendamentos do dia para uma loja específica
+  listToday: async (shopId: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Formata para o padrão do PocketBase (UTC)
+    const startStr = today.toISOString().replace('T', ' ').substring(0, 19);
+    const endStr = tomorrow.toISOString().replace('T', ' ').substring(0, 19);
+
+    return await pb.collection('appointments').getFullList<Appointment>({
+      filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time < "${endStr}"`,
+    });
+  },
+};
+
+export const usersApi = {
+  // Lista profissionais vinculados a uma loja
+  listStaffByShop: async (shopId: string) => {
+    return await pb.collection('users').getFullList<User>({
+      filter: `shop_id = "${shopId}"`,
+    });
+  }
 };
