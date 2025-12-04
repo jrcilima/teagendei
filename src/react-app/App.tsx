@@ -10,9 +10,9 @@ import RegisterPage from "./pages/Register";
 import OnboardingPage from "./pages/Onboarding";
 import DashboardPage from "./pages/Dashboard";
 import ClientDashboard from "./pages/ClientDashboard";
-// NOVAS IMPORTAÇÕES
 import ServicesList from "./pages/ServicesList";
 import ServiceForm from "./pages/ServiceForm";
+import BookingPage from "./pages/BookingPage"; // Importar Booking
 
 export default function App() {
   return (
@@ -24,6 +24,9 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            
+            {/* Rota de Agendamento (Pública/Híbrida) */}
+            <Route path="/book/:slug" element={<BookingPage />} />
 
             {/* Protected Routes - Dono */}
             <Route
@@ -45,7 +48,7 @@ export default function App() {
               }
             />
             
-            {/* ROTAS DE SERVIÇOS (ADICIONADAS) */}
+            {/* Gestão de Serviços */}
             <Route
               path="/services"
               element={

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { servicesApi } from '../lib/api';
 import { Service } from '../../shared/types';
-import { Plus, Edit2, Trash2, Clock, DollarSign, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+// REMOVIDO: DollarSign (e mantidos os que são usados: Clock, Plus, Edit2, Trash2, ArrowLeft, Loader2, AlertCircle)
+import { Plus, Edit2, Trash2, Clock, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 
 export default function ServicesList() {
   const { selectedShop } = useTenant();

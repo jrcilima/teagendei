@@ -50,6 +50,11 @@ export const shopsApi = {
     return await pb.collection('shops').getOne<Shop>(id);
   },
 
+  // NOVA FUNÇÃO: Buscar loja pela URL personalizada
+  getBySlug: async (slug: string) => {
+    return await pb.collection('shops').getFirstListItem<Shop>(`slug="${slug}"`);
+  },
+
   update: async (id: string, data: Partial<Shop>) => {
     return await pb.collection('shops').update<Shop>(id, data);
   },
@@ -93,7 +98,6 @@ export const segmentsApi = {
 };
 
 export const appointmentsApi = {
-  // Lista agendamentos do dia para o Dono/Staff
   listToday: async (shopId: string) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -113,18 +117,37 @@ export const appointmentsApi = {
     }
   },
 
-  // NOVA FUNÇÃO: Lista histórico de agendamentos do Cliente
   listByClient: async (clientId: string) => {
     try {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `client_id = "${clientId}"`,
-        sort: '-start_time', // Mais recentes primeiro
-        expand: 'service_id,barber_id,shop_id', // Traz dados do serviço e barbeiro
+        sort: '-start_time',
+        expand: 'service_id,barber_id,shop_id',
       });
     } catch (error) {
       console.warn("Erro ao buscar histórico do cliente:", error);
       return [];
     }
+  },
+
+  // NOVA FUNÇÃO: Criar agendamento
+  create: async (data: Partial<Appointment>) => {
+    return await pb.collection('appointments').create(data);
+  },
+  
+  // NOVA FUNÇÃO: Buscar agendamentos de um profissional em uma data específica (para verificar disponibilidade)
+  listByStaffAndDate: async (staffId: string, date: Date) => {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const startStr = startOfDay.toISOString().replace('T', ' ').substring(0, 19);
+    const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
+
+    return await pb.collection('appointments').getFullList<Appointment>({
+      filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != "cancelado"`,
+    });
   }
 };
 

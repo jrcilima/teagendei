@@ -85,16 +85,18 @@ export interface Appointment extends BaseModel {
   total_amount: number;
   notes?: string;
   client_id: string;
-  staff_id: string;
+  staff_id: string; // Mantido para retrocompatibilidade se necessário
+  barber_id: string; // ADICIONADO: Campo correto conforme schema do PB
   service_id: string;
   shop_id: string;
-  company_id: string;
+  company_id?: string; // Pode ser opcional dependendo da regra
   reminder_sent: boolean;
   confirmation_sent: boolean;
   cancellation_reason?: string;
   expand?: {
     client_id?: User;
     staff_id?: User;
+    barber_id?: User; // ADICIONADO
     service_id?: Service;
     shop_id?: Shop;
   };
