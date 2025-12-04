@@ -12,7 +12,8 @@ import DashboardPage from "./pages/Dashboard";
 import ClientDashboard from "./pages/ClientDashboard";
 import ServicesList from "./pages/ServicesList";
 import ServiceForm from "./pages/ServiceForm";
-import BookingPage from "./pages/BookingPage"; // Importar Booking
+import BookingPage from "./pages/BookingPage";
+import Appointments from "./pages/Appointments"; // Importar Agenda
 
 export default function App() {
   return (
@@ -48,6 +49,16 @@ export default function App() {
               }
             />
             
+            {/* AGENDA (NOVO) */}
+            <Route
+              path="/appointments"
+              element={
+                <ProtectedRoute allowedRoles={['dono', 'staff']}>
+                  <Appointments />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Gestão de Serviços */}
             <Route
               path="/services"

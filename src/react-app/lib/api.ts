@@ -50,7 +50,6 @@ export const shopsApi = {
     return await pb.collection('shops').getOne<Shop>(id);
   },
 
-  // NOVA FUNÇÃO: Buscar loja pela URL personalizada
   getBySlug: async (slug: string) => {
     return await pb.collection('shops').getFirstListItem<Shop>(`slug="${slug}"`);
   },
@@ -98,18 +97,26 @@ export const segmentsApi = {
 };
 
 export const appointmentsApi = {
+  // Lista agendamentos do dia (atalho)
   listToday: async (shopId: string) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    return appointmentsApi.listByShopAndDate(shopId, new Date());
+  },
 
-    const startStr = today.toISOString().replace('T', ' ').substring(0, 19);
-    const endStr = tomorrow.toISOString().replace('T', ' ').substring(0, 19);
+  // NOVA: Lista agendamentos de uma data específica
+  listByShopAndDate: async (shopId: string, date: Date) => {
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const startStr = startOfDay.toISOString().replace('T', ' ').substring(0, 19);
+    const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
 
     try {
       return await pb.collection('appointments').getFullList<Appointment>({
-        filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time < "${endStr}"`,
+        filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
+        sort: 'start_time',
+        expand: 'service_id,client_id,barber_id' // Traz os dados relacionados
       });
     } catch (error) {
       console.warn("Erro ao buscar agendamentos:", error);
@@ -130,12 +137,15 @@ export const appointmentsApi = {
     }
   },
 
-  // NOVA FUNÇÃO: Criar agendamento
   create: async (data: Partial<Appointment>) => {
     return await pb.collection('appointments').create(data);
   },
+
+  // NOVA: Atualizar status ou dados do agendamento
+  update: async (id: string, data: Partial<Appointment>) => {
+    return await pb.collection('appointments').update(id, data);
+  },
   
-  // NOVA FUNÇÃO: Buscar agendamentos de um profissional em uma data específica (para verificar disponibilidade)
   listByStaffAndDate: async (staffId: string, date: Date) => {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
