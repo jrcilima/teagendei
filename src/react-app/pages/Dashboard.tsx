@@ -14,27 +14,71 @@ import {
   Loader2
 } from 'lucide-react';
 import { Service } from '../../shared/types';
-import { servicesApi } from '../lib/api';
+import { servicesApi, appointmentsApi, usersApi } from '../lib/api';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const { company, shops, selectedShop, setSelectedShop, loading: tenantLoading } = useTenant();
+  
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
 
+  // Estados para as métricas reais (inicializados como 0)
+  const [stats, setStats] = useState({
+    appointmentsToday: 0,
+    revenueToday: 0,
+    activeProfessionals: 0,
+    occupancyRate: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(false);
+
   useEffect(() => {
     let mounted = true;
-    if (selectedShop) {
+
+    const loadDashboardData = async () => {
+      if (!selectedShop) return;
+
       setServicesLoading(true);
-      servicesApi.listByShop(selectedShop.id)
-        .then((data: any) => {
-          if (mounted) setServices(data);
-        })
-        .catch(console.error)
-        .finally(() => {
-          if (mounted) setServicesLoading(false);
-        });
-    }
+      setStatsLoading(true);
+
+      try {
+        // 1. Carregar Serviços
+        const servicesData = await servicesApi.listByShop(selectedShop.id);
+        if (mounted) setServices(servicesData);
+
+        // 2. Carregar Agendamentos de Hoje e Profissionais para calcular estatísticas
+        const appointmentsData = await appointmentsApi.listToday(selectedShop.id);
+        const staffData = await usersApi.listStaffByShop(selectedShop.id);
+
+        if (mounted) {
+          // Calcular Faturamento (Soma do total_amount dos agendamentos do dia)
+          const revenue = appointmentsData.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+
+          // Calcular Taxa de Ocupação (Estimativa: 8 agendamentos/dia por profissional)
+          const totalCapacity = staffData.length * 8; 
+          const occupied = appointmentsData.length;
+          const occupancy = totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 100) : 0;
+
+          setStats({
+            appointmentsToday: appointmentsData.length,
+            revenueToday: revenue,
+            activeProfessionals: staffData.length,
+            occupancyRate: occupancy
+          });
+        }
+
+      } catch (error) {
+        console.error("Erro ao carregar dados do dashboard:", error);
+      } finally {
+        if (mounted) {
+          setServicesLoading(false);
+          setStatsLoading(false);
+        }
+      }
+    };
+
+    loadDashboardData();
+
     return () => { mounted = false; };
   }, [selectedShop]);
 
@@ -112,7 +156,6 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
@@ -121,7 +164,9 @@ export default function Dashboard() {
               </div>
               <TrendingUp className="w-5 h-5 text-green-500" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-1">24</h3>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">
+              {statsLoading ? '-' : stats.appointmentsToday}
+            </h3>
             <p className="text-sm text-gray-600">Agendamentos Hoje</p>
           </div>
           
@@ -132,7 +177,9 @@ export default function Dashboard() {
               </div>
               <TrendingUp className="w-5 h-5 text-green-500" />
             </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-1">R$ 1.850</h3>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">
+              {statsLoading ? '-' : `R$ ${stats.revenueToday.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            </h3>
             <p className="text-sm text-gray-600">Faturamento Hoje</p>
           </div>
 
@@ -142,7 +189,9 @@ export default function Dashboard() {
                  <Users className="w-6 h-6 text-blue-600" />
                </div>
              </div>
-             <h3 className="text-2xl font-bold text-gray-900 mb-1">3</h3>
+             <h3 className="text-2xl font-bold text-gray-900 mb-1">
+               {statsLoading ? '-' : stats.activeProfessionals}
+             </h3>
              <p className="text-sm text-gray-600">Profissionais Ativos</p>
           </div>
 
@@ -152,12 +201,14 @@ export default function Dashboard() {
                  <Clock className="w-6 h-6 text-orange-600" />
                </div>
              </div>
-             <h3 className="text-2xl font-bold text-gray-900 mb-1">85%</h3>
+             <h3 className="text-2xl font-bold text-gray-900 mb-1">
+               {statsLoading ? '-' : `${stats.occupancyRate}%`}
+             </h3>
              <p className="text-sm text-gray-600">Taxa de Ocupação</p>
           </div>
         </div>
 
-        {/* Navigation Grid - Resolves unused Settings warning */}
+        {/* Navigation Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Link
             to="/appointments"
@@ -227,6 +278,12 @@ export default function Dashboard() {
                 <div className="px-6 py-12 text-center">
                   <Store className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 mb-4">Nenhum serviço cadastrado ainda</p>
+                  <Link
+                    to="/services/new"
+                    className="inline-block px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Cadastrar Primeiro Serviço
+                  </Link>
                 </div>
               ) : (
                 services.map((service) => (
@@ -237,6 +294,7 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-600 mt-1">{service.description}</p>
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                           <span>⏱️ {service.duration} min</span>
+                          {service.category && <span>📁 {service.category}</span>}
                         </div>
                       </div>
                       <div className="text-right">

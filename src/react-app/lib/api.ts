@@ -106,17 +106,28 @@ export const appointmentsApi = {
     const startStr = today.toISOString().replace('T', ' ').substring(0, 19);
     const endStr = tomorrow.toISOString().replace('T', ' ').substring(0, 19);
 
-    return await pb.collection('appointments').getFullList<Appointment>({
-      filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time < "${endStr}"`,
-    });
+    try {
+      return await pb.collection('appointments').getFullList<Appointment>({
+        filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time < "${endStr}"`,
+      });
+    } catch (error: any) {
+      // Se a coleção não existir ou der erro, retorna array vazio para não quebrar a tela
+      console.warn("Erro ao buscar agendamentos (provavelmente a coleção ainda não existe ou está vazia):", error);
+      return [];
+    }
   },
 };
 
 export const usersApi = {
   // Lista profissionais vinculados a uma loja
   listStaffByShop: async (shopId: string) => {
-    return await pb.collection('users').getFullList<User>({
-      filter: `shop_id = "${shopId}"`,
-    });
+    try {
+      return await pb.collection('users').getFullList<User>({
+        filter: `shop_id = "${shopId}"`,
+      });
+    } catch (error: any) {
+      console.warn("Erro ao buscar staff:", error);
+      return [];
+    }
   }
 };
