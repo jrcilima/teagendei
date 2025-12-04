@@ -265,7 +265,7 @@ export default function StaffForm() {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <>
                     <Save className="w-5 h-5" />
-                    Salvar
+                    Salvar Profissional
                   </>
                 )}
               </button>

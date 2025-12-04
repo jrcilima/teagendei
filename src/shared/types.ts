@@ -1,10 +1,23 @@
-// Tipos adaptados para o PocketBase (IDs são strings, campos de data são strings ISO)
-
+// Tipos adaptados para o PocketBase e nova estrutura v2
 
 export interface BaseModel {
   id: string;
   created: string;
   updated: string;
+  collectionId: string;
+  collectionName: string;
+}
+
+export interface PaymentMethod extends BaseModel {
+  name: string;
+  // code: number; // Removido para simplificação (confiar no ID)
+  is_active: boolean;
+  company_id: string;
+}
+
+export interface Category extends BaseModel {
+  name: string;
+  shop_id: string;
 }
 
 export interface Company extends BaseModel {
@@ -16,26 +29,12 @@ export interface Company extends BaseModel {
   owner_id?: string;
 }
 
-export interface BaseModel {
-  id: string;
-  created: string;
-  updated: string;
-  collectionId: string;
-  collectionName: string;
-}
-
-export interface Category extends BaseModel {
-  name: string;
-  shop_id: string;
-}
-
-
 export interface Segment extends BaseModel {
   name: string;
   slug: string;
   icon_url?: string;
-  theme_colors: any; // JSON object no PB
-  terminology: any; // JSON object no PB
+  theme_colors: any;
+  terminology: any;
 }
 
 export interface Shop extends BaseModel {
@@ -48,13 +47,17 @@ export interface Shop extends BaseModel {
   address?: string;
   phone?: string;
   description?: string;
-  business_hours?: any; // JSON
-  accepted_methods?: any; // JSON
+  business_hours?: any;
+  // Relação com payment_methods (array de IDs)
+  accepted_payment_methods?: string[]; 
   pix_key?: string;
   pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria';
   min_advance_time: number;
   max_advance_time: number;
   is_active: boolean;
+  expand?: {
+    accepted_payment_methods?: PaymentMethod[];
+  };
 }
 
 export interface User extends BaseModel {
@@ -68,22 +71,7 @@ export interface User extends BaseModel {
   company_id?: string;
   shop_id?: string;
   is_active: boolean;
-  is_professional: boolean; // NOVO CAMPO
-  emailVisibility: boolean;
-  verified: boolean;
-}
-
-export interface User extends BaseModel {
-  id: string;
-  email: string;
-  name: string;
-  phone?: string;
-  password_hash: string;
-  avatar?: string;
-  role: 'dono' | 'staff' | 'cliente';
-  company_id?: string;
-  shop_id?: string;
-  is_active: boolean;
+  is_professional: boolean;
   emailVisibility: boolean;
   verified: boolean;
 }
@@ -93,13 +81,55 @@ export interface Service extends BaseModel {
   description?: string;
   price: number;
   duration: number;
-  category_id?: string; // ID da categoria
+  category_id?: string; // Relação com a categoria
   is_active: boolean;
   shop_id: string;
   required_staff: number;
   buffer_time: number;
   expand?: {
-    category_id?: Category; // Objeto completo da categoria
+    category_id?: Category;
+  };
+}
+
+// Enums para uso no código (mapeando os números do banco)
+export enum AppointmentStatus {
+  CANCELADO = 0,
+  AGENDADO = 1,
+  CONFIRMADO = 2,
+  EM_ANDAMENTO = 3,
+  CONCLUIDO = 4,
+  FALTOU = 9
+}
+
+export enum PaymentStatus {
+  NAO_PAGO = 1,
+  PAGO = 2,
+  REEMBOLSADO = 3
+}
+
+export interface Appointment extends BaseModel {
+  start_time: string;
+  end_time: string;
+  // Agora são números baseados no Enum
+  status: AppointmentStatus; 
+  payment_status: PaymentStatus;
+  // Agora é relação com payment_methods (ID)
+  payment_method?: string; 
+  total_amount: number;
+  notes?: string;
+  client_id: string;
+  barber_id: string;
+  service_id: string;
+  shop_id: string;
+  reminder_sent: boolean;
+  confirmation_sent: boolean;
+  cancellation_reason?: string;
+  expand?: {
+    client_id?: User;
+    barber_id?: User;
+    service_id?: Service;
+    shop_id?: Shop;
+    payment_method?: PaymentMethod;
   };
 }
 
@@ -110,39 +140,13 @@ export interface StaffService extends BaseModel {
   special_price?: number;
 }
 
-export interface Appointment extends BaseModel {
-  start_time: string;
-  end_time: string;
-  status: 'agendado' | 'confirmado' | 'em_andamento' | 'concluido' | 'cancelado' | 'faltou';
-  payment_status: 'nao_pago' | 'pago' | 'reembolsado' | 'pendente';
-  payment_method?: 'pix' | 'dinheiro' | 'cartao';
-  total_amount: number;
-  notes?: string;
-  client_id: string;
-  staff_id: string; // Mantido para retrocompatibilidade se necessário
-  barber_id: string; // ADICIONADO: Campo correto conforme schema do PB
-  service_id: string;
-  shop_id: string;
-  company_id?: string; // Pode ser opcional dependendo da regra
-  reminder_sent: boolean;
-  confirmation_sent: boolean;
-  cancellation_reason?: string;
-  expand?: {
-    client_id?: User;
-    staff_id?: User;
-    barber_id?: User; // ADICIONADO
-    service_id?: Service;
-    shop_id?: Shop;
-  };
-}
-
 export interface BlockedSlot extends BaseModel {
   start_time: string;
   end_time: string;
   reason: 'folga' | 'feriado' | 'manutencao' | 'evento';
   staff_id?: string;
   shop_id: string;
-  recurring?: any; // JSON
+  recurring?: any;
 }
 
 export interface FinancialTransaction extends BaseModel {
@@ -152,7 +156,7 @@ export interface FinancialTransaction extends BaseModel {
   status: 'pendente' | 'concluido' | 'falhou';
   method?: 'pix' | 'cartao' | 'dinheiro';
   pix_code?: string;
-  metadata?: any; // JSON
+  metadata?: any;
   appointment_id?: string;
   shop_id: string;
   client_id: string;
@@ -162,7 +166,7 @@ export interface Notification extends BaseModel {
   type: 'whatsapp' | 'email' | 'sms' | 'push';
   recipient: string;
   subject?: string;
-  content?: any; // JSON
+  content?: any;
   status: 'enviado' | 'falhou' | 'pendente';
   sent_at?: string;
   related_id?: string;

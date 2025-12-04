@@ -1,5 +1,5 @@
 import { pb } from './pocketbase';
-import { Company, Shop, Service, Segment, Appointment, User, Category } from '../../shared/types';
+import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod } from '../../shared/types';
 
 export const authApi = {
   logout: () => {
@@ -47,11 +47,17 @@ export const shopsApi = {
   },
 
   getById: async (id: string) => {
-    return await pb.collection('shops').getOne<Shop>(id);
+    // Expand atualizado para trazer os métodos de pagamento aceitos
+    return await pb.collection('shops').getOne<Shop>(id, {
+      expand: 'accepted_payment_methods'
+    });
   },
 
   getBySlug: async (slug: string) => {
-    return await pb.collection('shops').getFirstListItem<Shop>(`slug="${slug}"`);
+    // Expand atualizado para trazer os métodos de pagamento aceitos na página de agendamento
+    return await pb.collection('shops').getFirstListItem<Shop>(`slug="${slug}"`, {
+      expand: 'accepted_payment_methods'
+    });
   },
 
   update: async (id: string, data: Partial<Shop>) => {
@@ -59,6 +65,34 @@ export const shopsApi = {
   },
 };
 
+// NOVA API: Métodos de Pagamento
+export const paymentMethodsApi = {
+  // Lista métodos filtrando pela empresa (company_id)
+  listByCompany: async (companyId: string) => {
+    return await pb.collection('payment_methods').getFullList<PaymentMethod>({
+      filter: `company_id = "${companyId}" && is_active = true`,
+      sort: 'name'
+    });
+  },
+  
+  // Lista todos (útil se tiver métodos globais sem company_id, ou para fallback)
+  list: async () => {
+    return await pb.collection('payment_methods').getFullList<PaymentMethod>({
+      filter: 'is_active = true',
+      sort: 'name'
+    });
+  },
+
+  create: async (data: Partial<PaymentMethod>) => {
+    return await pb.collection('payment_methods').create(data);
+  },
+
+  delete: async (id: string) => {
+    return await pb.collection('payment_methods').delete(id);
+  }
+};
+
+// NOVA API: Categorias
 export const categoriesApi = {
   listByShop: async (shopId: string) => {
     return await pb.collection('categories').getFullList<Category>({
@@ -66,9 +100,8 @@ export const categoriesApi = {
       sort: 'name'
     });
   },
-
-  create: async (data: Partial<Category>) => {
-    return await pb.collection('categories').create(data);
+  create: async (data: Partial<Category>) => { 
+    return await pb.collection('categories').create(data); 
   }
 };
 
@@ -81,7 +114,7 @@ export const servicesApi = {
     return await pb.collection('services').getFullList<Service>({
       filter: `shop_id = "${shopId}"`,
       sort: 'name',
-      expand: 'category_id' // Traz o nome da categoria
+      expand: 'category_id' // Expandir para mostrar o nome da categoria na lista
     });
   },
 
@@ -128,7 +161,8 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
         sort: 'start_time',
-        expand: 'service_id,client_id,barber_id'
+        // Expand atualizado para incluir payment_method e ver o nome do método
+        expand: 'service_id,client_id,barber_id,payment_method'
       });
     } catch (error) {
       console.warn("Erro ao buscar agendamentos:", error);
@@ -141,7 +175,8 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `client_id = "${clientId}"`,
         sort: '-start_time',
-        expand: 'service_id,barber_id,shop_id',
+        // Expand atualizado
+        expand: 'service_id,barber_id,shop_id,payment_method',
       });
     } catch (error) {
       console.warn("Erro ao buscar histórico do cliente:", error);
