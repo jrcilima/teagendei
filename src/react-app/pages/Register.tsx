@@ -46,10 +46,9 @@ export default function Register() {
       if (formData.role === 'dono') {
         navigate('/onboarding');
       } else if (formData.role === 'cliente') {
-        // Adjust redirect for client role if needed
-        navigate('/dashboard'); 
+        navigate('/client'); // CORRIGIDO: Vai para o painel do cliente
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard'); // Staff vai para o dashboard
       }
     } catch (err: any) {
       console.error(err);

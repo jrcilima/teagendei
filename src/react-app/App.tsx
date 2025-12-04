@@ -9,6 +9,7 @@ import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import OnboardingPage from "./pages/Onboarding";
 import DashboardPage from "./pages/Dashboard";
+import ClientDashboard from "./pages/ClientDashboard"; // Importar a nova página
 
 export default function App() {
   return (
@@ -31,11 +32,22 @@ export default function App() {
               }
             />
             
+            {/* Dashboard do Dono/Staff */}
             <Route
               path="/dashboard"
               element={
                 <ProtectedRoute allowedRoles={['dono', 'staff']}>
                   <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Dashboard do Cliente (NOVA ROTA) */}
+            <Route
+              path="/client"
+              element={
+                <ProtectedRoute allowedRoles={['cliente']}>
+                  <ClientDashboard />
                 </ProtectedRoute>
               }
             />

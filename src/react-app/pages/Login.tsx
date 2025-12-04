@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogIn, AlertCircle } from 'lucide-react';
+import { pb } from '../lib/pocketbase'; // Importar PB para checar role imediatamente
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -18,7 +19,19 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      
+      // Verifica o papel do usuário logado diretamente do authStore para redirecionar corretamente
+      const role = pb.authStore.model?.role;
+      
+      if (role === 'cliente') {
+        navigate('/client');
+      } else if (role === 'dono' || role === 'staff') {
+        navigate('/dashboard');
+      } else {
+        // Fallback
+        navigate('/');
+      }
+
     } catch (err: any) {
       console.error(err);
       // Friendly error handling
