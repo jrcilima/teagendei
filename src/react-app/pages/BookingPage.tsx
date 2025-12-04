@@ -2,11 +2,10 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
 import { Shop, Service, User, Appointment } from '../../shared/types';
-// REMOVIDO: Scissors (não estava sendo usado no JSX atual)
 import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, CalendarX, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-// Tipos auxiliares para o horário (mesmos do Settings)
+// Tipos auxiliares para o horário
 type DaySchedule = {
   open: boolean;
   start: string;
@@ -81,18 +80,17 @@ export default function BookingPage() {
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
-        // Se a busca falhar (ex: erro 403 de permissão ou 404), assumimos agenda vazia
-        // para não travar a tela, mas logamos o erro.
+        // Busca agendamentos do dia para verificar conflitos
+        // Usamos try/catch para evitar que erro 404 (lista vazia) quebre a tela
         const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate)) || [];
         
-        // Filtra apenas os que não estão cancelados
-        // Verifica se é um array antes de filtrar
+        // Garante que é array e filtra cancelados
         const activeAppts = Array.isArray(appts) ? appts.filter(a => a.status !== 'cancelado') : [];
         
         setExistingAppointments(activeAppts);
       } catch (err) {
-        console.error("Erro ao buscar disponibilidade (assumindo livre):", err);
-        setExistingAppointments([]); // Fallback seguro: nenhum agendamento bloqueando
+        console.warn("Erro ao buscar disponibilidade (pode ser lista vazia):", err);
+        setExistingAppointments([]); // Assume livre se falhar a busca
       } finally {
         setSlotsLoading(false);
       }
@@ -106,10 +104,10 @@ export default function BookingPage() {
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
-    // Garantir que a data está no formato correto e não tem problemas de fuso horário local vs UTC na criação
-    // Criamos a data "meio-dia" para evitar problemas de timezone virando o dia
-    const [year, month, day] = selectedDate.split('-').map(Number);
-    const dateObj = new Date(year, month - 1, day, 12, 0, 0); 
+    // Cria data baseada na string YYYY-MM-DD para pegar o dia da semana correto
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    // Mês em JS é 0-indexado
+    const dateObj = new Date(y, m - 1, d);
     
     const dayOfWeek = dateObj.getDay(); // 0 (Dom) a 6 (Sab)
     const dayKey = DAY_KEYS[dayOfWeek];
@@ -124,59 +122,55 @@ export default function BookingPage() {
     const { start, end } = businessHours[dayKey];
     const slots: string[] = [];
     
-    // Converter "09:00" para minutos do dia (ex: 540)
+    // Converter horários para minutos do dia (ex: "09:00" -> 540)
     const [startHour, startMin] = start.split(':').map(Number);
     const [endHour, endMin] = end.split(':').map(Number);
     
     let currentMinutes = startHour * 60 + startMin;
     const closeMinutes = endHour * 60 + endMin;
-    const interval = selectedService?.duration || 30; // Usa duração do serviço ou 30min padrão
+    const interval = 30; // Usando slots fixos de 30 min para padronização
 
     // Data atual para validar horários passados
     const now = new Date();
     const isToday = selectedDate === now.toISOString().split('T')[0];
     const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
 
-    while (currentMinutes + interval <= closeMinutes) {
-      // Se for hoje, não mostrar horários passados (+ buffer de 15 min para não agendar "agora mesmo")
+    while (currentMinutes + selectedService.duration <= closeMinutes) {
+      // Se for hoje, não mostrar horários passados (+15 min de buffer)
       if (isToday && currentMinutes < (currentMinutesNow + 15)) {
-        currentMinutes += interval; // ou 30 se o passo for fixo
+        currentMinutes += interval;
         continue;
       }
 
-      const h = Math.floor(currentMinutes / 60);
-      const m = currentMinutes % 60;
-      const timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-      
-      // Definição do horário de início e fim deste slot candidato em minutos
+      // Slot candidato
       const slotStart = currentMinutes;
-      const slotEnd = currentMinutes + interval;
+      const slotEnd = currentMinutes + selectedService.duration;
 
-      // Bloqueio 2: Choque com agendamentos existentes
+      // Verifica colisão com agendamentos existentes
       const isBlocked = existingAppointments.some(appt => {
-        // Se o usuário escolheu um profissional específico, ignora agendamentos de outros
+        // Se selecionou um profissional específico, só verifica conflitos dele
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
-        // Converter string ISO do banco para objeto Date
+        // Converter datas do agendamento para minutos do dia
         const apptStart = new Date(appt.start_time);
-        const apptEnd = new Date(appt.end_time); // Assumindo que temos end_time no banco
+        const apptEnd = new Date(appt.end_time);
 
-        // Converter agendamento do banco para minutos do dia para comparar
+        // Ajuste de fuso horário simples: pega hora/minuto local da data recebida
         const apptStartMinutes = apptStart.getHours() * 60 + apptStart.getMinutes();
         const apptEndMinutes = apptEnd.getHours() * 60 + apptEnd.getMinutes();
 
-        // Lógica de Colisão: (SlotStart < ApptEnd) E (SlotEnd > ApptStart)
-        // Ex: Slot 14:00-14:30 (840-870) vs Appt 14:00-15:00 (840-900) -> 840 < 900 AND 870 > 840 -> TRUE (Bloqueado)
+        // Lógica de Colisão: (StartA < EndB) e (EndA > StartB)
         return (slotStart < apptEndMinutes) && (slotEnd > apptStartMinutes);
       });
 
       if (!isBlocked) {
+        const h = Math.floor(currentMinutes / 60);
+        const mn = currentMinutes % 60;
+        const timeString = `${String(h).padStart(2, '0')}:${String(mn).padStart(2, '0')}`;
         slots.push(timeString);
       }
       
-      // Incremento: define de quanto em quanto tempo os slots aparecem. 
-      // Usando 30 min fixo para padronizar a grade
-      currentMinutes += 30; 
+      currentMinutes += interval; 
     }
 
     return slots;
@@ -184,7 +178,6 @@ export default function BookingPage() {
 
   const handleBooking = async () => {
     if (!user) {
-      // Salva o estado atual para voltar depois do login (futura melhoria)
       alert("Você precisa fazer login ou criar uma conta para agendar.");
       navigate('/login');
       return;
@@ -194,37 +187,37 @@ export default function BookingPage() {
 
     setBookingLoading(true);
     try {
-      // Construir data completa
+      // Construção Manual da Data para garantir integridade (Evita problemas de UTC/Fuso)
+      
+      // 1. String de Início: "YYYY-MM-DD HH:mm:ss"
+      const startString = `${selectedDate} ${selectedTime}:00`;
+      
+      // 2. Cálculo da Data Final
+      const [year, month, day] = selectedDate.split('-').map(Number);
       const [hours, minutes] = selectedTime.split(':').map(Number);
       
-      // Cria data local corretamente
-      const [year, month, day] = selectedDate.split('-').map(Number);
-      const startTime = new Date(year, month - 1, day, hours, minutes, 0);
+      // Usamos UTC apenas para somar minutos sem erros de virada de dia/horário de verão
+      const baseDate = new Date(Date.UTC(year, month - 1, day, hours, minutes));
+      const endDate = new Date(baseDate.getTime() + selectedService.duration * 60000);
+
+      // 3. String de Fim: "YYYY-MM-DD HH:mm:ss"
+      const endYear = endDate.getUTCFullYear();
+      const endMonth = String(endDate.getUTCMonth() + 1).padStart(2, '0');
+      const endDay = String(endDate.getUTCDate()).padStart(2, '0');
+      const endHour = String(endDate.getUTCHours()).padStart(2, '0');
+      const endMin = String(endDate.getUTCMinutes()).padStart(2, '0');
       
-      // Data fim
-      const endTime = new Date(startTime);
-      endTime.setMinutes(startTime.getMinutes() + selectedService.duration);
+      const endString = `${endYear}-${endMonth}-${endDay} ${endHour}:${endMin}:00`;
 
-      // Usando .toISOString() padrão para garantir compatibilidade total com PocketBase
-      const startIso = startTime.toISOString();
-      const endIso = endTime.toISOString();
-
-      console.log("Enviando agendamento:", {
-        shop_id: shop.id,
-        client_id: user.id,
-        barber_id: selectedStaff.id,
-        service_id: selectedService.id,
-        start_time: startIso,
-        end_time: endIso
-      });
+      console.log("Enviando:", { start: startString, end: endString });
 
       await appointmentsApi.create({
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startIso, 
-        end_time: endIso,     
+        start_time: startString, // Envia string exata
+        end_time: endString,     // Envia string exata
         status: 'agendado',
         payment_status: 'nao_pago',
         total_amount: selectedService.price,
@@ -235,20 +228,9 @@ export default function BookingPage() {
       alert("Agendamento realizado com sucesso!");
       navigate('/client');
     } catch (error: any) {
-      console.error("Erro detalhado do PocketBase:", error);
-      // Tenta mostrar mensagem de erro mais específica se vier do backend
-      const message = error?.data?.message || error?.message || "Erro desconhecido ao agendar.";
-      
-      // Verifica se é erro de validação de campos específicos
-      const fieldErrors = error?.data?.data;
-      let detailedError = "";
-      if (fieldErrors) {
-        detailedError = Object.entries(fieldErrors)
-          .map(([field, err]: [string, any]) => `${field}: ${err.message}`)
-          .join('\n');
-      }
-
-      alert(`Erro ao realizar agendamento:\n${message}\n${detailedError}`);
+      console.error("Erro ao agendar:", error);
+      const message = error?.data?.message || error?.message || "Erro desconhecido.";
+      alert(`Não foi possível agendar. Detalhes: ${message}`);
     } finally {
       setBookingLoading(false);
     }
@@ -326,6 +308,11 @@ export default function BookingPage() {
                       <span className="inline-flex items-center gap-1 text-xs text-purple-600 font-medium bg-purple-50 px-2 py-1 rounded-md">
                         <Clock className="w-3 h-3" /> {service.duration} min
                       </span>
+                      {service.expand?.category_id && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-md">
+                          {service.expand.category_id.name}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
@@ -347,8 +334,6 @@ export default function BookingPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Opção "Qualquer Profissional" removida temporariamente para simplificar a lógica de conflito */}
-              
               {staff.map(professional => (
                 <div 
                   key={professional.id}
@@ -393,7 +378,7 @@ export default function BookingPage() {
                 min={new Date().toISOString().split('T')[0]}
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
-                  setSelectedTime(null); // Reseta horário ao trocar dia
+                  setSelectedTime(null); 
                 }}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-gray-700 bg-gray-50"
               />
@@ -477,7 +462,7 @@ export default function BookingPage() {
                 <div className="flex justify-between border-b border-gray-100 pb-4">
                   <span className="text-gray-500">Data</span>
                   <span className="font-medium text-gray-900 capitalize">
-                    {new Date(selectedDate).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                    {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-gray-100 pb-4">
