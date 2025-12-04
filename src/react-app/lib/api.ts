@@ -193,6 +193,7 @@ export const appointmentsApi = {
     const startStr = startOfDay.toISOString().replace('T', ' ').substring(0, 19);
     const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
 
+    // Correção: Usando filtro numérico para status cancelado (0)
     return await pb.collection('appointments').getFullList<Appointment>({
       filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != ${AppointmentStatus.CANCELADO}`,
     });
