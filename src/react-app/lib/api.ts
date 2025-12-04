@@ -92,7 +92,7 @@ export const segmentsApi = {
   },
 };
 
-// NOVAS FUNÇÕES PARA O DASHBOARD
+// --- NOVAS FUNÇÕES ADICIONADAS PARA O DASHBOARD ---
 
 export const appointmentsApi = {
   // Lista agendamentos do dia para uma loja específica
@@ -102,7 +102,7 @@ export const appointmentsApi = {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Formata para o padrão do PocketBase (UTC)
+    // Formata para o padrão do PocketBase (UTC string)
     const startStr = today.toISOString().replace('T', ' ').substring(0, 19);
     const endStr = tomorrow.toISOString().replace('T', ' ').substring(0, 19);
 
