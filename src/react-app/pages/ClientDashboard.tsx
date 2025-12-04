@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { shopsApi } from '../lib/api';
-import { Appointment, Shop } from '../../shared/types';
-import { Calendar, MapPin, Plus, LogOut, Loader2, Clock } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { shopsApi, appointmentsApi } from '../lib/api';
+import { Shop, Appointment } from '../../shared/types';
+import { Calendar, MapPin, Plus, LogOut, Loader2, Clock, Store as StoreIcon, Scissors } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function ClientDashboard() {
   const { user, logout } = useAuth();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [myShop, setMyShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +17,7 @@ export default function ClientDashboard() {
       if (!user) return;
       setLoading(true);
       try {
-        // Carregar dados da unidade vinculada (se houver)
+        // 1. Carregar Unidade Vinculada
         if (user.shop_id) {
           try {
             const shopData = await shopsApi.getById(user.shop_id);
@@ -27,9 +27,14 @@ export default function ClientDashboard() {
           }
         }
 
-        // TODO: Adicionar função na API para listar agendamentos do cliente (por client_id)
-        // Por enquanto, deixamos lista vazia ou mockada
-        setAppointments([]); 
+        // 2. Carregar Agendamentos Reais
+        try {
+          const myAppointments = await appointmentsApi.listByClient(user.id);
+          setAppointments(myAppointments);
+        } catch (e) {
+          console.error("Erro ao carregar agendamentos", e);
+        }
+
       } catch (error) {
         console.error(error);
       } finally {
@@ -40,24 +45,38 @@ export default function ClientDashboard() {
     loadData();
   }, [user]);
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header Mobile-First */}
+    <div className="min-h-screen bg-slate-50 pb-20">
+      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Olá, {user?.name?.split(' ')[0]}</h1>
-            <p className="text-xs text-slate-500">Bem-vindo de volta</p>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold">
+              {user?.name?.charAt(0).toUpperCase() || 'C'}
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-slate-800">Olá, {user?.name?.split(' ')[0]}</h1>
+              <p className="text-xs text-slate-500">Bem-vindo(a)</p>
+            </div>
           </div>
-          <button onClick={logout} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
+          <button 
+            onClick={handleLogout} 
+            className="p-2 text-slate-400 hover:text-red-500 transition-colors bg-slate-50 rounded-lg"
+            title="Sair"
+          >
             <LogOut className="w-5 h-5" />
           </button>
         </div>
@@ -65,90 +84,111 @@ export default function ClientDashboard() {
 
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">
         
-        {/* Unidade Favorita */}
+        {/* Card da Unidade */}
         {myShop ? (
-          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-5 text-white shadow-lg">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h2 className="font-bold text-lg">{myShop.name}</h2>
-                <div className="flex items-center gap-1 text-purple-100 text-sm mt-1">
-                  <MapPin className="w-3 h-3" />
-                  <span>{myShop.address || 'Endereço não informado'}</span>
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+            <div className="relative z-10">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="font-bold text-xl">{myShop.name}</h2>
+                  <div className="flex items-center gap-1 text-purple-100 text-sm mt-1">
+                    <MapPin className="w-3 h-3" />
+                    <span>{myShop.address || 'Endereço não informado'}</span>
+                  </div>
+                </div>
+                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                  <StoreIcon className="w-6 h-6 text-white" />
                 </div>
               </div>
-              <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
-                <Store className="w-6 h-6 text-white" />
+              
+              <div className="flex gap-2">
+                <Link 
+                  to={`/book/${myShop.slug}`} 
+                  className="flex-1 bg-white text-purple-600 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-purple-50 transition-colors shadow-sm"
+                >
+                  <Plus className="w-4 h-4" />
+                  Agendar
+                </Link>
+                {myShop.phone && (
+                  <a 
+                    href={`https://wa.me/55${myShop.phone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-3 bg-white/20 text-white rounded-xl font-semibold text-sm backdrop-blur-md hover:bg-white/30 transition-colors"
+                  >
+                    WhatsApp
+                  </a>
+                )}
               </div>
             </div>
-            <Link 
-              to={`/book/${myShop.slug}`} // Futura rota de agendamento
-              className="w-full bg-white text-purple-600 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-purple-50 transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-              Novo Agendamento
-            </Link>
+            
+            {/* Decorativo */}
+            <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
           </div>
         ) : (
-          <div className="bg-white p-6 rounded-2xl shadow-sm text-center border border-slate-100">
-            <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-              <MapPin className="w-6 h-6 text-purple-600" />
+          <div className="bg-white p-8 rounded-2xl shadow-sm text-center border border-slate-100">
+            <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+              <MapPin className="w-8 h-8 text-purple-600" />
             </div>
-            <h3 className="font-semibold text-slate-800">Encontre um local</h3>
-            <p className="text-sm text-slate-500 mb-4">Você ainda não tem uma unidade favorita.</p>
-            <button className="text-purple-600 font-medium text-sm">Buscar Estabelecimentos</button>
+            <h3 className="font-bold text-slate-800 text-lg mb-2">Encontre um local</h3>
+            <p className="text-slate-500 text-sm mb-6">Você ainda não está vinculado a nenhuma unidade.</p>
+            <button className="w-full py-3 px-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors">
+              Buscar Estabelecimentos
+            </button>
           </div>
         )}
 
-        {/* Próximos Agendamentos */}
+        {/* Lista de Agendamentos */}
         <div>
-          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-purple-500" />
-            Meus Agendamentos
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-purple-500" />
+              Meus Agendamentos
+            </h3>
+            {appointments.length > 0 && (
+              <span className="text-xs text-purple-600 font-semibold bg-purple-100 px-2 py-1 rounded-full">
+                {appointments.length}
+              </span>
+            )}
+          </div>
           
           {appointments.length > 0 ? (
             <div className="space-y-3">
-              {/* Lista de agendamentos renderizada aqui */}
+              {appointments.map((appt) => (
+                <div key={appt.id} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
+                       <Scissors className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800">
+                        {appt.expand?.service_id?.name || 'Serviço'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(appt.start_time).toLocaleDateString('pt-BR')} às {new Date(appt.start_time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    appt.status === 'agendado' ? 'bg-yellow-100 text-yellow-700' : 
+                    appt.status === 'concluido' ? 'bg-green-100 text-green-700' : 
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {appt.status}
+                  </span>
+                </div>
+              ))}
             </div>
           ) : (
-            <div className="bg-white rounded-xl p-8 text-center border border-slate-100 border-dashed">
+            <div className="bg-white rounded-xl p-8 text-center border border-slate-200 border-dashed">
               <Clock className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 text-sm">Nenhum agendamento futuro.</p>
+              <p className="text-slate-500 text-sm font-medium">Nenhum agendamento.</p>
+              <p className="text-slate-400 text-xs mt-1">Seus horários aparecerão aqui.</p>
             </div>
           )}
-        </div>
-
-        {/* Promoções ou Histórico (Placeholder) */}
-        <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-          <h4 className="font-semibold text-purple-800 text-sm mb-1">Histórico</h4>
-          <p className="text-purple-600 text-xs">Seus atendimentos passados aparecerão aqui.</p>
         </div>
 
       </main>
     </div>
   );
-}
-
-// Pequeno helper para ícone Store caso não esteja importado
-function Store({ className }: { className?: string }) {
-  return (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width="24" 
-      height="24" 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      className={className}
-    >
-      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
-      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
-      <path d="M2 7h20"/>
-      <path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/>
-    </svg>
-  )
 }

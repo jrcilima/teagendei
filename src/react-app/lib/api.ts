@@ -92,17 +92,14 @@ export const segmentsApi = {
   },
 };
 
-// --- NOVAS FUNÇÕES ADICIONADAS PARA O DASHBOARD ---
-
 export const appointmentsApi = {
-  // Lista agendamentos do dia para uma loja específica
+  // Lista agendamentos do dia para o Dono/Staff
   listToday: async (shopId: string) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Formata para o padrão do PocketBase (UTC string)
     const startStr = today.toISOString().replace('T', ' ').substring(0, 19);
     const endStr = tomorrow.toISOString().replace('T', ' ').substring(0, 19);
 
@@ -110,22 +107,34 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time < "${endStr}"`,
       });
-    } catch (error: any) {
-      // Se a coleção não existir ou der erro, retorna array vazio para não quebrar a tela
-      console.warn("Erro ao buscar agendamentos (provavelmente a coleção ainda não existe ou está vazia):", error);
+    } catch (error) {
+      console.warn("Erro ao buscar agendamentos:", error);
       return [];
     }
   },
+
+  // NOVA FUNÇÃO: Lista histórico de agendamentos do Cliente
+  listByClient: async (clientId: string) => {
+    try {
+      return await pb.collection('appointments').getFullList<Appointment>({
+        filter: `client_id = "${clientId}"`,
+        sort: '-start_time', // Mais recentes primeiro
+        expand: 'service_id,barber_id,shop_id', // Traz dados do serviço e barbeiro
+      });
+    } catch (error) {
+      console.warn("Erro ao buscar histórico do cliente:", error);
+      return [];
+    }
+  }
 };
 
 export const usersApi = {
-  // Lista profissionais vinculados a uma loja
   listStaffByShop: async (shopId: string) => {
     try {
       return await pb.collection('users').getFullList<User>({
         filter: `shop_id = "${shopId}"`,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.warn("Erro ao buscar staff:", error);
       return [];
     }
