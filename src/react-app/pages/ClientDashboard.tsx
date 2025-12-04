@@ -5,6 +5,24 @@ import { Shop, Appointment, AppointmentStatus } from '../../shared/types';
 import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
+// Função para exibir a hora "original" (UTC) sem a conversão automática do navegador
+// Ex: Se o banco tem 09:00Z, o navegador mostraria 06:00 (Brasil). Isso força mostrar 09:00.
+const formatTimeDisplay = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+  const adjustedDate = new Date(date.getTime() + userTimezoneOffset);
+  return adjustedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatDateDisplay = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+  const adjustedDate = new Date(date.getTime() + userTimezoneOffset);
+  return adjustedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+};
+
 export default function ClientDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -18,7 +36,6 @@ export default function ClientDashboard() {
     if (!user) return;
     setLoading(true);
     try {
-      // 1. Carregar Unidade Vinculada
       if (user.shop_id) {
         try {
           const shopData = await shopsApi.getById(user.shop_id);
@@ -28,7 +45,6 @@ export default function ClientDashboard() {
         }
       }
 
-      // 2. Carregar Agendamentos
       try {
         const myAppointments = await appointmentsApi.listByClient(user.id);
         setAppointments(myAppointments);
@@ -66,7 +82,7 @@ export default function ClientDashboard() {
 
     setCancelLoading(appt.id);
     try {
-      // CORRIGIDO: Enviando status numérico
+      // CORRIGIDO: Enviando o número do Enum
       await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO });
       await loadData(); 
     } catch (error) {
@@ -77,8 +93,9 @@ export default function ClientDashboard() {
     }
   };
 
-  const getStatusBadge = (status: number) => {
-    switch(Number(status)) {
+  const getStatusBadge = (status: number | string) => {
+    const s = Number(status);
+    switch(s) {
       case AppointmentStatus.AGENDADO:
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">Agendado</span>;
       case AppointmentStatus.CONCLUIDO:
@@ -86,14 +103,13 @@ export default function ClientDashboard() {
       case AppointmentStatus.CANCELADO:
         return <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-50 text-red-700">Cancelado</span>;
       default:
-        return null;
+        return <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-700">Outro</span>;
     }
   };
 
-  // Separação de agendamentos
+  // Separação de agendamentos usando comparação numérica
   const now = new Date();
   
-  // CORRIGIDO: Comparação numérica de status
   const upcomingAppointments = appointments.filter(
     a => new Date(a.start_time) >= now && 
          Number(a.status) !== AppointmentStatus.CANCELADO && 
@@ -116,7 +132,6 @@ export default function ClientDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
-      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -140,7 +155,6 @@ export default function ClientDashboard() {
 
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">
         
-        {/* Card da Unidade (só mostra se tiver unidade vinculada) */}
         {myShop ? (
           <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
             <div className="relative z-10">
@@ -192,7 +206,6 @@ export default function ClientDashboard() {
           </div>
         )}
 
-        {/* Abas de Navegação */}
         <div className="flex p-1 bg-slate-100 rounded-xl">
           <button
             onClick={() => setActiveTab('upcoming')}
@@ -216,7 +229,6 @@ export default function ClientDashboard() {
           </button>
         </div>
 
-        {/* Lista de Agendamentos */}
         <div className="space-y-4">
           {activeTab === 'upcoming' ? (
             upcomingAppointments.length > 0 ? (
@@ -230,15 +242,17 @@ export default function ClientDashboard() {
                           <Calendar className="w-6 h-6" />
                         </div>
                         <div>
+                          {/* CORREÇÃO: Usando formatTimeDisplay para corrigir fuso */}
                           <p className="font-bold text-slate-900 text-lg">
-                            {new Date(appt.start_time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                            {formatTimeDisplay(appt.start_time)}
                           </p>
+                          {/* CORREÇÃO: Usando formatDateDisplay para corrigir fuso */}
                           <p className="text-sm text-slate-500 capitalize">
-                            {new Date(appt.start_time).toLocaleDateString('pt-BR', {weekday: 'long', day: 'numeric', month: 'long'})}
+                            {formatDateDisplay(appt.start_time)}
                           </p>
                         </div>
                      </div>
-                     {getStatusBadge(Number(appt.status))}
+                     {getStatusBadge(appt.status)}
                    </div>
 
                    <div className="space-y-2 mb-4">
@@ -294,11 +308,12 @@ export default function ClientDashboard() {
                         {appt.expand?.service_id?.name || 'Serviço'}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {new Date(appt.start_time).toLocaleDateString('pt-BR')} - {new Date(appt.start_time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                        {/* CORREÇÃO: Exibição de data/hora ajustada */}
+                        {formatDateDisplay(appt.start_time)} - {formatTimeDisplay(appt.start_time)}
                       </p>
                     </div>
                   </div>
-                  {getStatusBadge(Number(appt.status))}
+                  {getStatusBadge(appt.status)}
                 </div>
               ))
             ) : (
@@ -309,7 +324,6 @@ export default function ClientDashboard() {
             )
           )}
         </div>
-
       </main>
     </div>
   );
