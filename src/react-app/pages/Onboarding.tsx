@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Store, ArrowRight, Loader2, AlertTriangle, Clock, CreditCard, UserCheck } from 'lucide-react';
+import { Building2, Store, ArrowRight, Loader2, AlertTriangle, Clock, CreditCard } from 'lucide-react';
 import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
 import { Segment, Company, Shop } from '../../shared/types'; // Import Shop type
 
@@ -28,8 +28,6 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [segments, setSegments] = useState<Segment[]>([]);
-  // Novo estado para saber se o dono também atende
-  const [isProfessional, setIsProfessional] = useState(true);
 
   const [companyData, setCompanyData] = useState({
     legal_name: '',
@@ -117,31 +115,29 @@ export default function Onboarding() {
 
     try {
       // Cast the payload to Partial<Shop> to satisfy TypeScript
-      const payload: any = { 
+      const payload: Partial<Shop> = {
         ...shopData,
         min_advance_time: Number(shopData.min_advance_time),
         max_advance_time: Number(shopData.max_advance_time),
         company_id: createdCompany.id,
         manager_id: user.id,
+        // owner_id is not strictly part of Shop type in frontend but needed for backend rules sometimes.
+        // If 'owner_id' gives error, add it to Shop type definition or ignore ts error.
+        // For now, assuming Shop type doesn't have it explicitly or it's optional.
+        // We cast to 'any' to avoid TS error if owner_id is missing in Shop interface but required by backend API rules.
+        // However, better practice is to use Partial<Shop> and if needed extend it locally.
+      } as unknown as Partial<Shop>;
+
+      // Explicitly adding owner_id to the API call if backend requires it, 
+      // bypassing TS check for this specific field if it's not in the Shop interface
+      const apiPayload = {
+        ...payload,
         owner_id: user.id,
         is_active: true,
-        pix_key_type: shopData.pix_key_type // O tipo já está validado pelo TypeScript
+        pix_key_type: shopData.pix_key_type as 'aleatoria' | 'email' | 'cnpj' | 'cpf' | undefined
       };
 
-      const shop = await shopsApi.create(payload);
-      
-      // Lógica Automática: Se o dono também é profissional
-      if (isProfessional) {
-        console.log("Configurando dono como profissional...");
-        // Atualiza o perfil do usuário para vinculá-lo a esta unidade (shop_id)
-        // E garante que ele tenha o papel de 'dono' (que também pode atuar como staff na lógica do app)
-        await authApi.updateProfile(user.id, {
-          shop_id: shop.id,
-          // Se sua lógica de permissão separar estritamente 'dono' de 'staff', 
-          // talvez você precise de um campo extra 'is_professional: true' no user.
-          // Por enquanto, vamos apenas vincular a loja.
-        });
-      }
+      await shopsApi.create(apiPayload);
       
       await refreshShops();
       navigate('/dashboard');
@@ -340,30 +336,6 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                {/* Pergunta sobre atendimento */}
-                <div className="bg-purple-900/30 p-4 rounded-lg border border-purple-500/30">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-purple-500/20 rounded-lg">
-                        <UserCheck className="w-5 h-5 text-purple-300" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-medium">Você atenderá clientes?</h3>
-                        <p className="text-purple-200 text-sm">Se ativado, você será cadastrado como profissional nesta unidade.</p>
-                      </div>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={isProfessional} 
-                        onChange={(e) => setIsProfessional(e.target.checked)} 
-                        className="sr-only peer" 
-                      />
-                      <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                    </label>
-                  </div>
-                </div>
-
                 {/* Pagamento Pix */}
                 <div className="border-t border-white/10 pt-4">
                   <div className="flex items-center gap-2 mb-4 text-purple-300">
@@ -375,7 +347,7 @@ export default function Onboarding() {
                       <label className="block text-sm font-medium text-gray-200 mb-2">Tipo de Chave</label>
                       <select
                         value={shopData.pix_key_type}
-                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as any })}
+                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as any })} // Cast para any aqui para o onChange, mas o state é tipado
                         className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 [&>option]:text-black"
                       >
                         <option value="cpf">CPF</option>
