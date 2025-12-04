@@ -44,9 +44,18 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const shopsList = await shopsApi.list();
       setShops(shopsList);
       
-      // Automatically select the first shop if none is selected
-      if (shopsList.length > 0 && !selectedShop) {
-        setSelectedShop(shopsList[0]);
+      if (shopsList.length > 0) {
+        // Se não tiver loja selecionada, seleciona a primeira
+        if (!selectedShop) {
+          setSelectedShop(shopsList[0]);
+        } else {
+          // SE JÁ TIVER, ATUALIZA OS DADOS DELA COM A VERSÃO NOVA DO BANCO
+          // Isso corrige o bug de "salvei mas a tela mostra dados antigos"
+          const updatedSelected = shopsList.find(s => s.id === selectedShop.id);
+          if (updatedSelected) {
+            setSelectedShop(updatedSelected);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching shops:', error);
