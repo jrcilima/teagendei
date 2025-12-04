@@ -14,8 +14,9 @@ import ServicesList from "./pages/ServicesList";
 import ServiceForm from "./pages/ServiceForm";
 import BookingPage from "./pages/BookingPage";
 import Appointments from "./pages/Appointments";
-import StaffList from "./pages/StaffList"; // NOVO
-import StaffForm from "./pages/StaffForm"; // NOVO
+import StaffList from "./pages/StaffList";
+import StaffForm from "./pages/StaffForm";
+import SettingsPage from "./pages/Settings"; // NOVO
 
 export default function App() {
   return (
@@ -86,7 +87,7 @@ export default function App() {
               }
             />
 
-            {/* Gestão de Equipe (NOVO) */}
+            {/* Gestão de Equipe */}
             <Route
               path="/staff"
               element={
@@ -108,6 +109,16 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['dono']}>
                   <StaffForm />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Configurações (NOVO) */}
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <SettingsPage />
                 </ProtectedRoute>
               }
             />
