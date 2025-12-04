@@ -79,7 +79,9 @@ export default function BookingPage() {
       try {
         // Passando a data selecionada corretamente para listar agendamentos do dia
         // Importante: appointmentsApi.listByShopAndDate deve lidar com o filtro de data corretamente
+        // Usamos a data no formato YYYY-MM-DD + 00:00:00 local
         const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate + 'T00:00:00')) || [];
+        
         // Ajuste: Verifica status numérico (AppointmentStatus.CANCELADO é 0)
         const activeAppts = Array.isArray(appts) ? appts.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO) : [];
         setExistingAppointments(activeAppts);
@@ -122,7 +124,9 @@ export default function BookingPage() {
 
     const now = new Date();
     // Comparação de datas deve ser feita com strings para evitar problemas de fuso
-    const isToday = selectedDate === now.toLocaleDateString('en-CA'); // Formato YYYY-MM-DD local
+    // Se today for "2023-10-25" e selectedDate "2023-10-25", é hoje.
+    const todayStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD local
+    const isToday = selectedDate === todayStr;
     const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
 
     while (currentMinutes + selectedService.duration <= closeMinutes) {
@@ -137,11 +141,18 @@ export default function BookingPage() {
       const isBlocked = existingAppointments.some(appt => {
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
+        // Precisamos extrair a hora do agendamento vindo do banco (UTC) e converter para local minutes
+        // para comparar com os slots locais.
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
 
-        const apptStartMinutes = apptStart.getHours() * 60 + apptStart.getMinutes();
-        const apptEndMinutes = apptEnd.getHours() * 60 + apptEnd.getMinutes();
+        // A hora salva no banco já está "correta" visualmente (09:00 no banco é 09:00 aqui)
+        // se a gente não converteu errado.
+        // Mas como o JS converte UTC para local automaticamente, 09:00 UTC vira 06:00 local (-3h).
+        // Então precisamos "desfazer" o fuso para pegar a hora original salva.
+        
+        const apptStartMinutes = apptStart.getUTCHours() * 60 + apptStart.getUTCMinutes();
+        const apptEndMinutes = apptEnd.getUTCHours() * 60 + apptEnd.getUTCMinutes();
 
         // Simplificação da verificação de sobreposição
         return (slotStart < apptEndMinutes) && (slotEnd > apptStartMinutes);
@@ -176,12 +187,11 @@ export default function BookingPage() {
     setBookingLoading(true);
     try {
       // CORREÇÃO DE DATA/HORA:
-      // Removido: const startDateTimeLocal e const endDateTimeLocal que não eram usados
-      // e estavam causando o warning.
-      
-      // Ajuste manual para garantir que o horário salvo seja o horário "visual" escolhido.
-      // Vamos enviar a data como string "YYYY-MM-DD HH:MM:00" sem zona.
-      
+      // A chave do problema é que o PocketBase salva como UTC.
+      // Se o usuário escolhe "09:00" local, queremos salvar "09:00:00.000Z" no banco
+      // para que quando recuperarmos e exibirmos em qualquer lugar, saibamos que a "hora nominal" é 09:00.
+      // Ao exibir, basta tratar como UTC.
+
       const startString = `${selectedDate} ${selectedTime}:00`;
       
       // Calcular o fim manualmente
@@ -199,7 +209,7 @@ export default function BookingPage() {
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startString, // Enviando string direta "YYYY-MM-DD HH:MM:SS"
+        start_time: startString, // Enviando string direta "YYYY-MM-DD HH:MM:SS" (sem Z, PB assume UTC)
         end_time: endString,     // Enviando string direta
         status: AppointmentStatus.AGENDADO, 
         payment_status: PaymentStatus.NAO_PAGO, 
@@ -461,6 +471,7 @@ export default function BookingPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Data/Hora</span>
+                    {/* Correção na exibição da data para não sofrer com timezone na visualização final */}
                     <span className="font-medium text-gray-900 text-right capitalize">
                       {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })} às {selectedTime}
                     </span>

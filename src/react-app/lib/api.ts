@@ -194,7 +194,6 @@ export const appointmentsApi = {
     const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
 
     return await pb.collection('appointments').getFullList<Appointment>({
-      // CORRIGIDO: Usando o valor numérico do Enum para o filtro
       filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != ${AppointmentStatus.CANCELADO}`,
     });
   }

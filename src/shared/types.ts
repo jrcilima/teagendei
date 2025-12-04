@@ -47,7 +47,7 @@ export interface Shop extends BaseModel {
   phone?: string;
   description?: string;
   business_hours?: any;
-  // CORRIGIDO: Nome do campo ajustado para bater com o banco de dados
+  // CORREÇÃO: Nome do campo ajustado para bater com o banco de dados
   accepted_payment_methods?: string[]; 
   pix_key?: string;
   pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria';
