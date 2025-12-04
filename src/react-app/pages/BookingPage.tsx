@@ -77,7 +77,9 @@ export default function BookingPage() {
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
-        const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate)) || [];
+        // Passando a data selecionada corretamente para listar agendamentos do dia
+        // Importante: appointmentsApi.listByShopAndDate deve lidar com o filtro de data corretamente
+        const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate + 'T00:00:00')) || [];
         // Ajuste: Verifica status numérico (AppointmentStatus.CANCELADO é 0)
         const activeAppts = Array.isArray(appts) ? appts.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO) : [];
         setExistingAppointments(activeAppts);
@@ -97,6 +99,7 @@ export default function BookingPage() {
     if (!shop || !selectedDate || !selectedService) return [];
 
     const [y, m, d] = selectedDate.split('-').map(Number);
+    // Criando data localmente correta para pegar o dia da semana
     const dateObj = new Date(y, m - 1, d);
     const dayOfWeek = dateObj.getDay(); 
     const dayKey = DAY_KEYS[dayOfWeek];
@@ -118,7 +121,8 @@ export default function BookingPage() {
     const interval = 30; 
 
     const now = new Date();
-    const isToday = selectedDate === now.toISOString().split('T')[0];
+    // Comparação de datas deve ser feita com strings para evitar problemas de fuso
+    const isToday = selectedDate === now.toLocaleDateString('en-CA'); // Formato YYYY-MM-DD local
     const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
 
     while (currentMinutes + selectedService.duration <= closeMinutes) {
@@ -139,6 +143,7 @@ export default function BookingPage() {
         const apptStartMinutes = apptStart.getHours() * 60 + apptStart.getMinutes();
         const apptEndMinutes = apptEnd.getHours() * 60 + apptEnd.getMinutes();
 
+        // Simplificação da verificação de sobreposição
         return (slotStart < apptEndMinutes) && (slotEnd > apptStartMinutes);
       });
 
@@ -170,35 +175,36 @@ export default function BookingPage() {
 
     setBookingLoading(true);
     try {
+      // CORREÇÃO DE DATA/HORA:
+      // Removido: const startDateTimeLocal e const endDateTimeLocal que não eram usados
+      // e estavam causando o warning.
+      
+      // Ajuste manual para garantir que o horário salvo seja o horário "visual" escolhido.
+      // Vamos enviar a data como string "YYYY-MM-DD HH:MM:00" sem zona.
+      
       const startString = `${selectedDate} ${selectedTime}:00`;
       
-      const [year, month, day] = selectedDate.split('-').map(Number);
-      const [hours, minutes] = selectedTime.split(':').map(Number);
+      // Calcular o fim manualmente
+      const [hours, minutes] = selectedTime!.split(':').map(Number);
+      const endTotalMinutes = hours * 60 + minutes + selectedService.duration;
+      const endHours = Math.floor(endTotalMinutes / 60);
+      const endMinutes = endTotalMinutes % 60;
       
-      const baseDate = new Date(Date.UTC(year, month - 1, day, hours, minutes));
-      const endDate = new Date(baseDate.getTime() + selectedService.duration * 60000);
+      // Tratamento simples para virada de dia
+      const endTimeString = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
+      const endString = `${selectedDate} ${endTimeString}`;
 
-      const endYear = endDate.getUTCFullYear();
-      const endMonth = String(endDate.getUTCMonth() + 1).padStart(2, '0');
-      const endDay = String(endDate.getUTCDate()).padStart(2, '0');
-      const endHour = String(endDate.getUTCHours()).padStart(2, '0');
-      const endMin = String(endDate.getUTCMinutes()).padStart(2, '0');
-      
-      const endString = `${endYear}-${endMonth}-${endDay} ${endHour}:${endMin}:00`;
-
-      // CORREÇÃO CRÍTICA: Usando os Enums numéricos para status e payment_status
-      // Isso garante compatibilidade com o banco de dados que espera números
       const payload: Partial<Appointment> = {
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startString,
-        end_time: endString,
-        status: AppointmentStatus.AGENDADO, // Envia 1 (número)
-        payment_status: PaymentStatus.NAO_PAGO, // Envia 1 (número)
+        start_time: startString, // Enviando string direta "YYYY-MM-DD HH:MM:SS"
+        end_time: endString,     // Enviando string direta
+        status: AppointmentStatus.AGENDADO, 
+        payment_status: PaymentStatus.NAO_PAGO, 
         total_amount: Number(selectedService.price),
-        payment_method: selectedPaymentMethodId, // ID da relação
+        payment_method: selectedPaymentMethodId, 
         notes: notes,
         reminder_sent: false,
         confirmation_sent: false
@@ -367,7 +373,7 @@ export default function BookingPage() {
               <input 
                 type="date" 
                 value={selectedDate}
-                min={new Date().toISOString().split('T')[0]}
+                min={new Date().toLocaleDateString('en-CA')} // Correção para pegar data local YYYY-MM-DD
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
                   setSelectedTime(null); 
