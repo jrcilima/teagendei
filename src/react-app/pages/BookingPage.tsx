@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
-import { Shop, Service, User } from '../../shared/types';
-import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, Scissors, CalendarX, Clock } from 'lucide-react';
+import { Shop, Service, User, Appointment } from '../../shared/types';
+// REMOVIDO: Scissors (não estava sendo usado no JSX atual)
+import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, CalendarX, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 // Tipos auxiliares para o horário (mesmos do Settings)
@@ -16,7 +17,6 @@ type BusinessHours = {
   [key: string]: DaySchedule;
 };
 
-// Mapa para converter Date.getDay() (0-6) para as chaves do nosso JSON
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 export default function BookingPage() {
@@ -28,18 +28,21 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<User[]>([]);
   
-  const [step, setStep] = useState(1); // 1: Serviço, 2: Profissional, 3: Data/Hora, 4: Confirmar
+  const [step, setStep] = useState(1); 
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
   
-  // Data inicial: Hoje
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   
+  // Estado para armazenar agendamentos já existentes no dia selecionado
+  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(false);
 
-  // Carregar dados da loja
+  // 1. Carregar dados da loja
   useEffect(() => {
     if (!slug) return;
     const loadData = async () => {
@@ -47,16 +50,12 @@ export default function BookingPage() {
         const shopData = await shopsApi.getBySlug(slug);
         setShop(shopData);
         
-        // Carrega serviços e staff em paralelo
         const [servicesData, staffData] = await Promise.all([
           servicesApi.listByShop(shopData.id),
           usersApi.listStaffByShop(shopData.id)
         ]);
         
-        // Filtra apenas serviços ativos
         setServices(servicesData.filter(s => s.is_active));
-        
-        // Filtra staff que "atende clientes" (is_professional = true)
         setStaff(staffData.filter(u => u.is_professional));
 
       } catch (error) {
@@ -69,58 +68,91 @@ export default function BookingPage() {
     loadData();
   }, [slug]);
 
-  // Função inteligente para gerar slots baseada no horário da loja
+  // 2. Carregar agendamentos existentes quando mudar a data, loja ou profissional
+  useEffect(() => {
+    if (!shop || !selectedDate || step !== 3) return;
+
+    const fetchAppointments = async () => {
+      setSlotsLoading(true);
+      try {
+        const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate));
+        const activeAppts = appts.filter(a => a.status !== 'cancelado');
+        setExistingAppointments(activeAppts);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSlotsLoading(false);
+      }
+    };
+
+    fetchAppointments();
+  }, [shop, selectedDate, step, selectedStaff]);
+
+
+  // 3. Calcular Slots Disponíveis (com bloqueio)
   const availableSlots = useMemo(() => {
-    if (!shop || !selectedDate) return [];
+    if (!shop || !selectedDate || !selectedService) return [];
 
     const dateObj = new Date(selectedDate + 'T00:00:00');
-    const dayOfWeek = dateObj.getDay(); // 0 (Dom) a 6 (Sab)
+    const dayOfWeek = dateObj.getDay(); 
     const dayKey = DAY_KEYS[dayOfWeek];
 
     const businessHours = shop.business_hours as BusinessHours;
     
-    // Se não tiver configuração ou estiver fechado no dia
     if (!businessHours || !businessHours[dayKey] || !businessHours[dayKey].open) {
-      return []; // Fechado
+      return []; 
     }
 
     const { start, end } = businessHours[dayKey];
     const slots: string[] = [];
     
-    // Converter "09:00" para minutos do dia (ex: 540)
     const [startHour, startMin] = start.split(':').map(Number);
     const [endHour, endMin] = end.split(':').map(Number);
     
     let currentMinutes = startHour * 60 + startMin;
     const closeMinutes = endHour * 60 + endMin;
-    const interval = selectedService?.duration || 30; // Usa duração do serviço ou 30min padrão
+    const serviceDuration = selectedService.duration;
 
-    // Data atual para validar horários passados
     const now = new Date();
     const isToday = selectedDate === now.toISOString().split('T')[0];
     const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
 
-    while (currentMinutes + interval <= closeMinutes) {
-      // Se for hoje, não mostrar horários passados
+    while (currentMinutes + serviceDuration <= closeMinutes) {
       if (isToday && currentMinutes < currentMinutesNow) {
-        currentMinutes += interval;
+        currentMinutes += serviceDuration; 
         continue;
       }
 
-      const h = Math.floor(currentMinutes / 60);
-      const m = currentMinutes % 60;
-      const timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      const slotStart = currentMinutes;
+      const slotEnd = currentMinutes + serviceDuration;
+
+      const isBlocked = existingAppointments.some(appt => {
+        if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
+
+        const apptStart = new Date(appt.start_time);
+        const apptEnd = new Date(appt.end_time);
+
+        const apptStartMinutes = apptStart.getHours() * 60 + apptStart.getMinutes();
+        const apptEndMinutes = apptEnd.getHours() * 60 + apptEnd.getMinutes();
+
+        return (slotStart < apptEndMinutes) && (slotEnd > apptStartMinutes);
+      });
+
+      if (!isBlocked) {
+        const h = Math.floor(currentMinutes / 60);
+        const m = currentMinutes % 60;
+        const timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        slots.push(timeString);
+      }
       
-      slots.push(timeString);
-      currentMinutes += interval;
+      currentMinutes += 30; 
     }
 
     return slots;
-  }, [shop, selectedDate, selectedService]);
+  }, [shop, selectedDate, selectedService, existingAppointments, selectedStaff]);
 
   const handleBooking = async () => {
     if (!user) {
-      // Salva o estado atual para voltar depois do login (futura melhoria)
       alert("Você precisa fazer login ou criar uma conta para agendar.");
       navigate('/login');
       return;
@@ -130,12 +162,10 @@ export default function BookingPage() {
 
     setBookingLoading(true);
     try {
-      // Construir data completa (UTC handling simplificado para MVP)
       const [hours, minutes] = selectedTime.split(':').map(Number);
       const startTime = new Date(selectedDate);
-      startTime.setHours(hours, minutes, 0, 0);
+      startTime.setHours(hours, minutes, 0, 0); 
       
-      // Data fim
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + selectedService.duration);
 
@@ -157,7 +187,7 @@ export default function BookingPage() {
       navigate('/client');
     } catch (error) {
       console.error(error);
-      alert("Erro ao realizar agendamento. Tente novamente.");
+      alert("Erro ao realizar agendamento. O horário pode ter sido ocupado.");
     } finally {
       setBookingLoading(false);
     }
@@ -256,23 +286,8 @@ export default function BookingPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Opção "Qualquer Profissional" (Primeiro Disponível) */}
-              {staff.length > 0 && (
-                 <div 
-                 onClick={() => {
-                   setSelectedStaff(staff[0]); // Simplificação: pega o primeiro (backend poderia distribuir melhor)
-                   setStep(3);
-                 }}
-                 className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm cursor-pointer hover:border-purple-500 hover:shadow-md transition-all text-center flex flex-col items-center justify-center group h-40"
-               >
-                 <div className="w-16 h-16 bg-purple-100 rounded-full mb-3 flex items-center justify-center group-hover:scale-110 transition-transform">
-                   <Scissors className="w-8 h-8 text-purple-600" />
-                 </div>
-                 <h3 className="font-semibold text-gray-900">Primeiro Disponível</h3>
-                 <p className="text-xs text-gray-500 mt-1">Horário mais próximo</p>
-               </div>
-              )}
-
+              {/* Opção "Qualquer Profissional" removida temporariamente para simplificar a lógica de conflito */}
+              
               {staff.map(professional => (
                 <div 
                   key={professional.id}
@@ -326,7 +341,11 @@ export default function BookingPage() {
             <div>
               <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center justify-between">
                 <span>Horários Disponíveis</span>
-                <span className="text-xs font-normal text-gray-500">Duração: {selectedService?.duration} min</span>
+                {slotsLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                ) : (
+                    <span className="text-xs font-normal text-gray-500">Duração: {selectedService?.duration} min</span>
+                )}
               </h3>
               
               {availableSlots.length > 0 ? (
@@ -348,13 +367,17 @@ export default function BookingPage() {
               ) : (
                 <div className="text-center py-10 bg-white rounded-xl border border-gray-200 border-dashed">
                   <CalendarX className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                  <p className="text-gray-500 font-medium">Fechado ou sem horários</p>
-                  <p className="text-sm text-gray-400">Tente selecionar outra data.</p>
+                  <p className="text-gray-500 font-medium">
+                     {slotsLoading ? 'Verificando disponibilidade...' : 'Sem horários disponíveis'}
+                  </p>
+                  <p className="text-sm text-gray-400">
+                     {slotsLoading ? 'Aguarde um instante.' : 'Tente selecionar outra data.'}
+                  </p>
                 </div>
               )}
             </div>
 
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 md:static md:bg-transparent md:border-0 md:p-0">
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 md:static md:bg-transparent md:border-0 md:p-0 z-20">
               <div className="max-w-2xl mx-auto">
                 <button
                   disabled={!selectedTime}
