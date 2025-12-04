@@ -53,6 +53,22 @@ export interface User extends BaseModel {
   company_id?: string;
   shop_id?: string;
   is_active: boolean;
+  is_professional: boolean; // NOVO CAMPO
+  emailVisibility: boolean;
+  verified: boolean;
+}
+
+export interface User extends BaseModel {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string;
+  password_hash: string;
+  avatar?: string;
+  role: 'dono' | 'staff' | 'cliente';
+  company_id?: string;
+  shop_id?: string;
+  is_active: boolean;
   emailVisibility: boolean;
   verified: boolean;
 }

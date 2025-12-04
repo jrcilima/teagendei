@@ -97,12 +97,10 @@ export const segmentsApi = {
 };
 
 export const appointmentsApi = {
-  // Lista agendamentos do dia (atalho)
   listToday: async (shopId: string) => {
     return appointmentsApi.listByShopAndDate(shopId, new Date());
   },
 
-  // NOVA: Lista agendamentos de uma data específica
   listByShopAndDate: async (shopId: string, date: Date) => {
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
@@ -116,7 +114,7 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
         sort: 'start_time',
-        expand: 'service_id,client_id,barber_id' // Traz os dados relacionados
+        expand: 'service_id,client_id,barber_id'
       });
     } catch (error) {
       console.warn("Erro ao buscar agendamentos:", error);
@@ -141,7 +139,6 @@ export const appointmentsApi = {
     return await pb.collection('appointments').create(data);
   },
 
-  // NOVA: Atualizar status ou dados do agendamento
   update: async (id: string, data: Partial<Appointment>) => {
     return await pb.collection('appointments').update(id, data);
   },
@@ -162,14 +159,37 @@ export const appointmentsApi = {
 };
 
 export const usersApi = {
+  // Lista Staff (Dono ou Barbeiro) de uma loja
   listStaffByShop: async (shopId: string) => {
     try {
       return await pb.collection('users').getFullList<User>({
-        filter: `shop_id = "${shopId}"`,
+        filter: `shop_id = "${shopId}" && role != "cliente"`,
+        sort: '-created'
       });
     } catch (error) {
       console.warn("Erro ao buscar staff:", error);
       return [];
     }
+  },
+
+  getById: async (id: string) => {
+    return await pb.collection('users').getOne<User>(id);
+  },
+
+  // Criação de funcionário
+  createStaff: async (data: any) => {
+    return await pb.collection('users').create({
+      ...data,
+      emailVisibility: true,
+      role: 'barbeiro'
+    });
+  },
+
+  updateStaff: async (id: string, data: any) => {
+    return await pb.collection('users').update(id, data);
+  },
+
+  deleteStaff: async (id: string) => {
+    return await pb.collection('users').delete(id);
   }
 };

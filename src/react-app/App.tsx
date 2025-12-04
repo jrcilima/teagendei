@@ -13,7 +13,9 @@ import ClientDashboard from "./pages/ClientDashboard";
 import ServicesList from "./pages/ServicesList";
 import ServiceForm from "./pages/ServiceForm";
 import BookingPage from "./pages/BookingPage";
-import Appointments from "./pages/Appointments"; // Importar Agenda
+import Appointments from "./pages/Appointments";
+import StaffList from "./pages/StaffList"; // NOVO
+import StaffForm from "./pages/StaffForm"; // NOVO
 
 export default function App() {
   return (
@@ -49,7 +51,6 @@ export default function App() {
               }
             />
             
-            {/* AGENDA (NOVO) */}
             <Route
               path="/appointments"
               element={
@@ -81,6 +82,32 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['dono', 'staff']}>
                   <ServiceForm />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Gestão de Equipe (NOVO) */}
+            <Route
+              path="/staff"
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <StaffList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/new"
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <StaffForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/staff/:id"
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <StaffForm />
                 </ProtectedRoute>
               }
             />
