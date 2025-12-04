@@ -750,7 +750,7 @@
       {
         "system": false,
         "id": "k1g4gsya",
-        "name": "acecepted_payment_methods",
+        "name": "accepted_payment_methods",
         "type": "relation",
         "required": false,
         "presentable": false,
