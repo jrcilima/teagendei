@@ -205,21 +205,26 @@ export default function BookingPage() {
       const endTime = new Date(startTime);
       endTime.setMinutes(startTime.getMinutes() + selectedService.duration);
 
-      // Converter para ISO string (UTC) para o banco
-      // O PocketBase espera UTC. .toISOString() converte local -> UTC automaticamente.
-      // Isso é o correto se o servidor e cliente estiverem alinhados, mas para simplificar visualização:
-      // Se o PB estiver rodando local, ele pode esperar tempo local se não for data strict.
-      // A forma mais segura é enviar o ISO string normal:
-      const startIso = startTime.toISOString().replace('T', ' ').substring(0, 19);
-      const endIso = endTime.toISOString().replace('T', ' ').substring(0, 19);
+      // Usando .toISOString() padrão para garantir compatibilidade total com PocketBase
+      const startIso = startTime.toISOString();
+      const endIso = endTime.toISOString();
+
+      console.log("Enviando agendamento:", {
+        shop_id: shop.id,
+        client_id: user.id,
+        barber_id: selectedStaff.id,
+        service_id: selectedService.id,
+        start_time: startIso,
+        end_time: endIso
+      });
 
       await appointmentsApi.create({
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startIso, // Formato PocketBase
-        end_time: endIso,     // Formato PocketBase
+        start_time: startIso, 
+        end_time: endIso,     
         status: 'agendado',
         payment_status: 'nao_pago',
         total_amount: selectedService.price,
@@ -229,9 +234,21 @@ export default function BookingPage() {
 
       alert("Agendamento realizado com sucesso!");
       navigate('/client');
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao realizar agendamento. Tente novamente.");
+    } catch (error: any) {
+      console.error("Erro detalhado do PocketBase:", error);
+      // Tenta mostrar mensagem de erro mais específica se vier do backend
+      const message = error?.data?.message || error?.message || "Erro desconhecido ao agendar.";
+      
+      // Verifica se é erro de validação de campos específicos
+      const fieldErrors = error?.data?.data;
+      let detailedError = "";
+      if (fieldErrors) {
+        detailedError = Object.entries(fieldErrors)
+          .map(([field, err]: [string, any]) => `${field}: ${err.message}`)
+          .join('\n');
+      }
+
+      alert(`Erro ao realizar agendamento:\n${message}\n${detailedError}`);
     } finally {
       setBookingLoading(false);
     }
