@@ -121,12 +121,23 @@ export default function Onboarding() {
         max_advance_time: Number(shopData.max_advance_time),
         company_id: createdCompany.id,
         manager_id: user.id,
+        // owner_id is not strictly part of Shop type in frontend but needed for backend rules sometimes.
+        // If 'owner_id' gives error, add it to Shop type definition or ignore ts error.
+        // For now, assuming Shop type doesn't have it explicitly or it's optional.
+        // We cast to 'any' to avoid TS error if owner_id is missing in Shop interface but required by backend API rules.
+        // However, better practice is to use Partial<Shop> and if needed extend it locally.
+      } as unknown as Partial<Shop>;
+
+      // Explicitly adding owner_id to the API call if backend requires it, 
+      // bypassing TS check for this specific field if it's not in the Shop interface
+      const apiPayload = {
+        ...payload,
+        owner_id: user.id,
         is_active: true,
-        // Ensure pix_key_type matches the expected literal types in Shop interface
         pix_key_type: shopData.pix_key_type as 'aleatoria' | 'email' | 'cnpj' | 'cpf' | undefined
       };
 
-      await shopsApi.create(payload);
+      await shopsApi.create(apiPayload);
       
       await refreshShops();
       navigate('/dashboard');
