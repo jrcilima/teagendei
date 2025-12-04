@@ -42,7 +42,7 @@ export default function Dashboard() {
       setStatsLoading(true);
 
       try {
-        // 1. Carregar Serviços
+        // 1. Carregar Serviços (A API já deve estar configurada com expand='category_id')
         const servicesData = await servicesApi.listByShop(selectedShop.id);
         if (mounted) setServices(servicesData);
 
@@ -294,7 +294,10 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-600 mt-1">{service.description}</p>
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                           <span>⏱️ {service.duration} min</span>
-                          {service.category_id && <span>📁 {service.category_id}</span>}
+                          {/* CORREÇÃO AQUI: Acesso ao expand em vez do ID puro */}
+                          {service.expand?.category_id && (
+                            <span>📁 {service.expand.category_id.name}</span>
+                          )}
                         </div>
                       </div>
                       <div className="text-right">
