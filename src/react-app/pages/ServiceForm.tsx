@@ -34,17 +34,14 @@ export default function ServiceForm() {
 
     const loadData = async () => {
       try {
-        // 1. Carrega categorias da loja
-        // Cast forçado aqui para corrigir o erro de tipo "RecordModel | Category"
-        const cats = await categoriesApi.listByShop(selectedShop.id) as unknown as Category[];
+        // CORRIGIDO: Removido cast desnecessário
+        const cats = await categoriesApi.listByShop(selectedShop.id);
         setCategories(cats);
 
-        // 2. Se for edição, carrega o serviço
         if (id) {
           const service = await servicesApi.getById(id);
           setFormData({
             ...service,
-            // Garante que category_id seja uma string, mesmo se vier nulo
             category_id: service.category_id || ''
           });
         }
@@ -63,11 +60,11 @@ export default function ServiceForm() {
     if (!newCategoryName.trim() || !selectedShop) return;
     
     try {
-      // Cast forçado aqui também
+      // CORRIGIDO: Removido cast desnecessário
       const newCat = await categoriesApi.create({
         name: newCategoryName,
         shop_id: selectedShop.id
-      }) as unknown as Category;
+      });
 
       setCategories([...categories, newCat]);
       setFormData({ ...formData, category_id: newCat.id });

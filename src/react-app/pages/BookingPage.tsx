@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
-import { Shop, Service, User, Appointment } from '../../shared/types';
+import { Shop, Service, User, Appointment, PaymentMethod } from '../../shared/types';
 import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, CalendarX, Clock, CreditCard, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -33,8 +33,8 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   
-  // Novos campos para garantir que o payload esteja completo
-  const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'cartao'>('dinheiro'); 
+  // CORRIGIDO: Estado para armazenar o ID do método de pagamento (relação)
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
   const [notes, setNotes] = useState('');
 
   const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
@@ -48,6 +48,7 @@ export default function BookingPage() {
     if (!slug) return;
     const loadData = async () => {
       try {
+        // O shopsApi.getBySlug já faz o expand 'accepted_payment_methods'
         const shopData = await shopsApi.getBySlug(slug);
         setShop(shopData);
         
@@ -160,8 +161,9 @@ export default function BookingPage() {
       return;
     }
     
-    if (!shop?.id || !selectedService?.id || !selectedStaff?.id || !selectedTime || !user.id) { 
-      alert("Erro: Dados incompletos. Verifique se selecionou tudo."); 
+    // Validação atualizada: verifica selectedPaymentMethodId
+    if (!shop?.id || !selectedService?.id || !selectedStaff?.id || !selectedTime || !user.id || !selectedPaymentMethodId) { 
+      alert("Por favor, preencha todos os campos, incluindo a forma de pagamento."); 
       return; 
     }
 
@@ -183,7 +185,7 @@ export default function BookingPage() {
       
       const endString = `${endYear}-${endMonth}-${endDay} ${endHour}:${endMin}:00`;
 
-      // CORREÇÃO: Tipagem explícita para garantir compatibilidade com a interface Appointment
+      // CORREÇÃO: Payload atualizado com payment_method (relação)
       const payload: Partial<Appointment> = {
         shop_id: shop.id,
         client_id: user.id,
@@ -191,10 +193,10 @@ export default function BookingPage() {
         service_id: selectedService.id,
         start_time: startString,
         end_time: endString,
-        status: 'agendado', // Literal string correta
-        payment_status: 'nao_pago', // Literal string correta
+        status: 'agendado',
+        payment_status: 'nao_pago',
         total_amount: Number(selectedService.price),
-        payment_method: paymentMethod,
+        payment_method: selectedPaymentMethodId, // ID da relação
         notes: notes,
         reminder_sent: false,
         confirmation_sent: false
@@ -463,14 +465,26 @@ export default function BookingPage() {
                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
                        <CreditCard className="w-4 h-4 text-purple-600" /> Forma de Pagamento
                      </label>
-                     <select 
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value as 'dinheiro' | 'pix' | 'cartao')}
-                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50"
-                     >
-                        <option value="dinheiro">Dinheiro / Pix na Loja</option>
-                        <option value="cartao">Cartão de Crédito/Débito</option>
-                     </select>
+                     
+                     {/* CORRIGIDO: Select dinâmico baseado nos métodos do backend */}
+                     {shop?.expand?.accepted_payment_methods && shop.expand.accepted_payment_methods.length > 0 ? (
+                       <select 
+                          value={selectedPaymentMethodId}
+                          onChange={(e) => setSelectedPaymentMethodId(e.target.value)}
+                          className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-gray-50"
+                       >
+                          <option value="">Selecione uma opção...</option>
+                          {shop.expand.accepted_payment_methods.map((method: PaymentMethod) => (
+                            <option key={method.id} value={method.id}>
+                              {method.name}
+                            </option>
+                          ))}
+                       </select>
+                     ) : (
+                       <p className="text-sm text-red-500">
+                         Esta loja não configurou métodos de pagamento.
+                       </p>
+                     )}
                    </div>
 
                    <div>

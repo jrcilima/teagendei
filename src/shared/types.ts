@@ -10,7 +10,6 @@ export interface BaseModel {
 
 export interface PaymentMethod extends BaseModel {
   name: string;
-  // code: number; // Removido para simplificação (confiar no ID)
   is_active: boolean;
   company_id: string;
 }
@@ -48,7 +47,7 @@ export interface Shop extends BaseModel {
   phone?: string;
   description?: string;
   business_hours?: any;
-  // Relação com payment_methods (array de IDs)
+  // CORRIGIDO: Nome do campo ajustado para bater com o banco de dados
   accepted_payment_methods?: string[]; 
   pix_key?: string;
   pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria';
@@ -81,7 +80,7 @@ export interface Service extends BaseModel {
   description?: string;
   price: number;
   duration: number;
-  category_id?: string; // Relação com a categoria
+  category_id?: string;
   is_active: boolean;
   shop_id: string;
   required_staff: number;
@@ -91,7 +90,6 @@ export interface Service extends BaseModel {
   };
 }
 
-// Enums para uso no código (mapeando os números do banco)
 export enum AppointmentStatus {
   CANCELADO = 0,
   AGENDADO = 1,
@@ -110,10 +108,9 @@ export enum PaymentStatus {
 export interface Appointment extends BaseModel {
   start_time: string;
   end_time: string;
-  // Agora são números baseados no Enum
-  status: AppointmentStatus; 
-  payment_status: PaymentStatus;
-  // Agora é relação com payment_methods (ID)
+  status: 'agendado' | 'concluido' | 'cancelado' | string; 
+  payment_status: 'nao_pago' | 'pago' | 'reembolsado' | string;
+  // CORRIGIDO: Agora é singular e aponta para PaymentMethod
   payment_method?: string; 
   total_amount: number;
   notes?: string;

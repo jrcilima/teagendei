@@ -65,9 +65,7 @@ export const shopsApi = {
   },
 };
 
-// NOVA API: Métodos de Pagamento
 export const paymentMethodsApi = {
-  // Lista métodos filtrando pela empresa (company_id)
   listByCompany: async (companyId: string) => {
     return await pb.collection('payment_methods').getFullList<PaymentMethod>({
       filter: `company_id = "${companyId}" && is_active = true`,
@@ -75,7 +73,6 @@ export const paymentMethodsApi = {
     });
   },
   
-  // Lista todos (útil se tiver métodos globais sem company_id, ou para fallback)
   list: async () => {
     return await pb.collection('payment_methods').getFullList<PaymentMethod>({
       filter: 'is_active = true',
@@ -92,16 +89,16 @@ export const paymentMethodsApi = {
   }
 };
 
-// NOVA API: Categorias
 export const categoriesApi = {
   listByShop: async (shopId: string) => {
+    // Adicionado generics <Category> para evitar erros de tipo no frontend
     return await pb.collection('categories').getFullList<Category>({
       filter: `shop_id = "${shopId}"`,
       sort: 'name'
     });
   },
   create: async (data: Partial<Category>) => { 
-    return await pb.collection('categories').create(data); 
+    return await pb.collection('categories').create<Category>(data); 
   }
 };
 
@@ -114,7 +111,7 @@ export const servicesApi = {
     return await pb.collection('services').getFullList<Service>({
       filter: `shop_id = "${shopId}"`,
       sort: 'name',
-      expand: 'category_id' // Expandir para mostrar o nome da categoria na lista
+      expand: 'category_id'
     });
   },
 
@@ -161,7 +158,7 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
         sort: 'start_time',
-        // Expand atualizado para incluir payment_method e ver o nome do método
+        // Expand atualizado para incluir payment_method
         expand: 'service_id,client_id,barber_id,payment_method'
       });
     } catch (error) {
