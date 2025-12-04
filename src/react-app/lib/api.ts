@@ -1,5 +1,5 @@
 import { pb } from './pocketbase';
-import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod } from '../../shared/types';
+import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod, AppointmentStatus } from '../../shared/types';
 
 export const authApi = {
   logout: () => {
@@ -47,14 +47,12 @@ export const shopsApi = {
   },
 
   getById: async (id: string) => {
-    // Expand atualizado para trazer os métodos de pagamento aceitos
     return await pb.collection('shops').getOne<Shop>(id, {
       expand: 'accepted_payment_methods'
     });
   },
 
   getBySlug: async (slug: string) => {
-    // Expand atualizado para trazer os métodos de pagamento aceitos na página de agendamento
     return await pb.collection('shops').getFirstListItem<Shop>(`slug="${slug}"`, {
       expand: 'accepted_payment_methods'
     });
@@ -91,7 +89,6 @@ export const paymentMethodsApi = {
 
 export const categoriesApi = {
   listByShop: async (shopId: string) => {
-    // Adicionado generics <Category> para evitar erros de tipo no frontend
     return await pb.collection('categories').getFullList<Category>({
       filter: `shop_id = "${shopId}"`,
       sort: 'name'
@@ -158,7 +155,6 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
         sort: 'start_time',
-        // Expand atualizado para incluir payment_method
         expand: 'service_id,client_id,barber_id,payment_method'
       });
     } catch (error) {
@@ -172,7 +168,6 @@ export const appointmentsApi = {
       return await pb.collection('appointments').getFullList<Appointment>({
         filter: `client_id = "${clientId}"`,
         sort: '-start_time',
-        // Expand atualizado
         expand: 'service_id,barber_id,shop_id,payment_method',
       });
     } catch (error) {
@@ -199,7 +194,8 @@ export const appointmentsApi = {
     const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
 
     return await pb.collection('appointments').getFullList<Appointment>({
-      filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != "cancelado"`,
+      // CORRIGIDO: Usando o valor numérico do Enum para o filtro
+      filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != ${AppointmentStatus.CANCELADO}`,
     });
   }
 };

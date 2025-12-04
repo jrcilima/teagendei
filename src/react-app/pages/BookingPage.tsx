@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
-import { Shop, Service, User, Appointment, PaymentMethod } from '../../shared/types';
+import { Shop, Service, User, Appointment, PaymentMethod, AppointmentStatus, PaymentStatus } from '../../shared/types';
 import { User as UserIcon, CheckCircle, Loader2, MapPin, ChevronLeft, CalendarX, Clock, CreditCard, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -33,7 +33,7 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   
-  // CORRIGIDO: Estado para armazenar o ID do método de pagamento (relação)
+  // Estado para armazenar o ID do método de pagamento (relação)
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
   const [notes, setNotes] = useState('');
 
@@ -78,7 +78,8 @@ export default function BookingPage() {
       setSlotsLoading(true);
       try {
         const appts = await appointmentsApi.listByShopAndDate(shop.id, new Date(selectedDate)) || [];
-        const activeAppts = Array.isArray(appts) ? appts.filter(a => a.status !== 'cancelado') : [];
+        // Ajuste: Verifica status numérico (AppointmentStatus.CANCELADO é 0)
+        const activeAppts = Array.isArray(appts) ? appts.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO) : [];
         setExistingAppointments(activeAppts);
       } catch (err) {
         console.warn("Erro ao buscar disponibilidade:", err);
@@ -161,7 +162,7 @@ export default function BookingPage() {
       return;
     }
     
-    // Validação atualizada: verifica selectedPaymentMethodId
+    // Validação: verifica selectedPaymentMethodId
     if (!shop?.id || !selectedService?.id || !selectedStaff?.id || !selectedTime || !user.id || !selectedPaymentMethodId) { 
       alert("Por favor, preencha todos os campos, incluindo a forma de pagamento."); 
       return; 
@@ -185,7 +186,8 @@ export default function BookingPage() {
       
       const endString = `${endYear}-${endMonth}-${endDay} ${endHour}:${endMin}:00`;
 
-      // CORREÇÃO: Payload atualizado com payment_method (relação)
+      // CORREÇÃO CRÍTICA: Usando os Enums numéricos para status e payment_status
+      // Isso garante compatibilidade com o banco de dados que espera números
       const payload: Partial<Appointment> = {
         shop_id: shop.id,
         client_id: user.id,
@@ -193,8 +195,8 @@ export default function BookingPage() {
         service_id: selectedService.id,
         start_time: startString,
         end_time: endString,
-        status: 'agendado',
-        payment_status: 'nao_pago',
+        status: AppointmentStatus.AGENDADO, // Envia 1 (número)
+        payment_status: PaymentStatus.NAO_PAGO, // Envia 1 (número)
         total_amount: Number(selectedService.price),
         payment_method: selectedPaymentMethodId, // ID da relação
         notes: notes,
@@ -466,7 +468,7 @@ export default function BookingPage() {
                        <CreditCard className="w-4 h-4 text-purple-600" /> Forma de Pagamento
                      </label>
                      
-                     {/* CORRIGIDO: Select dinâmico baseado nos métodos do backend */}
+                     {/* Select dinâmico baseado nos métodos do backend */}
                      {shop?.expand?.accepted_payment_methods && shop.expand.accepted_payment_methods.length > 0 ? (
                        <select 
                           value={selectedPaymentMethodId}

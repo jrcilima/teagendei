@@ -108,8 +108,10 @@ export enum PaymentStatus {
 export interface Appointment extends BaseModel {
   start_time: string;
   end_time: string;
-  status: 'agendado' | 'concluido' | 'cancelado' | string; 
-  payment_status: 'nao_pago' | 'pago' | 'reembolsado' | string;
+  // O PocketBase pode retornar status como string ou number dependendo da configuração,
+  // mas para comparações no código usamos o Enum (number).
+  status: AppointmentStatus | number; 
+  payment_status: PaymentStatus | number;
   // CORRIGIDO: Agora é singular e aponta para PaymentMethod
   payment_method?: string; 
   total_amount: number;

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { appointmentsApi } from '../lib/api';
-import { Appointment } from '../../shared/types';
+import { Appointment, AppointmentStatus } from '../../shared/types';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -39,11 +39,12 @@ export default function Appointments() {
     loadAppointments();
   }, [selectedShop, selectedDate]);
 
-  const handleStatusChange = async (id: string, newStatus: 'concluido' | 'cancelado') => {
-    if (!confirm(`Deseja marcar como ${newStatus}?`)) return;
+  const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
+    const statusText = newStatus === AppointmentStatus.CONCLUIDO ? 'concluído' : 'cancelado';
+    if (!confirm(`Deseja marcar como ${statusText}?`)) return;
     try {
       await appointmentsApi.update(id, { status: newStatus });
-      loadAppointments(); // Recarrega a lista
+      loadAppointments(); 
     } catch (err) {
       console.error(err);
       alert('Erro ao atualizar status');
@@ -56,13 +57,26 @@ export default function Appointments() {
     setSelectedDate(newDate);
   };
 
+  const getStatusBadge = (status: number) => {
+    switch(Number(status)) {
+      case AppointmentStatus.AGENDADO:
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Agendado</span>;
+      case AppointmentStatus.CONCLUIDO:
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">Concluído</span>;
+      case AppointmentStatus.CANCELADO:
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">Cancelado</span>;
+      default:
+        return <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">Outro</span>;
+    }
+  };
+
   if (!selectedShop) {
     return <div className="p-8 text-center text-gray-500">Selecione uma unidade.</div>;
   }
 
-  // Agrupa agendamentos por status para contagem
-  const scheduled = appointments.filter(a => a.status === 'agendado');
-  const completed = appointments.filter(a => a.status === 'concluido');
+  // Agrupa agendamentos por status para contagem (usando conversão para Number para segurança)
+  const scheduled = appointments.filter(a => Number(a.status) === AppointmentStatus.AGENDADO);
+  const completed = appointments.filter(a => Number(a.status) === AppointmentStatus.CONCLUIDO);
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -129,13 +143,7 @@ export default function Appointments() {
                     <span className="block text-lg font-bold text-gray-900">
                       {new Date(appt.start_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      appt.status === 'agendado' ? 'bg-blue-100 text-blue-700' :
-                      appt.status === 'concluido' ? 'bg-green-100 text-green-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {appt.status}
-                    </span>
+                    {getStatusBadge(Number(appt.status))}
                   </div>
 
                   <div className="h-12 w-px bg-gray-200 hidden md:block"></div>
@@ -158,17 +166,17 @@ export default function Appointments() {
                 </div>
 
                 {/* Ações */}
-                {appt.status === 'agendado' && (
+                {Number(appt.status) === AppointmentStatus.AGENDADO && (
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => handleStatusChange(appt.id, 'concluido')}
+                      onClick={() => handleStatusChange(appt.id, AppointmentStatus.CONCLUIDO)}
                       className="flex items-center gap-1 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
                     >
                       <CheckCircle className="w-4 h-4" />
                       Concluir
                     </button>
                     <button 
-                      onClick={() => handleStatusChange(appt.id, 'cancelado')}
+                      onClick={() => handleStatusChange(appt.id, AppointmentStatus.CANCELADO)}
                       className="flex items-center gap-1 px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
                     >
                       <XCircle className="w-4 h-4" />

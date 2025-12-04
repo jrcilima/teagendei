@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { shopsApi, appointmentsApi } from '../lib/api';
-import { Shop, Appointment } from '../../shared/types';
+import { Shop, Appointment, AppointmentStatus } from '../../shared/types';
 import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -66,8 +66,9 @@ export default function ClientDashboard() {
 
     setCancelLoading(appt.id);
     try {
-      await appointmentsApi.update(appt.id, { status: 'cancelado' });
-      await loadData(); // Recarrega a lista
+      // CORRIGIDO: Enviando status numérico
+      await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO });
+      await loadData(); 
     } catch (error) {
       console.error(error);
       alert("Erro ao cancelar agendamento.");
@@ -76,14 +77,33 @@ export default function ClientDashboard() {
     }
   };
 
+  const getStatusBadge = (status: number) => {
+    switch(Number(status)) {
+      case AppointmentStatus.AGENDADO:
+        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">Agendado</span>;
+      case AppointmentStatus.CONCLUIDO:
+        return <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-50 text-green-700">Concluído</span>;
+      case AppointmentStatus.CANCELADO:
+        return <span className="text-xs px-2 py-1 rounded-full font-medium bg-red-50 text-red-700">Cancelado</span>;
+      default:
+        return null;
+    }
+  };
+
   // Separação de agendamentos
   const now = new Date();
+  
+  // CORRIGIDO: Comparação numérica de status
   const upcomingAppointments = appointments.filter(
-    a => new Date(a.start_time) >= now && a.status !== 'cancelado' && a.status !== 'concluido'
+    a => new Date(a.start_time) >= now && 
+         Number(a.status) !== AppointmentStatus.CANCELADO && 
+         Number(a.status) !== AppointmentStatus.CONCLUIDO
   ).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
   const historyAppointments = appointments.filter(
-    a => new Date(a.start_time) < now || a.status === 'cancelado' || a.status === 'concluido'
+    a => new Date(a.start_time) < now || 
+         Number(a.status) === AppointmentStatus.CANCELADO || 
+         Number(a.status) === AppointmentStatus.CONCLUIDO
   ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
 
   if (loading) {
@@ -218,9 +238,7 @@ export default function ClientDashboard() {
                           </p>
                         </div>
                      </div>
-                     <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                       Agendado
-                     </span>
+                     {getStatusBadge(Number(appt.status))}
                    </div>
 
                    <div className="space-y-2 mb-4">
@@ -267,9 +285,9 @@ export default function ClientDashboard() {
                 <div key={appt.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      appt.status === 'concluido' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                      Number(appt.status) === AppointmentStatus.CONCLUIDO ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                     }`}>
-                       {appt.status === 'concluido' ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                       {Number(appt.status) === AppointmentStatus.CONCLUIDO ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
                     </div>
                     <div>
                       <p className="font-semibold text-slate-800 text-sm">
@@ -280,11 +298,7 @@ export default function ClientDashboard() {
                       </p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
-                    appt.status === 'concluido' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                  }`}>
-                    {appt.status}
-                  </span>
+                  {getStatusBadge(Number(appt.status))}
                 </div>
               ))
             ) : (
