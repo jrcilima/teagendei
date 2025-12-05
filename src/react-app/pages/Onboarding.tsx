@@ -21,7 +21,7 @@ interface ShopFormData {
 }
 
 export default function Onboarding() {
-  const { refreshCompany, refreshShops } = useTenant();
+  const { refreshCompany, refreshShops, company, shops } = useTenant();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -33,8 +33,6 @@ export default function Onboarding() {
     legal_name: '',
     cnpj: '',
   });
-
-  const [createdCompany, setCreatedCompany] = useState<Company | null>(null);
 
   // Initialize state with the correct type
   const [shopData, setShopData] = useState<ShopFormData>({
@@ -56,6 +54,13 @@ export default function Onboarding() {
     }).catch(console.error);
   }, []);
 
+  // AUTO-AVANÇO: Se já existe empresa mas não tem loja, vai direto pro passo 2
+  useEffect(() => {
+    if (company && shops.length === 0) {
+      setStep(2);
+    }
+  }, [company, shops]);
+
   const formatValidationErrors = (data: any) => {
     if (!data) return 'Dados inválidos.';
     
@@ -76,17 +81,15 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
-      const company = await companiesApi.create({
+      const newCompany = await companiesApi.create({
         ...companyData,
         owner_id: user.id,
         plan_status: 'trial',
         plan_type: 'empresarial'
       }) as unknown as Company;
       
-      setCreatedCompany(company);
-
       await authApi.updateProfile(user.id, {
-        company_id: company.id,
+        company_id: newCompany.id,
         role: 'dono'
       });
 
@@ -108,7 +111,10 @@ export default function Onboarding() {
 
   const handleShopSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createdCompany || !user) return;
+    if (!company || !user) {
+      setError('Empresa não encontrada. Recarregue a página.');
+      return;
+    }
 
     setError('');
     setLoading(true);
@@ -119,17 +125,10 @@ export default function Onboarding() {
         ...shopData,
         min_advance_time: Number(shopData.min_advance_time),
         max_advance_time: Number(shopData.max_advance_time),
-        company_id: createdCompany.id,
+        company_id: company.id,
         manager_id: user.id,
-        // owner_id is not strictly part of Shop type in frontend but needed for backend rules sometimes.
-        // If 'owner_id' gives error, add it to Shop type definition or ignore ts error.
-        // For now, assuming Shop type doesn't have it explicitly or it's optional.
-        // We cast to 'any' to avoid TS error if owner_id is missing in Shop interface but required by backend API rules.
-        // However, better practice is to use Partial<Shop> and if needed extend it locally.
       } as unknown as Partial<Shop>;
 
-      // Explicitly adding owner_id to the API call if backend requires it, 
-      // bypassing TS check for this specific field if it's not in the Shop interface
       const apiPayload = {
         ...payload,
         owner_id: user.id,

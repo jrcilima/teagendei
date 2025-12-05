@@ -151,19 +151,39 @@ export const segmentsApi = {
   },
 };
 
+// Helper para formatar data YYYY-MM-DD para ISO UTC
+const getDayRangeUTC = (dateInput: Date | string) => {
+  let dateStr: string;
+  
+  if (typeof dateInput === 'string') {
+    // Assume input YYYY-MM-DD
+    dateStr = dateInput;
+  } else {
+    // Input Date object: usa método local para obter a string YYYY-MM-DD que o usuário vê
+    const y = dateInput.getFullYear();
+    const m = String(dateInput.getMonth() + 1).padStart(2, '0');
+    const d = String(dateInput.getDate()).padStart(2, '0');
+    dateStr = `${y}-${m}-${d}`;
+  }
+
+  // Define inicio e fim do dia como strings que o PocketBase pode comparar com campos Date
+  // PocketBase armazena datas em UTC. 
+  // Para ser robusto, comparamos strings diretas no formato UTC.
+  // "2023-10-25 00:00:00" em UTC cobre o dia.
+  
+  const startStr = `${dateStr} 00:00:00`;
+  const endStr = `${dateStr} 23:59:59`;
+  
+  return { startStr, endStr };
+};
+
 export const appointmentsApi = {
   listToday: async (shopId: string) => {
     return appointmentsApi.listByShopAndDate(shopId, new Date());
   },
 
-  listByShopAndDate: async (shopId: string, date: Date) => {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const startStr = startOfDay.toISOString().replace('T', ' ').substring(0, 19);
-    const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
+  listByShopAndDate: async (shopId: string, date: Date | string) => {
+    const { startStr, endStr } = getDayRangeUTC(date);
 
     try {
       return await pb.collection('appointments').getFullList<Appointment>({
@@ -198,14 +218,8 @@ export const appointmentsApi = {
     return await pb.collection('appointments').update(id, data);
   },
   
-  listByStaffAndDate: async (staffId: string, date: Date) => {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const startStr = startOfDay.toISOString().replace('T', ' ').substring(0, 19);
-    const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
+  listByStaffAndDate: async (staffId: string, date: Date | string) => {
+    const { startStr, endStr } = getDayRangeUTC(date);
 
     return await pb.collection('appointments').getFullList<Appointment>({
       filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != ${AppointmentStatus.CANCELADO}`,

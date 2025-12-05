@@ -11,7 +11,8 @@ import {
   DollarSign,
   Clock,
   LogOut,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react';
 import { Service } from '../../shared/types';
 import { servicesApi, appointmentsApi, usersApi } from '../lib/api';
@@ -93,16 +94,44 @@ export default function Dashboard() {
   if (!company) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center p-8 bg-white rounded-xl shadow-md">
+        <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
+          <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Store className="w-8 h-8 text-purple-600" />
+          </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
             Você ainda não possui uma empresa cadastrada
           </h2>
-          <p className="text-gray-600 mb-6">Complete seu cadastro para começar a usar o sistema.</p>
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">Complete seu cadastro para começar a usar o sistema e gerenciar seus agendamentos.</p>
           <Link
             to="/onboarding"
-            className="inline-block px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
           >
-            Cadastrar Empresa
+            Cadastrar Empresa <Plus className="w-5 h-5" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback para Empresa sem Lojas
+  if (shops.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
+          <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Store className="w-8 h-8 text-orange-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Cadastre sua primeira unidade
+          </h2>
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            Sua empresa <strong>{company.legal_name}</strong> foi criada, mas você precisa adicionar uma unidade (loja) para começar a operar.
+          </p>
+          <Link
+            to="/onboarding"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Criar Unidade <Plus className="w-5 h-5" />
           </Link>
         </div>
       </div>
