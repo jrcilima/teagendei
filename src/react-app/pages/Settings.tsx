@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { shopsApi, paymentMethodsApi } from '../lib/api';
 import { Shop, PaymentMethod } from '../../shared/types';
-import { Save, Loader2, Clock, MapPin, CreditCard, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Save, Loader2, Clock, MapPin, CreditCard, AlertCircle, ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
 
 type DaySchedule = {
   open: boolean;
@@ -181,9 +183,15 @@ export default function Settings() {
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
         
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Configurações da Loja</h1>
-          <p className="text-gray-500">Gerencie horários e informações de contato da {selectedShop.name}</p>
+          {/* Cabeçalho com Botão de Voltar */}
+        <div className="flex items-center gap-4 mb-8">
+          <Link to="/dashboard" className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+            <ArrowLeft className="w-6 h-6 text-gray-600" />
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Configurações da Loja</h1>
+            <p className="text-gray-500">Gerencie horários e informações de contato da {selectedShop.name}</p>
+          </div>
         </div>
 
         {success && (
