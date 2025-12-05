@@ -23,6 +23,14 @@ const formatDateDisplay = (dateString: string) => {
   return adjustedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 };
 
+// Função auxiliar para formatar moeda PT-BR
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value);
+};
+
 export default function ClientDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -283,6 +291,7 @@ export default function ClientDashboard() {
             </div>
             <h3 className="font-bold text-slate-800 text-lg mb-2">Encontre um local</h3>
             <p className="text-slate-500 text-sm mb-6">Você ainda não está vinculado a nenhuma unidade.</p>
+            {/* Botão Corrigido com onClick */}
             <button 
               onClick={handleOpenShopSearch}
               className="w-full py-3 px-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
@@ -354,7 +363,9 @@ export default function ClientDashboard() {
                    </div>
 
                    <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                      <span className="font-bold text-slate-900">R$ {appt.total_amount?.toFixed(2)}</span>
+                      <span className="font-bold text-slate-900">
+                        {formatCurrency(appt.total_amount || 0)}
+                      </span>
                       <button 
                         onClick={() => handleCancel(appt)}
                         disabled={cancelLoading === appt.id}

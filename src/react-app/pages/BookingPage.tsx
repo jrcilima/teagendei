@@ -55,6 +55,14 @@ const PaymentStatusEnum = {
   PAGO: 2
 };
 
+// Função auxiliar para formatar moeda PT-BR
+const formatCurrency = (value: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  }).format(value);
+};
+
 export default function BookingPage() {
   const { slug } = useParams();
   const { user } = useAuth();
@@ -264,48 +272,41 @@ export default function BookingPage() {
       const endString = `${selectedDate} ${endTimeString}`;
 
       // --- VERIFICAÇÃO FINAL DE COLISÃO (TRAVA DE SEGURANÇA) ---
-      // Busca novamente os agendamentos do dia para garantir que não houve
-      // reserva simultânea ou problema de carregamento anterior.
       const searchDate = new Date(selectedDate + 'T00:00:00');
       const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, searchDate);
       
       const hasConflict = latestAppointments.some(appt => {
-        // Ignora cancelados
         if (Number(appt.status) === StatusEnum.CANCELADO) return false;
-        // Verifica apenas o barbeiro selecionado
         if (appt.barber_id !== selectedStaff.id) return false;
 
-        // Converte horários para comparação
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
         const bookingStart = new Date(startString);
         const bookingEnd = new Date(endString);
 
-        // Lógica de colisão: NovoInicio < AntigoFim E NovoFim > AntigoInicio
         return bookingStart < apptEnd && bookingEnd > apptStart;
       });
 
       if (hasConflict) {
         alert("Ops! Este horário acabou de ser ocupado ou já estava reservado. Por favor, escolha outro horário.");
-        // Atualiza a lista visualmente
         setExistingAppointments(latestAppointments.filter(a => Number(a.status) !== StatusEnum.CANCELADO));
-        setStep(3); // Volta para a tela de seleção de horário
+        setStep(3); 
         setBookingLoading(false);
         return;
       }
       // ---------------------------------------------------------
 
-      const payload: Partial<Appointment> = {
+      const payload: Partial<Appointment> | any = {
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
         start_time: startString,
         end_time: endString,
-        status: StatusEnum.AGENDADO, // Envia 1
-        payment_status: PaymentStatusEnum.NAO_PAGO, // Envia 1
+        status: StatusEnum.AGENDADO, 
+        payment_status: PaymentStatusEnum.NAO_PAGO, 
         total_amount: Number(selectedService.price),
-        payment_method: selectedPaymentMethodId, // ID da relação
+        payment_methods: selectedPaymentMethodId, // Plural
         notes: notes,
         reminder_sent: false,
         confirmation_sent: false
@@ -422,7 +423,7 @@ export default function BookingPage() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <span className="block font-bold text-gray-900 text-lg">
-                      R$ {service.price.toFixed(2)}
+                      {formatCurrency(service.price)}
                     </span>
                     <span className="text-xs text-purple-600 font-medium bg-purple-50 px-2 py-1 rounded-full mt-1 inline-block">
                       Agendar
@@ -662,7 +663,7 @@ export default function BookingPage() {
               <div className="flex justify-between pt-4 border-t border-gray-100">
                 <span className="text-gray-900 font-bold text-lg">Total</span>
                 <span className="text-purple-600 font-bold text-xl">
-                  R$ {selectedService.price.toFixed(2)}
+                  {formatCurrency(selectedService.price)}
                 </span>
               </div>
             </div>
