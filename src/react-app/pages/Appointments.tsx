@@ -47,7 +47,9 @@ export default function Appointments() {
         selectedShop.id,
         selectedDate
       );
-      setAppointments(data);
+      // FILTRAGEM: Remove agendamentos cancelados da visualização
+      const activeData = data.filter(a => Number(a.status) !== StatusEnum.CANCELADO);
+      setAppointments(activeData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -90,6 +92,7 @@ export default function Appointments() {
           Concluído
         </span>
       );
+    // Caso algum escape do filtro (ex: race condition visual), ainda temos o badge
     if (s === StatusEnum.CANCELADO)
       return (
         <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">
@@ -111,7 +114,7 @@ export default function Appointments() {
     );
   }
 
-  // Filtros usando valores numéricos
+  // Filtros para contadores (scheduled / completed)
   const scheduled = appointments.filter(
     (a) => Number(a.status) === StatusEnum.AGENDADO
   );

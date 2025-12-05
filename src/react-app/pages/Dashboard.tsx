@@ -14,7 +14,7 @@ import {
   Loader2,
   Plus
 } from 'lucide-react';
-import { Service } from '../../shared/types';
+import { Service, AppointmentStatus } from '../../shared/types';
 import { servicesApi, appointmentsApi, usersApi } from '../lib/api';
 
 export default function Dashboard() {
@@ -43,7 +43,7 @@ export default function Dashboard() {
       setStatsLoading(true);
 
       try {
-        // 1. Carregar Serviços (A API já deve estar configurada com expand='category_id')
+        // 1. Carregar Serviços
         const servicesData = await servicesApi.listByShop(selectedShop.id);
         if (mounted) setServices(servicesData);
 
@@ -52,16 +52,19 @@ export default function Dashboard() {
         const staffData = await usersApi.listStaffByShop(selectedShop.id);
 
         if (mounted) {
-          // Calcular Faturamento (Soma do total_amount dos agendamentos do dia)
-          const revenue = appointmentsData.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
+          // FILTRAGEM: Considera apenas agendamentos NÃO cancelados para as métricas
+          const activeAppointments = appointmentsData.filter(appt => Number(appt.status) !== AppointmentStatus.CANCELADO);
+
+          // Calcular Faturamento (Soma do total_amount dos agendamentos ativos do dia)
+          const revenue = activeAppointments.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
 
           // Calcular Taxa de Ocupação (Estimativa: 8 agendamentos/dia por profissional)
           const totalCapacity = staffData.length * 8; 
-          const occupied = appointmentsData.length;
+          const occupied = activeAppointments.length;
           const occupancy = totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 100) : 0;
 
           setStats({
-            appointmentsToday: appointmentsData.length,
+            appointmentsToday: activeAppointments.length,
             revenueToday: revenue,
             activeProfessionals: staffData.length,
             occupancyRate: occupancy
