@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { appointmentsApi } from '../lib/api';
-import { Appointment } from '../../shared/types';
+import { Appointment, AppointmentStatus, PaymentStatus } from '../../shared/types';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -14,17 +14,11 @@ import {
   Loader2,
   ArrowLeft,
   Scissors,
-  CreditCard
+  CreditCard,
+  DollarSign
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-const StatusEnum = {
-  CANCELADO: 0,
-  AGENDADO: 1,
-  CONFIRMADO: 2,
-  CONCLUIDO: 4
-};
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -48,7 +42,7 @@ export default function Appointments() {
         selectedDate
       );
       // FILTRAGEM: Remove agendamentos cancelados da visualização
-      const activeData = data.filter(a => Number(a.status) !== StatusEnum.CANCELADO);
+      const activeData = data.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO);
       setAppointments(activeData);
     } catch (err) {
       console.error(err);
@@ -63,7 +57,7 @@ export default function Appointments() {
 
   const handleStatusChange = async (id: string, newStatus: number) => {
     const statusText =
-      newStatus === StatusEnum.CONCLUIDO ? 'concluído' : 'cancelado';
+      newStatus === AppointmentStatus.CONCLUIDO ? 'concluído' : 'cancelado';
     if (!confirm(`Deseja marcar como ${statusText}?`)) return;
     try {
       await appointmentsApi.update(id, { status: newStatus });
@@ -74,34 +68,72 @@ export default function Appointments() {
     }
   };
 
+  const handlePaymentToggle = async (appt: Appointment) => {
+    const currentStatus = Number(appt.payment_status);
+    const newStatus = currentStatus === PaymentStatus.PAGO ? PaymentStatus.NAO_PAGO : PaymentStatus.PAGO;
+    const actionText = newStatus === PaymentStatus.PAGO ? "MARCAR COMO PAGO" : "MARCAR COMO NÃO PAGO";
+
+    if(!confirm(`Deseja realmente ${actionText}?`)) return;
+
+    try {
+      await appointmentsApi.update(appt.id, { payment_status: newStatus });
+      loadAppointments();
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao atualizar pagamento');
+    }
+  };
+
   const changeDate = (days: number) => {
     setSelectedDate(prev => addDays(prev, days));
   };
 
   const getStatusBadge = (status: any) => {
     const s = Number(status);
-    if (s === StatusEnum.AGENDADO)
+    if (s === AppointmentStatus.AGENDADO)
       return (
-        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">
+        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 border border-blue-200">
           Agendado
         </span>
       );
-    if (s === StatusEnum.CONCLUIDO)
+    if (s === AppointmentStatus.CONCLUIDO)
       return (
-        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">
+        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700 border border-green-200">
           Concluído
         </span>
       );
-    // Caso algum escape do filtro (ex: race condition visual), ainda temos o badge
-    if (s === StatusEnum.CANCELADO)
+    return (
+      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700 border border-gray-200">
+        Outro
+      </span>
+    );
+  };
+
+  const getPaymentBadge = (paymentStatus: any, appointmentStatus: any) => {
+    const ps = Number(paymentStatus);
+    const as = Number(appointmentStatus);
+
+    if (ps === PaymentStatus.PAGO) {
       return (
-        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700">
-          Cancelado
+        <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-100">
+           Pago
         </span>
       );
+    }
+    
+    // Se já foi concluído e não pagou, é dívida (Vermelho)
+    if (as === AppointmentStatus.CONCLUIDO) {
+       return (
+        <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100">
+           Pendente
+        </span>
+      );
+    }
+
+    // Se ainda está agendado, é normal não ter pago (Cinza/Amarelo)
     return (
-      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">
-        Outro
+      <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+         A Pagar
       </span>
     );
   };
@@ -114,12 +146,12 @@ export default function Appointments() {
     );
   }
 
-  // Filtros para contadores (scheduled / completed)
+  // Filtros para contadores
   const scheduled = appointments.filter(
-    (a) => Number(a.status) === StatusEnum.AGENDADO
+    (a) => Number(a.status) === AppointmentStatus.AGENDADO
   );
   const completed = appointments.filter(
-    (a) => Number(a.status) === StatusEnum.CONCLUIDO
+    (a) => Number(a.status) === AppointmentStatus.CONCLUIDO
   );
 
   return (
@@ -193,17 +225,20 @@ export default function Appointments() {
                 key={appt.id}
                 className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 pt-1">
+                <div className="flex items-start gap-4 flex-1">
+                  <div className="flex-shrink-0 pt-1 text-center min-w-[70px]">
                     <span className="block text-lg font-bold text-gray-900">
                       {format(new Date(appt.start_time), 'HH:mm')}
                     </span>
-                    {getStatusBadge(appt.status)}
+                    <div className="flex flex-col gap-1 items-center mt-1">
+                      {getStatusBadge(appt.status)}
+                      {getPaymentBadge(appt.payment_status, appt.status)}
+                    </div>
                   </div>
 
                   <div className="h-12 w-px bg-gray-200 hidden md:block"></div>
 
-                  <div>
+                  <div className="flex-1">
                     <div className="flex items-center gap-2 text-gray-900 font-semibold">
                       <User className="w-4 h-4 text-gray-500" />
                       {appt.expand?.client_id?.name || 'Cliente sem nome'}
@@ -224,28 +259,40 @@ export default function Appointments() {
                   </div>
                 </div>
 
-                {Number(appt.status) === StatusEnum.AGENDADO && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() =>
-                        handleStatusChange(appt.id, StatusEnum.CONCLUIDO)
-                      }
-                      className="flex items-center gap-1 px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      Concluir
-                    </button>
-                    <button
-                      onClick={() =>
-                        handleStatusChange(appt.id, StatusEnum.CANCELADO)
-                      }
-                      className="flex items-center gap-1 px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Cancelar
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4 justify-end md:justify-start">
+                  
+                  {/* Botão de Pagamento (Alternar Status) */}
+                  <button
+                    onClick={() => handlePaymentToggle(appt)}
+                    title={Number(appt.payment_status) === PaymentStatus.PAGO ? "Marcar como Não Pago" : "Marcar como Pago"}
+                    className={`p-2 rounded-lg transition-colors ${
+                      Number(appt.payment_status) === PaymentStatus.PAGO 
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                      : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600'
+                    }`}
+                  >
+                    <DollarSign className="w-5 h-5" />
+                  </button>
+
+                  {Number(appt.status) === AppointmentStatus.AGENDADO && (
+                    <>
+                      <button
+                        onClick={() => handleStatusChange(appt.id, AppointmentStatus.CONCLUIDO)}
+                        className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                        title="Concluir Atendimento"
+                      >
+                        <CheckCircle className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleStatusChange(appt.id, AppointmentStatus.CANCELADO)}
+                        className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                        title="Cancelar Agendamento"
+                      >
+                        <XCircle className="w-5 h-5" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>

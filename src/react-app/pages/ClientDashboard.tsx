@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { shopsApi, appointmentsApi, authApi } from '../lib/api';
 import { pb } from '../lib/pocketbase';
-import { Shop, Appointment, AppointmentStatus } from '../../shared/types';
-import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle, Search, X } from 'lucide-react';
+import { Shop, Appointment, AppointmentStatus, PaymentStatus } from '../../shared/types';
+import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle, Search, X, AlertCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -75,7 +75,6 @@ export default function ClientDashboard() {
     const startTime = new Date(appt.start_time);
     const now = new Date();
     
-    // Uso do differenceInHours do date-fns para precisão
     const diffInHours = differenceInHours(startTime, now);
 
     if (diffInHours < 2) {
@@ -158,6 +157,22 @@ export default function ClientDashboard() {
       default:
         return <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-700">Outro</span>;
     }
+  };
+
+  const getPaymentStatusDisplay = (appt: Appointment) => {
+    const ps = Number(appt.payment_status);
+    const as = Number(appt.status);
+
+    if (ps === PaymentStatus.PAGO) {
+      return <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Pago</span>;
+    }
+    
+    // Se está concluído mas não pago, exibe alerta vermelho
+    if (as === AppointmentStatus.CONCLUIDO && ps === PaymentStatus.NAO_PAGO) {
+      return <span className="text-xs font-bold text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Pendente</span>;
+    }
+
+    return null;
   };
 
   const now = new Date();
@@ -333,9 +348,14 @@ export default function ClientDashboard() {
                    </div>
 
                    <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                      <span className="font-bold text-slate-900">
-                        {formatCurrency(appt.total_amount || 0)}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-900">
+                          {formatCurrency(appt.total_amount || 0)}
+                        </span>
+                        {/* Exibe status financeiro se relevante (ex: pago antecipado) */}
+                        {getPaymentStatusDisplay(appt)}
+                      </div>
+                      
                       <button 
                         onClick={() => handleCancel(appt)}
                         disabled={cancelLoading === appt.id}
@@ -374,9 +394,13 @@ export default function ClientDashboard() {
                       <p className="font-semibold text-slate-800 text-sm">
                         {appt.expand?.service_id?.name || 'Serviço'}
                       </p>
-                      <p className="text-xs text-slate-500 capitalize">
-                        {format(new Date(appt.start_time), "dd/MM")} - {format(new Date(appt.start_time), 'HH:mm')}
-                      </p>
+                      <div className="flex gap-2 items-center">
+                        <p className="text-xs text-slate-500 capitalize">
+                          {format(new Date(appt.start_time), "dd/MM")} - {format(new Date(appt.start_time), 'HH:mm')}
+                        </p>
+                        {/* Indicador de Pagamento no Histórico */}
+                        {getPaymentStatusDisplay(appt)}
+                      </div>
                     </div>
                   </div>
                   {getStatusBadge(appt.status)}
