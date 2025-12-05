@@ -249,11 +249,6 @@ export default function BookingPage() {
 
     setBookingLoading(true);
     try {
-      // --- CORREÇÃO DE FUSO HORÁRIO ---
-      // Construímos a string manualmente: "YYYY-MM-DD HH:MM:00"
-      // Ao enviar assim para o PocketBase, ele salva "YYYY-MM-DD 09:00:00.000Z"
-      // Isso preserva o "09:00" visualmente no banco, como desejado.
-
       const startString = `${selectedDate} ${selectedTime}:00`;
 
       // Calcular horário de término manualmente
@@ -263,11 +258,42 @@ export default function BookingPage() {
       const endHours = Math.floor(endTotalMinutes / 60);
       const endMinutes = endTotalMinutes % 60;
 
-      // Nota: Não estamos tratando virada de dia para simplificar, assumindo horário comercial
       const endTimeString = `${String(endHours).padStart(2, '0')}:${String(
         endMinutes
       ).padStart(2, '0')}:00`;
       const endString = `${selectedDate} ${endTimeString}`;
+
+      // --- VERIFICAÇÃO FINAL DE COLISÃO (TRAVA DE SEGURANÇA) ---
+      // Busca novamente os agendamentos do dia para garantir que não houve
+      // reserva simultânea ou problema de carregamento anterior.
+      const searchDate = new Date(selectedDate + 'T00:00:00');
+      const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, searchDate);
+      
+      const hasConflict = latestAppointments.some(appt => {
+        // Ignora cancelados
+        if (Number(appt.status) === StatusEnum.CANCELADO) return false;
+        // Verifica apenas o barbeiro selecionado
+        if (appt.barber_id !== selectedStaff.id) return false;
+
+        // Converte horários para comparação
+        const apptStart = new Date(appt.start_time);
+        const apptEnd = new Date(appt.end_time);
+        const bookingStart = new Date(startString);
+        const bookingEnd = new Date(endString);
+
+        // Lógica de colisão: NovoInicio < AntigoFim E NovoFim > AntigoInicio
+        return bookingStart < apptEnd && bookingEnd > apptStart;
+      });
+
+      if (hasConflict) {
+        alert("Ops! Este horário acabou de ser ocupado ou já estava reservado. Por favor, escolha outro horário.");
+        // Atualiza a lista visualmente
+        setExistingAppointments(latestAppointments.filter(a => Number(a.status) !== StatusEnum.CANCELADO));
+        setStep(3); // Volta para a tela de seleção de horário
+        setBookingLoading(false);
+        return;
+      }
+      // ---------------------------------------------------------
 
       const payload: Partial<Appointment> = {
         shop_id: shop.id,
