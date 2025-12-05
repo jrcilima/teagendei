@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string;
     name: string;
     phone?: string;
+    // ALTERADO: 'barbeiro' -> 'staff'
     role: 'dono' | 'staff' | 'cliente';
     passwordConfirm: string;
   }) => {

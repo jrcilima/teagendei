@@ -42,7 +42,7 @@ export interface Shop extends BaseModel {
   company_id: string;
   segment_id: string;
   manager_id?: string;
-  owner_id?: string; // CAMPO ADICIONADO PARA CORRIGIR O ONBOARDING
+  owner_id?: string;
   logo_url?: string;
   address?: string;
   phone?: string;
@@ -50,7 +50,6 @@ export interface Shop extends BaseModel {
   business_hours?: any;
   accepted_payment_methods?: string[]; 
   pix_key?: string;
-  // CAMPO ATUALIZADO COM 'telefone' PARA CORRIGIR SETTINGS
   pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria' | 'telefone';
   min_advance_time: number;
   max_advance_time: number;
@@ -67,6 +66,7 @@ export interface User extends BaseModel {
   phone?: string;
   password_hash: string;
   avatar?: string;
+  // ALTERADO: 'barbeiro' -> 'staff'
   role: 'dono' | 'staff' | 'cliente';
   company_id?: string;
   shop_id?: string;
@@ -115,6 +115,7 @@ export interface Appointment extends BaseModel {
   total_amount: number;
   notes?: string;
   client_id: string;
+  // Mantivemos o nome da coluna do banco 'barber_id' para evitar migração complexa agora
   barber_id: string;
   service_id: string;
   shop_id: string;
@@ -123,7 +124,7 @@ export interface Appointment extends BaseModel {
   cancellation_reason?: string;
   expand?: {
     client_id?: User;
-    barber_id?: User;
+    barber_id?: User; // O objeto expandido será um User com role 'staff'
     service_id?: Service;
     shop_id?: Shop;
     payment_method?: PaymentMethod;

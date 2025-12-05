@@ -3,7 +3,19 @@ import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { usersApi } from '../lib/api';
 import { User } from '../../shared/types';
-import { Plus, Edit2, Trash2, ArrowLeft, Loader2, User as UserIcon, Mail, Phone, ShieldCheck, Shield, Scissors } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  ArrowLeft,
+  Loader2,
+  User as UserIcon,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Shield,
+  Scissors
+} from 'lucide-react';
 
 export default function StaffList() {
   const { selectedShop } = useTenant();
@@ -28,10 +40,11 @@ export default function StaffList() {
   }, [selectedShop]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja remover este membro da equipe?')) return;
+    if (!confirm('Tem certeza que deseja remover este membro da equipe?'))
+      return;
     try {
       await usersApi.deleteStaff(id);
-      setStaff(staff.filter(s => s.id !== id));
+      setStaff(staff.filter((s) => s.id !== id));
     } catch (err) {
       console.error(err);
       alert('Erro ao remover funcionário');
@@ -40,7 +53,9 @@ export default function StaffList() {
 
   const getAvatarUrl = (user: User) => {
     if (!user.avatar) return null;
-    return `${import.meta.env.VITE_POCKETBASE_URL || 'http://136.248.77.97:8090'}/api/files/users/${user.id}/${user.avatar}`;
+    return `${
+      import.meta.env.VITE_POCKETBASE_URL || 'http://136.248.77.97:8090'
+    }/api/files/users/${user.id}/${user.avatar}`;
   };
 
   if (!selectedShop) {
@@ -56,15 +71,20 @@ export default function StaffList() {
       <div className="max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+            <Link
+              to="/dashboard"
+              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+            >
               <ArrowLeft className="w-6 h-6 text-gray-600" />
             </Link>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Equipe</h1>
-              <p className="text-gray-500 text-sm">Gerencie os profissionais da {selectedShop.name}</p>
+              <p className="text-gray-500 text-sm">
+                Gerencie os profissionais da {selectedShop.name}
+              </p>
             </div>
           </div>
-          
+
           <Link
             to="/staff/new"
             className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
@@ -83,8 +103,12 @@ export default function StaffList() {
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <UserIcon className="w-8 h-8 text-blue-300" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum profissional encontrado</h3>
-            <p className="text-gray-500 mb-6">Cadastre sua equipe para começar a receber agendamentos.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Nenhum profissional encontrado
+            </h3>
+            <p className="text-gray-500 mb-6">
+              Cadastre sua equipe para começar a receber agendamentos.
+            </p>
             <Link
               to="/staff/new"
               className="text-purple-600 font-medium hover:text-purple-700"
@@ -95,9 +119,12 @@ export default function StaffList() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {staff.map((member) => (
-              <div key={member.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow group relative">
+              <div
+                key={member.id}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow group relative"
+              >
                 <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Link 
+                  <Link
                     to={`/staff/${member.id}`}
                     className="p-2 bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-lg transition-colors"
                     title="Editar"
@@ -105,7 +132,7 @@ export default function StaffList() {
                     <Edit2 className="w-4 h-4" />
                   </Link>
                   {member.role !== 'dono' && (
-                    <button 
+                    <button
                       onClick={() => handleDelete(member.id)}
                       className="p-2 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 rounded-lg transition-colors"
                       title="Remover"
@@ -118,12 +145,18 @@ export default function StaffList() {
                 <div className="flex flex-col items-center text-center mb-4">
                   <div className="w-20 h-20 bg-gray-100 rounded-full mb-3 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm">
                     {getAvatarUrl(member) ? (
-                      <img src={getAvatarUrl(member)!} alt={member.name} className="w-full h-full object-cover" />
+                      <img
+                        src={getAvatarUrl(member)!}
+                        alt={member.name}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       <UserIcon className="w-10 h-10 text-gray-400" />
                     )}
                   </div>
-                  <h3 className="font-bold text-lg text-gray-900">{member.name}</h3>
+                  <h3 className="font-bold text-lg text-gray-900">
+                    {member.name}
+                  </h3>
                   <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
                     {/* Badge de Role */}
                     {member.role === 'dono' ? (

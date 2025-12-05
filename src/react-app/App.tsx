@@ -16,7 +16,7 @@ import Settings from './pages/Settings';
 import BookingPage from './pages/BookingPage';
 import Onboarding from './pages/Onboarding';
 import ClientDashboard from './pages/ClientDashboard';
-import ShopForm from './pages/ShopForm'; // <--- IMPORTADO
+import ShopForm from './pages/ShopForm';
 
 export default function App() {
   return (
@@ -52,6 +52,7 @@ export default function App() {
             <Route 
               path="/dashboard" 
               element={
+                // ALTERADO: 'barbeiro' -> 'staff'
                 <ProtectedRoute allowedRoles={['dono', 'staff']}>
                   <Dashboard />
                 </ProtectedRoute>
@@ -118,7 +119,7 @@ export default function App() {
               } 
             />
 
-            {/* Gestão de Unidades - NOVA ROTA */}
+            {/* Gestão de Unidades */}
             <Route 
               path="/shops/new" 
               element={

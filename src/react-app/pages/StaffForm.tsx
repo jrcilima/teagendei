@@ -6,7 +6,6 @@ import { User } from '../../shared/types';
 import { ArrowLeft, Loader2, Save, Upload } from 'lucide-react';
 import { z } from 'zod';
 
-// Schema base para validação
 const staffSchema = z.object({
   name: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
   email: z.string().email("Email inválido"),
@@ -25,7 +24,8 @@ const staffSchema = z.object({
 });
 
 type StaffFormData = z.infer<typeof staffSchema> & {
-  role: 'barbeiro' | 'dono';
+  // ALTERADO: 'barbeiro' -> 'staff'
+  role: 'staff' | 'dono';
 };
 
 export default function StaffForm() {
@@ -37,7 +37,6 @@ export default function StaffForm() {
   const [initialLoading, setInitialLoading] = useState(!!id);
   const [error, setError] = useState('');
   
-  // Avatar preview
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
@@ -47,7 +46,8 @@ export default function StaffForm() {
     phone: '',
     password: '',
     passwordConfirm: '',
-    role: 'barbeiro',
+    // ALTERADO: 'barbeiro' -> 'staff'
+    role: 'staff',
     is_professional: true
   });
 
@@ -61,7 +61,7 @@ export default function StaffForm() {
             phone: data.phone || '',
             password: '',
             passwordConfirm: '',
-            role: data.role as 'barbeiro' | 'dono',
+            role: data.role as 'staff' | 'dono',
             is_professional: data.is_professional 
           });
           if (data.avatar) {
@@ -90,7 +90,6 @@ export default function StaffForm() {
     if (!selectedShop) return;
     setError('');
 
-    // Validação Zod
     const validation = staffSchema.safeParse(formData);
     if (!validation.success) {
       setError(validation.error.errors[0].message);
@@ -114,7 +113,8 @@ export default function StaffForm() {
         payload.append('email', formData.email);
         payload.append('password', formData.password || '');
         payload.append('passwordConfirm', formData.passwordConfirm || '');
-        payload.append('role', 'barbeiro');
+        // ALTERADO: 'barbeiro' -> 'staff'
+        payload.append('role', 'staff');
         payload.append('shop_id', selectedShop.id);
         payload.append('company_id', selectedShop.company_id);
       }

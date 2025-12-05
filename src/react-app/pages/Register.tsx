@@ -10,6 +10,7 @@ export default function Register() {
     phone: '',
     password: '',
     confirmPassword: '',
+    // ALTERADO: 'barbeiro' -> 'staff'
     role: 'cliente' as 'dono' | 'staff' | 'cliente',
   });
   const [error, setError] = useState('');
@@ -46,9 +47,9 @@ export default function Register() {
       if (formData.role === 'dono') {
         navigate('/onboarding');
       } else if (formData.role === 'cliente') {
-        navigate('/client'); // CORRIGIDO: Vai para o painel do cliente
+        navigate('/client'); 
       } else {
-        navigate('/dashboard'); // Staff vai para o dashboard
+        navigate('/dashboard');
       }
     } catch (err: any) {
       console.error(err);
