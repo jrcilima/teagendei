@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { UserPlus, AlertCircle } from 'lucide-react';
+import { pb } from '../lib/pocketbase';
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -10,7 +11,6 @@ export default function Register() {
     phone: '',
     password: '',
     confirmPassword: '',
-    // ALTERADO: 'barbeiro' -> 'staff'
     role: 'cliente' as 'dono' | 'staff' | 'cliente',
   });
   const [error, setError] = useState('');
@@ -52,8 +52,25 @@ export default function Register() {
         navigate('/dashboard');
       }
     } catch (err: any) {
-      console.error(err);
-      setError(err?.message || 'Erro ao criar conta. Tente novamente.');
+      console.error("Erro completo:", err);
+      
+      // Lógica melhorada de tratamento de erro do PocketBase
+      if (err.data && err.data.data) {
+        const fieldErrors = err.data.data;
+        // Pega o primeiro erro que encontrar nos campos
+        const firstErrorKey = Object.keys(fieldErrors)[0];
+        if (firstErrorKey) {
+          setError(`${firstErrorKey}: ${fieldErrors[firstErrorKey].message}`);
+        } else {
+          setError(err.message || 'Erro de validação desconhecido.');
+        }
+      } else if (err.status === 400) {
+        setError('Dados inválidos. Verifique se o email já está cadastrado.');
+      } else if (err.status === 403) {
+        setError('Permissão negada. Verifique as Regras de API no painel.');
+      } else {
+        setError(err.message || 'Erro ao criar conta. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -78,9 +95,9 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                {error}
+              <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-100 text-sm flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
