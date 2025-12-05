@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { shopsApi, appointmentsApi, authApi } from '../lib/api';
 import { pb } from '../lib/pocketbase';
@@ -38,13 +38,13 @@ export default function ClientDashboard() {
   const [availableShops, setAvailableShops] = useState<Shop[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
   const [joiningShopId, setJoiningShopId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const loadData = async () => {
     if (!user) return;
     setLoading(true);
     try {
       // 1. Carregar Unidade Vinculada
-      // Tenta pegar do authStore atualizado ou do user do contexto
       const currentUser = pb.authStore.model;
       const currentShopId = currentUser?.shop_id || user.shop_id;
 
@@ -108,20 +108,33 @@ export default function ClientDashboard() {
 
   // === LÓGICA DE BUSCA DE LOJAS ===
 
-  const handleOpenShopSearch = async () => {
-    setShowShopModal(true);
+  const fetchShops = useCallback(async (term: string) => {
     setShopsLoading(true);
     try {
-      // Busca todas as lojas (em produção, idealmente paginado ou com filtro de busca)
-      const shops = await shopsApi.list();
-      // Filtra apenas as ativas
-      setAvailableShops(shops.filter(s => s.is_active));
+      const shops = await shopsApi.searchActive(term);
+      setAvailableShops(shops);
     } catch (err) {
       console.error("Erro ao buscar lojas", err);
-      alert("Não foi possível carregar a lista de estabelecimentos.");
     } finally {
       setShopsLoading(false);
     }
+  }, []);
+
+  // Debounce para busca
+  useEffect(() => {
+    if (!showShopModal) return;
+    
+    const delayDebounceFn = setTimeout(() => {
+      fetchShops(searchTerm);
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, showShopModal, fetchShops]);
+
+  const handleOpenShopSearch = () => {
+    setShowShopModal(true);
+    setSearchTerm(''); // Limpa busca anterior
+    // O useEffect acima irá disparar a busca inicial vazia
   };
 
   const handleJoinShop = async (shop: Shop) => {
@@ -130,17 +143,12 @@ export default function ClientDashboard() {
 
     setJoiningShopId(shop.id);
     try {
-      // 1. Atualiza o perfil do usuário no banco
       await authApi.updateProfile(user.id, { shop_id: shop.id });
-      
-      // 2. Força atualização do token local para refletir a mudança
       await pb.collection('users').authRefresh();
-
-      // 3. Fecha modal e recarrega a tela
+      
       setShowShopModal(false);
-      // Pequeno delay para garantir que o authRefresh propagou
       setTimeout(() => {
-        window.location.reload(); // Recarrega para garantir estado limpo
+        window.location.reload();
       }, 500);
       
     } catch (err) {
@@ -275,7 +283,6 @@ export default function ClientDashboard() {
             </div>
             <h3 className="font-bold text-slate-800 text-lg mb-2">Encontre um local</h3>
             <p className="text-slate-500 text-sm mb-6">Você ainda não está vinculado a nenhuma unidade.</p>
-            {/* Botão Corrigido com onClick */}
             <button 
               onClick={handleOpenShopSearch}
               className="w-full py-3 px-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
@@ -406,15 +413,30 @@ export default function ClientDashboard() {
 
       </main>
 
-      {/* Modal de Seleção de Loja */}
+      {/* Modal de Seleção de Loja com Busca */}
       {showShopModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col animate-slide-up">
-             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-               <h3 className="font-bold text-lg text-gray-900">Escolher Unidade</h3>
-               <button onClick={() => setShowShopModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                 <X className="w-5 h-5 text-gray-500" />
-               </button>
+             <div className="p-4 border-b border-gray-100">
+               <div className="flex items-center justify-between mb-4">
+                 <h3 className="font-bold text-lg text-gray-900">Escolher Unidade</h3>
+                 <button onClick={() => setShowShopModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                   <X className="w-5 h-5 text-gray-500" />
+                 </button>
+               </div>
+               
+               {/* Barra de Pesquisa */}
+               <div className="relative">
+                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                 <input 
+                   type="text" 
+                   placeholder="Buscar por nome..." 
+                   className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all text-sm"
+                   value={searchTerm}
+                   onChange={(e) => setSearchTerm(e.target.value)}
+                   autoFocus
+                 />
+               </div>
              </div>
              
              <div className="p-4 overflow-y-auto">
@@ -424,7 +446,8 @@ export default function ClientDashboard() {
                  </div>
                ) : availableShops.length === 0 ? (
                  <div className="text-center py-8 text-gray-500">
-                   Nenhuma loja encontrada.
+                   <p>Nenhuma loja encontrada.</p>
+                   {searchTerm && <p className="text-xs mt-1">Tente outro termo de busca.</p>}
                  </div>
                ) : (
                  <div className="space-y-3">
@@ -433,7 +456,7 @@ export default function ClientDashboard() {
                        key={shop.id}
                        onClick={() => handleJoinShop(shop)}
                        disabled={!!joiningShopId}
-                       className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all group relative"
+                       className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all group relative bg-white"
                      >
                        <div className="flex justify-between items-start">
                          <div>

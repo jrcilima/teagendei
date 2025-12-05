@@ -42,8 +42,22 @@ export const shopsApi = {
     return await pb.collection('shops').create(data);
   },
 
+  // Lista todas as lojas (usado pelo tenant/admin)
   list: async () => {
     return await pb.collection('shops').getFullList<Shop>();
+  },
+
+  // Busca lojas ativas com filtro opcional de nome (usado pelo cliente)
+  searchActive: async (query?: string) => {
+    const filterParts = ['is_active = true'];
+    if (query && query.trim() !== '') {
+      filterParts.push(`name ~ "${query}"`);
+    }
+    
+    return await pb.collection('shops').getFullList<Shop>({
+      filter: filterParts.join(' && '),
+      sort: 'name',
+    });
   },
 
   getById: async (id: string) => {
