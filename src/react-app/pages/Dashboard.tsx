@@ -153,20 +153,30 @@ export default function Dashboard() {
             
             <div className="flex items-center gap-4">
               {shops.length > 0 && (
-                <select
-                  value={selectedShop?.id || ''}
-                  onChange={(e) => {
-                    const shop = shops.find(s => s.id === e.target.value);
-                    setSelectedShop(shop || null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
-                >
-                  {shops.map(shop => (
-                    <option key={shop.id} value={shop.id}>
-                      {shop.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedShop?.id || ''}
+                    onChange={(e) => {
+                      const shop = shops.find(s => s.id === e.target.value);
+                      setSelectedShop(shop || null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  >
+                    {shops.map(shop => (
+                      <option key={shop.id} value={shop.id}>
+                        {shop.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* NOVO: Botão para adicionar nova unidade */}
+                  <Link 
+                    to="/shops/new" 
+                    className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
+                    title="Nova Unidade"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </Link>
+                </div>
               )}
               
               <div className="flex items-center gap-2">
@@ -326,7 +336,6 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-600 mt-1">{service.description}</p>
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                           <span>⏱️ {service.duration} min</span>
-                          {/* CORREÇÃO AQUI: Acesso ao expand em vez do ID puro */}
                           {service.expand?.category_id && (
                             <span>📁 {service.expand.category_id.name}</span>
                           )}

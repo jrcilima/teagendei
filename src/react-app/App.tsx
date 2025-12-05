@@ -1,143 +1,148 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "./contexts/AuthContext";
-import { TenantProvider } from "./contexts/TenantContext";
-import ProtectedRoute from "./components/ProtectedRoute";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import { TenantProvider } from './contexts/TenantContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
-// Pages
-import HomePage from "./pages/Home";
-import LoginPage from "./pages/Login";
-import RegisterPage from "./pages/Register";
-import OnboardingPage from "./pages/Onboarding";
-import DashboardPage from "./pages/Dashboard";
-import ClientDashboard from "./pages/ClientDashboard";
-import ServicesList from "./pages/ServicesList";
-import ServiceForm from "./pages/ServiceForm";
-import BookingPage from "./pages/BookingPage";
-import Appointments from "./pages/Appointments";
-import StaffList from "./pages/StaffList";
-import StaffForm from "./pages/StaffForm";
-import SettingsPage from "./pages/Settings"; // NOVO
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';
+import Home from './pages/Home';
+import Appointments from './pages/Appointments';
+import ServicesList from './pages/ServicesList';
+import ServiceForm from './pages/ServiceForm';
+import StaffList from './pages/StaffList';
+import StaffForm from './pages/StaffForm';
+import Settings from './pages/Settings';
+import BookingPage from './pages/BookingPage';
+import Onboarding from './pages/Onboarding';
+import ClientDashboard from './pages/ClientDashboard';
+import ShopForm from './pages/ShopForm'; // <--- IMPORTADO
 
 export default function App() {
   return (
-    <AuthProvider>
-      <TenantProvider>
-        <Router>
+    <BrowserRouter>
+      <AuthProvider>
+        <TenantProvider>
           <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<HomePage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            
-            {/* Rota de Agendamento (Pública/Híbrida) */}
+            {/* Rotas Públicas */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             <Route path="/book/:slug" element={<BookingPage />} />
-
-            {/* Protected Routes - Dono */}
-            <Route
-              path="/onboarding"
-              element={
-                <ProtectedRoute allowedRoles={['dono']}>
-                  <OnboardingPage />
-                </ProtectedRoute>
-              }
-            />
             
-            {/* Protected Routes - Staff e Dono */}
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute allowedRoles={['dono', 'staff']}>
-                  <DashboardPage />
-                </ProtectedRoute>
-              }
-            />
-            
-            <Route
-              path="/appointments"
-              element={
-                <ProtectedRoute allowedRoles={['dono', 'staff']}>
-                  <Appointments />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Gestão de Serviços */}
-            <Route
-              path="/services"
-              element={
-                <ProtectedRoute allowedRoles={['dono', 'staff']}>
-                  <ServicesList />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/services/new"
-              element={
-                <ProtectedRoute allowedRoles={['dono', 'staff']}>
-                  <ServiceForm />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/services/:id"
-              element={
-                <ProtectedRoute allowedRoles={['dono', 'staff']}>
-                  <ServiceForm />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Gestão de Equipe */}
-            <Route
-              path="/staff"
-              element={
-                <ProtectedRoute allowedRoles={['dono']}>
-                  <StaffList />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/staff/new"
-              element={
-                <ProtectedRoute allowedRoles={['dono']}>
-                  <StaffForm />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/staff/:id"
-              element={
-                <ProtectedRoute allowedRoles={['dono']}>
-                  <StaffForm />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Configurações (NOVO) */}
-            <Route
-              path="/settings"
-              element={
-                <ProtectedRoute allowedRoles={['dono']}>
-                  <SettingsPage />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Dashboard do Cliente */}
-            <Route
-              path="/client"
+            {/* Rotas Protegidas (Área do Cliente) */}
+            <Route 
+              path="/client" 
               element={
                 <ProtectedRoute allowedRoles={['cliente']}>
                   <ClientDashboard />
                 </ProtectedRoute>
-              }
+              } 
             />
 
-            {/* Fallback Route */}
+            {/* Rotas Protegidas (Dono/Staff) */}
+            <Route 
+              path="/onboarding" 
+              element={
+                <ProtectedRoute>
+                  <Onboarding />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['dono', 'staff']}>
+                  <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/appointments" 
+              element={
+                <ProtectedRoute allowedRoles={['dono', 'staff']}>
+                  <Appointments />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Gestão de Serviços */}
+            <Route 
+              path="/services" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <ServicesList />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/services/new" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <ServiceForm />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/services/:id" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <ServiceForm />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Gestão de Equipe */}
+            <Route 
+              path="/staff" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <StaffList />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/staff/new" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <StaffForm />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/staff/:id" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <StaffForm />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Gestão de Unidades - NOVA ROTA */}
+            <Route 
+              path="/shops/new" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <ShopForm />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Configurações */}
+            <Route 
+              path="/settings" 
+              element={
+                <ProtectedRoute allowedRoles={['dono']}>
+                  <Settings />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </Router>
-      </TenantProvider>
-    </AuthProvider>
+        </TenantProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
