@@ -20,6 +20,18 @@ import {
   FileText
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { 
+  addMinutes, 
+  format, 
+  parse, 
+  isBefore, 
+  isAfter, 
+  setHours, 
+  setMinutes, 
+  setSeconds,
+  isSameDay 
+} from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 type DaySchedule = {
   open: boolean;
@@ -41,7 +53,6 @@ const DAY_KEYS = [
   'saturday'
 ];
 
-// Enums locais para garantir envio numérico
 const StatusEnum = {
   CANCELADO: 0,
   AGENDADO: 1,
@@ -55,7 +66,6 @@ const PaymentStatusEnum = {
   PAGO: 2
 };
 
-// Função auxiliar para formatar moeda PT-BR
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -78,8 +88,9 @@ export default function BookingPage() {
 
   // Data selecionada como string YYYY-MM-DD
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toLocaleDateString('en-CA')
+    format(new Date(), 'yyyy-MM-dd')
   );
+  // Horário selecionado como string "HH:mm"
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] =
@@ -126,13 +137,10 @@ export default function BookingPage() {
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
-        // Monta data local para filtro. O backend deve filtrar pelo dia.
-        // Adicionamos T00:00:00 para criar um objeto Date válido para a função da API
-        const searchDate = new Date(selectedDate + 'T00:00:00');
+        const searchDate = new Date(`${selectedDate}T00:00:00`);
         const appts =
           (await appointmentsApi.listByShopAndDate(shop.id, searchDate)) || [];
 
-        // Filtra apenas agendamentos ativos (Status != 0)
         const activeAppts = Array.isArray(appts)
           ? appts.filter((a) => Number(a.status) !== StatusEnum.CANCELADO)
           : [];
@@ -148,13 +156,11 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
-  // 3. Calcular Slots Disponíveis
+  // 3. Calcular Slots Disponíveis usando date-fns
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
-    // Parse da data selecionada (YYYY-MM-DD) para pegar o dia da semana corretamente
-    const [y, m, d] = selectedDate.split('-').map(Number);
-    const dateObj = new Date(y, m - 1, d); // Mês em JS é 0-indexado
+    const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
     const dayOfWeek = dateObj.getDay();
     const dayKey = DAY_KEYS[dayOfWeek];
 
@@ -171,58 +177,44 @@ export default function BookingPage() {
     const { start, end } = businessHours[dayKey];
     const slots: string[] = [];
 
-    const [startHour, startMin] = start.split(':').map(Number);
-    const [endHour, endMin] = end.split(':').map(Number);
+    // Parse dos horários de funcionamento
+    const startDate = parse(start, 'HH:mm', dateObj);
+    const endDate = parse(end, 'HH:mm', dateObj);
 
-    let currentMinutes = startHour * 60 + startMin;
-    const closeMinutes = endHour * 60 + endMin;
-    const interval = 30;
-
+    let currentSlot = startDate;
     const now = new Date();
-    // Verifica se é hoje comparando string YYYY-MM-DD
-    const isToday = selectedDate === now.toLocaleDateString('en-CA');
-    const currentMinutesNow = now.getHours() * 60 + now.getMinutes();
+    const isToday = isSameDay(dateObj, now);
 
-    while (currentMinutes + selectedService.duration <= closeMinutes) {
-      // Se for hoje, ignora horários passados (+15min de margem)
-      if (isToday && currentMinutes < currentMinutesNow + 15) {
-        currentMinutes += interval;
+    // Loop para gerar horários
+    while (isBefore(addMinutes(currentSlot, selectedService.duration), endDate) || currentSlot.getTime() === endDate.getTime()) {
+      // Bloqueio de horários passados (se for hoje) + Buffer de 30min
+      if (isToday && isBefore(currentSlot, addMinutes(now, 30))) {
+        currentSlot = addMinutes(currentSlot, 30);
         continue;
       }
 
-      const slotStart = currentMinutes;
-      const slotEnd = currentMinutes + selectedService.duration;
+      const slotStart = currentSlot;
+      const slotEnd = addMinutes(currentSlot, selectedService.duration);
 
       // Verifica colisão com agendamentos existentes
       const isBlocked = existingAppointments.some((appt) => {
-        // Se escolheu um barbeiro específico, só olha a agenda dele
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
-        // Extração segura da hora do agendamento vindo do banco (UTC)
-        // Como o banco gravou 09:00 UTC, getUTCHours() retornará 9.
+        // Converter strings UTC do banco para objetos Date locais para comparação
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
 
-        const apptStartMinutes =
-          apptStart.getUTCHours() * 60 + apptStart.getUTCMinutes();
-        const apptEndMinutes =
-          apptEnd.getUTCHours() * 60 + apptEnd.getUTCMinutes();
-
         // Lógica de colisão de intervalos
-        return slotStart < apptEndMinutes && slotEnd > apptStartMinutes;
+        // (StartA < EndB) e (EndA > StartB)
+        return isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart);
       });
 
       if (!isBlocked) {
-        const h = Math.floor(currentMinutes / 60);
-        const mn = currentMinutes % 60;
-        const timeString = `${String(h).padStart(2, '0')}:${String(mn).padStart(
-          2,
-          '0'
-        )}`;
-        slots.push(timeString);
+        slots.push(format(currentSlot, 'HH:mm'));
       }
 
-      currentMinutes += interval;
+      // Intervalo de 30 minutos entre slots
+      currentSlot = addMinutes(currentSlot, 30);
     }
 
     return slots;
@@ -257,23 +249,16 @@ export default function BookingPage() {
 
     setBookingLoading(true);
     try {
-      const startString = `${selectedDate} ${selectedTime}:00`;
+      // Construção Segura da Data
+      const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
+      const [hours, minutes] = selectedTime.split(':').map(Number);
+      
+      const startDate = setSeconds(setMinutes(setHours(baseDate, hours), minutes), 0);
+      const endDate = addMinutes(startDate, selectedService.duration);
 
-      // Calcular horário de término manualmente
-      const [hours, minutes] = selectedTime!.split(':').map(Number);
-      const endTotalMinutes = hours * 60 + minutes + selectedService.duration;
-
-      const endHours = Math.floor(endTotalMinutes / 60);
-      const endMinutes = endTotalMinutes % 60;
-
-      const endTimeString = `${String(endHours).padStart(2, '0')}:${String(
-        endMinutes
-      ).padStart(2, '0')}:00`;
-      const endString = `${selectedDate} ${endTimeString}`;
-
-      // --- VERIFICAÇÃO FINAL DE COLISÃO (TRAVA DE SEGURANÇA) ---
-      const searchDate = new Date(selectedDate + 'T00:00:00');
-      const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, searchDate);
+      // Verifica novamente se há conflito (Race Condition Check)
+      // Recarrega agendamentos para o dia
+      const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
       
       const hasConflict = latestAppointments.some(appt => {
         if (Number(appt.status) === StatusEnum.CANCELADO) return false;
@@ -281,32 +266,30 @@ export default function BookingPage() {
 
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
-        const bookingStart = new Date(startString);
-        const bookingEnd = new Date(endString);
 
-        return bookingStart < apptEnd && bookingEnd > apptStart;
+        return isBefore(startDate, apptEnd) && isAfter(endDate, apptStart);
       });
 
       if (hasConflict) {
-        alert("Ops! Este horário acabou de ser ocupado ou já estava reservado. Por favor, escolha outro horário.");
+        alert("Ops! Este horário acabou de ser ocupado. Por favor, escolha outro.");
         setExistingAppointments(latestAppointments.filter(a => Number(a.status) !== StatusEnum.CANCELADO));
         setStep(3); 
         setBookingLoading(false);
         return;
       }
-      // ---------------------------------------------------------
 
       const payload: Partial<Appointment> | any = {
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        start_time: startString,
-        end_time: endString,
+        // Envia ISO String completo (com fuso UTC) para o PocketBase
+        start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
         status: StatusEnum.AGENDADO, 
         payment_status: PaymentStatusEnum.NAO_PAGO, 
         total_amount: Number(selectedService.price),
-        payment_method: selectedPaymentMethodId, // Singular
+        payment_method: selectedPaymentMethodId, 
         notes: notes,
         reminder_sent: false,
         confirmation_sent: false
@@ -506,7 +489,7 @@ export default function BookingPage() {
               <input
                 type="date"
                 value={selectedDate}
-                min={new Date().toLocaleDateString('en-CA')} // Pega data local YYYY-MM-DD
+                min={format(new Date(), 'yyyy-MM-dd')}
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
                   setSelectedTime(null);
@@ -603,13 +586,9 @@ export default function BookingPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Data/Hora</span>
-                  {/* Exibição direta do horário selecionado, sem conversão de Date para não ter risco */}
                   <span className="font-medium text-gray-900 text-right capitalize">
-                    {new Date(selectedDate + 'T12:00:00').toLocaleDateString(
-                      'pt-BR',
-                      { weekday: 'short', day: 'numeric', month: 'short' }
-                    )}{' '}
-                    às {selectedTime}
+                    {format(parse(selectedDate, 'yyyy-MM-dd', new Date()), "EEE, d 'de' MMM", { locale: ptBR })}
+                    {' '}às {selectedTime}
                   </span>
                 </div>
               </div>

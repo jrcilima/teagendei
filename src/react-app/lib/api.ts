@@ -1,5 +1,6 @@
 import { pb } from './pocketbase';
 import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod, AppointmentStatus } from '../../shared/types';
+import { startOfDay, endOfDay } from 'date-fns';
 
 export const authApi = {
   logout: () => {
@@ -151,30 +152,28 @@ export const segmentsApi = {
   },
 };
 
-// Helper para formatar data YYYY-MM-DD para ISO UTC
+// Helper robusto para converter data local em range UTC para filtro do PocketBase
 const getDayRangeUTC = (dateInput: Date | string) => {
-  let dateStr: string;
+  let targetDate: Date;
   
   if (typeof dateInput === 'string') {
-    // Assume input YYYY-MM-DD
-    dateStr = dateInput;
+    // Corrige problema de fuso ao instanciar string "YYYY-MM-DD"
+    // Adiciona "T00:00:00" para garantir que seja tratado como local time, não UTC
+    targetDate = new Date(`${dateInput}T00:00:00`);
   } else {
-    // Input Date object: usa método local para obter a string YYYY-MM-DD que o usuário vê
-    const y = dateInput.getFullYear();
-    const m = String(dateInput.getMonth() + 1).padStart(2, '0');
-    const d = String(dateInput.getDate()).padStart(2, '0');
-    dateStr = `${y}-${m}-${d}`;
+    targetDate = dateInput;
   }
 
-  // Define inicio e fim do dia como strings que o PocketBase pode comparar com campos Date
-  // PocketBase armazena datas em UTC. 
-  // Para ser robusto, comparamos strings diretas no formato UTC.
-  // "2023-10-25 00:00:00" em UTC cobre o dia.
-  
-  const startStr = `${dateStr} 00:00:00`;
-  const endStr = `${dateStr} 23:59:59`;
-  
-  return { startStr, endStr };
+  // startOfDay pega 00:00:00 do horário local do navegador
+  const start = startOfDay(targetDate);
+  // endOfDay pega 23:59:59 do horário local do navegador
+  const end = endOfDay(targetDate);
+
+  // toISOString() converte automaticamente para UTC (ex: 03:00:00Z para quem está no BR)
+  return { 
+    startStr: start.toISOString().replace('T', ' ').substring(0, 19), 
+    endStr: end.toISOString().replace('T', ' ').substring(0, 19)
+  };
 };
 
 export const appointmentsApi = {
@@ -187,6 +186,7 @@ export const appointmentsApi = {
 
     try {
       return await pb.collection('appointments').getFullList<Appointment>({
+        // PocketBase aceita comparações de string se estiverem no formato UTC "YYYY-MM-DD HH:mm:ss"
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
         sort: 'start_time',
         expand: 'service_id,client_id,barber_id,payment_method'
@@ -245,17 +245,14 @@ export const usersApi = {
   },
 
   createStaff: async (data: any) => {
-    // CORREÇÃO: Verifica se é FormData antes de tentar espalhar propriedades
     if (data instanceof FormData) {
       data.append('emailVisibility', 'true');
-      // Se o form não enviou role, adiciona padrão
       if (!data.has('role')) {
          data.append('role', 'barbeiro');
       }
       return await pb.collection('users').create(data);
     }
 
-    // Fallback para objeto simples (JSON)
     return await pb.collection('users').create({
       ...data,
       emailVisibility: true,

@@ -16,8 +16,9 @@ import {
   Scissors,
   CreditCard
 } from 'lucide-react';
+import { format, addDays } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-// Enums locais para comparação (mesmo se types.ts não estiver atualizado)
 const StatusEnum = {
   CANCELADO: 0,
   AGENDADO: 1,
@@ -25,17 +26,6 @@ const StatusEnum = {
   CONCLUIDO: 4
 };
 
-// Função que pega a hora UTC (09:00Z) e exibe "09:00" (ignorando que o navegador converteria para 06:00)
-const formatTimeDisplay = (dateString: string) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  // getUTCHours pega a hora '9' de '09:00Z', ignorando o fuso local
-  const hours = date.getUTCHours().toString().padStart(2, '0');
-  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-  return `${hours}:${minutes}`;
-};
-
-// Função auxiliar para formatar moeda PT-BR
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -83,9 +73,7 @@ export default function Appointments() {
   };
 
   const changeDate = (days: number) => {
-    const newDate = new Date(selectedDate);
-    newDate.setDate(newDate.getDate() + days);
-    setSelectedDate(newDate);
+    setSelectedDate(prev => addDays(prev, days));
   };
 
   const getStatusBadge = (status: any) => {
@@ -157,11 +145,7 @@ export default function Appointments() {
           <div className="flex items-center gap-2">
             <CalendarIcon className="w-5 h-5 text-purple-600" />
             <span className="font-semibold text-gray-900 capitalize">
-              {selectedDate.toLocaleDateString('pt-BR', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long'
-              })}
+              {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
             </span>
           </div>
 
@@ -209,8 +193,7 @@ export default function Appointments() {
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0 pt-1">
                     <span className="block text-lg font-bold text-gray-900">
-                      {/* CORREÇÃO: Exibe a hora UTC sem converter para local */}
-                      {formatTimeDisplay(appt.start_time)}
+                      {format(new Date(appt.start_time), 'HH:mm')}
                     </span>
                     {getStatusBadge(appt.status)}
                   </div>
@@ -228,13 +211,11 @@ export default function Appointments() {
                       <span className="text-gray-300">|</span>
                       {appt.expand?.barber_id?.name || 'Profissional'}
                     </div>
-                    {/* Campo de Pagamento Atualizado */}
                     <div className="flex items-center gap-2 text-gray-500 text-sm mt-1">
                       <CreditCard className="w-3 h-3" />
                       {appt.expand?.payment_method?.name || 'Não informado'}
                     </div>
                     <div className="text-purple-600 font-bold text-sm mt-1">
-                      {/* Formatação Correta para PT-BR */}
                       {formatCurrency(appt.total_amount || 0)}
                     </div>
                   </div>
