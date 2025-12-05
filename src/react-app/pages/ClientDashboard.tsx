@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { shopsApi, appointmentsApi, authApi } from '../lib/api';
 import { pb } from '../lib/pocketbase';
 import { Shop, Appointment, AppointmentStatus, PaymentStatus } from '../../shared/types';
-import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle, Search, X, AlertCircle } from 'lucide-react';
+import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle, Search, X, AlertCircle, Clock } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -167,9 +167,14 @@ export default function ClientDashboard() {
       return <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Pago</span>;
     }
     
-    // Se está concluído mas não pago, exibe alerta vermelho
+    // Se está concluído mas não pago (Dívida)
     if (as === AppointmentStatus.CONCLUIDO && ps === PaymentStatus.NAO_PAGO) {
       return <span className="text-xs font-bold text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Pendente</span>;
+    }
+
+    // NOVO: Se está agendado e não pago (A Pagar) - Antes retornava null
+    if (as === AppointmentStatus.AGENDADO && ps === PaymentStatus.NAO_PAGO) {
+      return <span className="text-xs font-bold text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> A Pagar</span>;
     }
 
     return null;
@@ -352,7 +357,7 @@ export default function ClientDashboard() {
                         <span className="font-bold text-slate-900">
                           {formatCurrency(appt.total_amount || 0)}
                         </span>
-                        {/* Exibe status financeiro se relevante (ex: pago antecipado) */}
+                        {/* Exibe status financeiro */}
                         {getPaymentStatusDisplay(appt)}
                       </div>
                       
