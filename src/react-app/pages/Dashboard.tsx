@@ -24,7 +24,7 @@ export default function Dashboard() {
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
 
-  // Estados para as métricas reais (inicializados como 0)
+  // Estados para as métricas reais
   const [stats, setStats] = useState({
     appointmentsToday: 0,
     revenueToday: 0,
@@ -47,15 +47,21 @@ export default function Dashboard() {
         const servicesData = await servicesApi.listByShop(selectedShop.id);
         if (mounted) setServices(servicesData);
 
-        // 2. Carregar Agendamentos de Hoje e Profissionais para calcular estatísticas
+        // 2. Carregar Agendamentos de Hoje e Profissionais
         const appointmentsData = await appointmentsApi.listToday(selectedShop.id);
         const staffData = await usersApi.listStaffByShop(selectedShop.id);
 
         if (mounted) {
-          // FILTRAGEM: Considera apenas agendamentos NÃO cancelados para as métricas
-          const activeAppointments = appointmentsData.filter(appt => Number(appt.status) !== AppointmentStatus.CANCELADO);
+          // FILTRAGEM INICIAL: Apenas agendamentos ativos
+          let activeAppointments = appointmentsData.filter(appt => Number(appt.status) !== AppointmentStatus.CANCELADO);
 
-          // Calcular Faturamento (Soma do total_amount dos agendamentos ativos do dia)
+          // FILTRAGEM DE SEGURANÇA PARA STAFF
+          // Se for Staff, filtra apenas os agendamentos DELE para os cálculos
+          if (user?.role === 'staff') {
+            activeAppointments = activeAppointments.filter(appt => appt.barber_id === user.id);
+          }
+
+          // Calcular Faturamento (Soma do total_amount dos agendamentos filtrados)
           const revenue = activeAppointments.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
 
           // Calcular Taxa de Ocupação (Estimativa: 8 agendamentos/dia por profissional)
@@ -84,7 +90,7 @@ export default function Dashboard() {
     loadDashboardData();
 
     return () => { mounted = false; };
-  }, [selectedShop]);
+  }, [selectedShop, user]);
 
   if (tenantLoading) {
     return (
@@ -95,6 +101,7 @@ export default function Dashboard() {
   }
 
   if (!company) {
+    // ... (código de onboarding omitido, igual ao original)
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
@@ -116,9 +123,9 @@ export default function Dashboard() {
     );
   }
 
-  // Fallback para Empresa sem Lojas
   if (shops.length === 0) {
-    return (
+     // ... (código de criar unidade omitido, igual ao original)
+     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
           <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -168,14 +175,17 @@ export default function Dashboard() {
                       </option>
                     ))}
                   </select>
-                  {/* NOVO: Botão para adicionar nova unidade */}
-                  <Link 
-                    to="/shops/new" 
-                    className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
-                    title="Nova Unidade"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </Link>
+                  
+                  {/* Apenas DONO pode criar nova unidade */}
+                  {user?.role === 'dono' && (
+                    <Link 
+                      to="/shops/new" 
+                      className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
+                      title="Nova Unidade"
+                    >
+                      <Plus className="w-5 h-5" />
+                    </Link>
+                  )}
                 </div>
               )}
               
@@ -198,7 +208,9 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        {/* Cards de Métricas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Card Agendamentos (Visível para todos, mas filtrado para Staff) */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-purple-100 rounded-lg">
@@ -212,6 +224,7 @@ export default function Dashboard() {
             <p className="text-sm text-gray-600">Agendamentos Hoje</p>
           </div>
           
+          {/* Card Faturamento (Visível para todos, mas filtrado para Staff) */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-green-100 rounded-lg">
@@ -222,36 +235,45 @@ export default function Dashboard() {
             <h3 className="text-2xl font-bold text-gray-900 mb-1">
               {statsLoading ? '-' : `R$ ${stats.revenueToday.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             </h3>
-            <p className="text-sm text-gray-600">Faturamento Hoje</p>
+            <p className="text-sm text-gray-600">
+              {user?.role === 'staff' ? 'Meu Faturamento Hoje' : 'Faturamento Hoje'}
+            </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-             <div className="flex items-center justify-between mb-4">
-               <div className="p-2 bg-blue-100 rounded-lg">
-                 <Users className="w-6 h-6 text-blue-600" />
-               </div>
-             </div>
-             <h3 className="text-2xl font-bold text-gray-900 mb-1">
-               {statsLoading ? '-' : stats.activeProfessionals}
-             </h3>
-             <p className="text-sm text-gray-600">Profissionais Ativos</p>
-          </div>
+          {/* Cards Administrativos (Visíveis APENAS para DONO) */}
+          {user?.role === 'dono' && (
+            <>
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+                 <div className="flex items-center justify-between mb-4">
+                   <div className="p-2 bg-blue-100 rounded-lg">
+                     <Users className="w-6 h-6 text-blue-600" />
+                   </div>
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                   {statsLoading ? '-' : stats.activeProfessionals}
+                 </h3>
+                 <p className="text-sm text-gray-600">Profissionais Ativos</p>
+              </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-             <div className="flex items-center justify-between mb-4">
-               <div className="p-2 bg-orange-100 rounded-lg">
-                 <Clock className="w-6 h-6 text-orange-600" />
-               </div>
-             </div>
-             <h3 className="text-2xl font-bold text-gray-900 mb-1">
-               {statsLoading ? '-' : `${stats.occupancyRate}%`}
-             </h3>
-             <p className="text-sm text-gray-600">Taxa de Ocupação</p>
-          </div>
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+                 <div className="flex items-center justify-between mb-4">
+                   <div className="p-2 bg-orange-100 rounded-lg">
+                     <Clock className="w-6 h-6 text-orange-600" />
+                   </div>
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                   {statsLoading ? '-' : `${stats.occupancyRate}%`}
+                 </h3>
+                 <p className="text-sm text-gray-600">Taxa de Ocupação</p>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Navigation Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {/* Grid de Navegação */}
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${user?.role === 'dono' ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6 mb-8`}>
+          
+          {/* Agenda - Visível para todos */}
           <Link
             to="/appointments"
             className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-purple-500"
@@ -263,52 +285,59 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500">Gerenciar agendamentos</p>
           </Link>
 
-          <Link
-            to="/services"
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-pink-500"
-          >
-            <div className="p-3 bg-pink-100 text-pink-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
-              <Store className="w-6 h-6" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Serviços</h3>
-            <p className="text-sm text-gray-500">Catálogo de serviços</p>
-          </Link>
+          {/* Menus Administrativos - Visíveis APENAS para DONO */}
+          {user?.role === 'dono' && (
+            <>
+              <Link
+                to="/services"
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-pink-500"
+              >
+                <div className="p-3 bg-pink-100 text-pink-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Store className="w-6 h-6" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Serviços</h3>
+                <p className="text-sm text-gray-500">Catálogo de serviços</p>
+              </Link>
 
-          <Link
-            to="/staff"
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-blue-500"
-          >
-            <div className="p-3 bg-blue-100 text-blue-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
-              <Users className="w-6 h-6" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Equipe</h3>
-            <p className="text-sm text-gray-500">Gerenciar profissionais</p>
-          </Link>
+              <Link
+                to="/staff"
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-blue-500"
+              >
+                <div className="p-3 bg-blue-100 text-blue-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Equipe</h3>
+                <p className="text-sm text-gray-500">Gerenciar profissionais</p>
+              </Link>
 
-          <Link
-            to="/settings"
-            className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-gray-500"
-          >
-            <div className="p-3 bg-gray-100 text-gray-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
-              <Settings className="w-6 h-6" />
-            </div>
-            <h3 className="font-semibold text-gray-900">Configurações</h3>
-            <p className="text-sm text-gray-500">Ajustes da unidade</p>
-          </Link>
+              <Link
+                to="/settings"
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-gray-500"
+              >
+                <div className="p-3 bg-gray-100 text-gray-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Settings className="w-6 h-6" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Configurações</h3>
+                <p className="text-sm text-gray-500">Ajustes da unidade</p>
+              </Link>
+            </>
+          )}
         </div>
 
-        {selectedShop ? (
+        {selectedShop && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
                 Serviços de {selectedShop.name}
               </h2>
-              <Link
-                to="/services/new"
-                className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                Novo Serviço
-              </Link>
+              {user?.role === 'dono' && (
+                <Link
+                  to="/services/new"
+                  className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Novo Serviço
+                </Link>
+              )}
             </div>
             
             <div className="divide-y divide-gray-200">
@@ -320,12 +349,14 @@ export default function Dashboard() {
                 <div className="px-6 py-12 text-center">
                   <Store className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-600 mb-4">Nenhum serviço cadastrado ainda</p>
-                  <Link
-                    to="/services/new"
-                    className="inline-block px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    Cadastrar Primeiro Serviço
-                  </Link>
+                  {user?.role === 'dono' && (
+                    <Link
+                      to="/services/new"
+                      className="inline-block px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      Cadastrar Primeiro Serviço
+                    </Link>
+                  )}
                 </div>
               ) : (
                 services.map((service) => (
@@ -351,10 +382,6 @@ export default function Dashboard() {
                 ))
               )}
             </div>
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-500">Selecione uma unidade para ver os detalhes.</p>
           </div>
         )}
       </main>

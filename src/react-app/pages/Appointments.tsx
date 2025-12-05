@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
+import { useAuth } from '../contexts/AuthContext';
 import { appointmentsApi } from '../lib/api';
 import { Appointment, AppointmentStatus, PaymentStatus } from '../../shared/types';
 import {
   Calendar as CalendarIcon,
   Clock,
-  User,
+  User as UserIcon,
   CheckCircle,
   XCircle,
   ChevronLeft,
@@ -28,13 +29,14 @@ const formatCurrency = (value: number) => {
 };
 
 export default function Appointments() {
+  const { user } = useAuth();
   const { selectedShop } = useTenant();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
 
   const loadAppointments = async () => {
-    if (!selectedShop) return;
+    if (!selectedShop || !user) return;
     setLoading(true);
     try {
       const data = await appointmentsApi.listByShopAndDate(
@@ -42,7 +44,13 @@ export default function Appointments() {
         selectedDate
       );
       // FILTRAGEM: Remove agendamentos cancelados da visualização
-      const activeData = data.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO);
+      let activeData = data.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO);
+
+      // SEGURANÇA: Se for Staff, filtra apenas os agendamentos DELE
+      if (user.role === 'staff') {
+        activeData = activeData.filter(a => a.barber_id === user.id);
+      }
+
       setAppointments(activeData);
     } catch (err) {
       console.error(err);
@@ -53,7 +61,7 @@ export default function Appointments() {
 
   useEffect(() => {
     loadAppointments();
-  }, [selectedShop, selectedDate]);
+  }, [selectedShop, selectedDate, user]);
 
   const handleStatusChange = async (id: string, newStatus: number) => {
     const statusText =
@@ -240,7 +248,7 @@ export default function Appointments() {
 
                   <div className="flex-1">
                     <div className="flex items-center gap-2 text-gray-900 font-semibold">
-                      <User className="w-4 h-4 text-gray-500" />
+                      <UserIcon className="w-4 h-4 text-gray-500" />
                       {appt.expand?.client_id?.name || 'Cliente sem nome'}
                     </div>
                     <div className="flex items-center gap-2 text-gray-500 text-sm mt-1">
