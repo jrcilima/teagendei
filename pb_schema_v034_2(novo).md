@@ -1,3 +1,5 @@
+##Novo schema (migração de versão do banco)
+
 [
   {
     "id": "_pb_users_auth_",

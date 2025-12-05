@@ -1,3 +1,5 @@
+##Esquema Antigo obsoleto apenas para consulta
+
 [
   {
     "id": "_pb_users_auth_",
