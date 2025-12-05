@@ -2,6 +2,7 @@ import { pb } from './pocketbase';
 import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod, AppointmentStatus } from '../../shared/types';
 import { startOfDay, endOfDay } from 'date-fns';
 
+// ... existing authApi ...
 export const authApi = {
   logout: () => {
     pb.authStore.clear();
@@ -20,6 +21,7 @@ export const authApi = {
   }
 };
 
+// ... existing companiesApi ...
 export const companiesApi = {
   create: async (data: Partial<Company>) => {
     return await pb.collection('companies').create(data);
@@ -43,12 +45,32 @@ export const shopsApi = {
     return await pb.collection('shops').create(data);
   },
 
-  // Lista todas as lojas (usado pelo tenant/admin)
+  // CORREÇÃO CRÍTICA: Filtra apenas lojas que o usuário tem permissão de ver
   list: async () => {
-    return await pb.collection('shops').getFullList<Shop>();
+    const user = pb.authStore.model;
+    if (!user) return [];
+
+    // Se for DONO: vê lojas da sua empresa
+    // Se for STAFF: vê apenas a loja onde trabalha
+    const filters = [];
+    
+    // Regra 1: É dono da empresa dona da loja
+    filters.push(`company_id.owner_id = "${user.id}"`);
+    
+    // Regra 2: Está vinculado à loja (staff)
+    if (user.shop_id) {
+      filters.push(`id = "${user.shop_id}"`);
+    }
+    
+    // Regra 3: É o próprio dono da loja (caso haja relação direta)
+    filters.push(`owner_id = "${user.id}"`);
+
+    return await pb.collection('shops').getFullList<Shop>({
+      filter: filters.length > 0 ? `(${filters.join(' || ')})` : '',
+      sort: 'name'
+    });
   },
 
-  // Busca lojas ativas com filtro opcional de nome (usado pelo cliente)
   searchActive: async (query?: string) => {
     const filterParts = ['is_active = true'];
     if (query && query.trim() !== '') {
@@ -78,6 +100,7 @@ export const shopsApi = {
   },
 };
 
+// ... existing paymentMethodsApi ...
 export const paymentMethodsApi = {
   listByCompany: async (companyId: string) => {
     return await pb.collection('payment_methods').getFullList<PaymentMethod>({
@@ -102,6 +125,7 @@ export const paymentMethodsApi = {
   }
 };
 
+// ... existing categoriesApi ...
 export const categoriesApi = {
   listByShop: async (shopId: string) => {
     return await pb.collection('categories').getFullList<Category>({
@@ -114,6 +138,7 @@ export const categoriesApi = {
   }
 };
 
+// ... existing servicesApi ...
 export const servicesApi = {
   create: async (data: Partial<Service>) => {
     return await pb.collection('services').create(data);
@@ -140,6 +165,7 @@ export const servicesApi = {
   },
 };
 
+// ... existing segmentsApi ...
 export const segmentsApi = {
   list: async () => {
     return await pb.collection('segments').getFullList<Segment>({
@@ -152,30 +178,25 @@ export const segmentsApi = {
   },
 };
 
-// Helper robusto para converter data local em range UTC para filtro do PocketBase
 const getDayRangeUTC = (dateInput: Date | string) => {
   let targetDate: Date;
   
   if (typeof dateInput === 'string') {
-    // Corrige problema de fuso ao instanciar string "YYYY-MM-DD"
-    // Adiciona "T00:00:00" para garantir que seja tratado como local time, não UTC
     targetDate = new Date(`${dateInput}T00:00:00`);
   } else {
     targetDate = dateInput;
   }
 
-  // startOfDay pega 00:00:00 do horário local do navegador
   const start = startOfDay(targetDate);
-  // endOfDay pega 23:59:59 do horário local do navegador
   const end = endOfDay(targetDate);
 
-  // toISOString() converte automaticamente para UTC (ex: 03:00:00Z para quem está no BR)
   return { 
     startStr: start.toISOString().replace('T', ' ').substring(0, 19), 
     endStr: end.toISOString().replace('T', ' ').substring(0, 19)
   };
 };
 
+// ... existing appointmentsApi ...
 export const appointmentsApi = {
   listToday: async (shopId: string) => {
     return appointmentsApi.listByShopAndDate(shopId, new Date());
@@ -186,7 +207,6 @@ export const appointmentsApi = {
 
     try {
       return await pb.collection('appointments').getFullList<Appointment>({
-        // PocketBase aceita comparações de string se estiverem no formato UTC "YYYY-MM-DD HH:mm:ss"
         filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}"`,
         sort: 'start_time',
         expand: 'service_id,client_id,barber_id,payment_method'
@@ -227,10 +247,12 @@ export const appointmentsApi = {
   }
 };
 
+// ... existing usersApi ...
 export const usersApi = {
   listStaffByShop: async (shopId: string) => {
     try {
       return await pb.collection('users').getFullList<User>({
+        // Garante que só traz usuários daquela loja específica
         filter: `shop_id = "${shopId}" && role != "cliente"`,
         sort: '-created'
       });
@@ -244,19 +266,15 @@ export const usersApi = {
     return await pb.collection('users').getOne<User>(id);
   },
 
-  // Método atualizado com tipagem segura e lógica de FormData
   createStaff: async (data: FormData | Record<string, any>) => {
-    // Se for FormData, adicionamos os campos obrigatórios
     if (data instanceof FormData) {
       data.append('emailVisibility', 'true');
-      // Se o form não enviou role, adiciona padrão
       if (!data.has('role')) {
          data.append('role', 'staff');
       }
       return await pb.collection('users').create(data);
     }
 
-    // Se for objeto JSON simples
     return await pb.collection('users').create({
       ...data,
       emailVisibility: true,

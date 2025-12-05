@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { usersApi } from '../lib/api';
 import { User } from '../../shared/types';
-import { ArrowLeft, Loader2, Save, Upload } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, Upload, AlertTriangle } from 'lucide-react';
 import { z } from 'zod';
 
 const staffSchema = z.object({
@@ -24,7 +24,6 @@ const staffSchema = z.object({
 });
 
 type StaffFormData = z.infer<typeof staffSchema> & {
-  // ALTERADO: 'barbeiro' -> 'staff'
   role: 'staff' | 'dono';
 };
 
@@ -46,15 +45,21 @@ export default function StaffForm() {
     phone: '',
     password: '',
     passwordConfirm: '',
-    // ALTERADO: 'barbeiro' -> 'staff'
     role: 'staff',
     is_professional: true
   });
 
   useEffect(() => {
-    if (id) {
+    if (id && selectedShop) {
       usersApi.getById(id)
         .then((data: User) => {
+          // SEGURANÇA: Verifica se o profissional pertence à loja selecionada
+          if (data.shop_id && data.shop_id !== selectedShop.id) {
+            setError('Você não tem permissão para editar este profissional.');
+            setTimeout(() => navigate('/staff'), 2000);
+            return;
+          }
+
           setFormData({
             name: data.name,
             email: data.email,
@@ -74,8 +79,10 @@ export default function StaffForm() {
           setError('Erro ao carregar dados do profissional.');
         })
         .finally(() => setInitialLoading(false));
+    } else if (!id) {
+       setInitialLoading(false);
     }
-  }, [id]);
+  }, [id, selectedShop, navigate]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -113,7 +120,6 @@ export default function StaffForm() {
         payload.append('email', formData.email);
         payload.append('password', formData.password || '');
         payload.append('passwordConfirm', formData.passwordConfirm || '');
-        // ALTERADO: 'barbeiro' -> 'staff'
         payload.append('role', 'staff');
         payload.append('shop_id', selectedShop.id);
         payload.append('company_id', selectedShop.company_id);
@@ -166,7 +172,8 @@ export default function StaffForm() {
           </p>
 
           {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg text-sm">
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg text-sm flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5" />
               {error}
             </div>
           )}
