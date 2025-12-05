@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { shopsApi, appointmentsApi } from '../lib/api';
+import { shopsApi, appointmentsApi, authApi } from '../lib/api';
+import { pb } from '../lib/pocketbase';
 import { Shop, Appointment, AppointmentStatus } from '../../shared/types';
-import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle } from 'lucide-react';
+import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle, Search, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
 // Função para exibir a hora "original" (UTC) sem a conversão automática do navegador
-// Ex: Se o banco tem 09:00Z, o navegador mostraria 06:00 (Brasil). Isso força mostrar 09:00.
 const formatTimeDisplay = (dateString: string) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -26,25 +26,38 @@ const formatDateDisplay = (dateString: string) => {
 export default function ClientDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [myShop, setMyShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
   const [cancelLoading, setCancelLoading] = useState<string | null>(null);
 
+  // Estados para busca de loja
+  const [showShopModal, setShowShopModal] = useState(false);
+  const [availableShops, setAvailableShops] = useState<Shop[]>([]);
+  const [shopsLoading, setShopsLoading] = useState(false);
+  const [joiningShopId, setJoiningShopId] = useState<string | null>(null);
+
   const loadData = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      if (user.shop_id) {
+      // 1. Carregar Unidade Vinculada
+      // Atualiza o user localmente caso tenha mudado (ex: acabamos de vincular uma loja)
+      const currentUser = pb.authStore.model;
+      const currentShopId = currentUser?.shop_id || user.shop_id;
+
+      if (currentShopId) {
         try {
-          const shopData = await shopsApi.getById(user.shop_id);
+          const shopData = await shopsApi.getById(currentShopId);
           setMyShop(shopData);
         } catch (e) {
           console.error("Erro ao carregar unidade favorita", e);
         }
       }
 
+      // 2. Carregar Agendamentos
       try {
         const myAppointments = await appointmentsApi.listByClient(user.id);
         setAppointments(myAppointments);
@@ -82,7 +95,6 @@ export default function ClientDashboard() {
 
     setCancelLoading(appt.id);
     try {
-      // CORRIGIDO: Enviando o número do Enum
       await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO });
       await loadData(); 
     } catch (error) {
@@ -90,6 +102,46 @@ export default function ClientDashboard() {
       alert("Erro ao cancelar agendamento.");
     } finally {
       setCancelLoading(null);
+    }
+  };
+
+  // Lógica para abrir modal e buscar lojas
+  const handleOpenShopSearch = async () => {
+    setShowShopModal(true);
+    setShopsLoading(true);
+    try {
+      const shops = await shopsApi.list();
+      // Filtra apenas lojas ativas
+      setAvailableShops(shops.filter(s => s.is_active));
+    } catch (err) {
+      console.error("Erro ao buscar lojas", err);
+      alert("Não foi possível carregar a lista de estabelecimentos.");
+    } finally {
+      setShopsLoading(false);
+    }
+  };
+
+  // Lógica para vincular cliente à loja
+  const handleJoinShop = async (shop: Shop) => {
+    if (!user) return;
+    if (!confirm(`Deseja definir "${shop.name}" como sua unidade preferida?`)) return;
+
+    setJoiningShopId(shop.id);
+    try {
+      // 1. Atualiza perfil do usuário
+      await authApi.updateProfile(user.id, { shop_id: shop.id });
+      
+      // 2. Atualiza o authStore local do PocketBase para refletir a mudança imediatamente
+      await pb.collection('users').authRefresh();
+
+      // 3. Fecha modal e recarrega dados
+      setShowShopModal(false);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao vincular unidade.");
+    } finally {
+      setJoiningShopId(null);
     }
   };
 
@@ -107,7 +159,6 @@ export default function ClientDashboard() {
     }
   };
 
-  // Separação de agendamentos usando comparação numérica
   const now = new Date();
   
   const upcomingAppointments = appointments.filter(
@@ -135,8 +186,16 @@ export default function ClientDashboard() {
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold">
-              {user?.name?.charAt(0).toUpperCase() || 'C'}
+            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold overflow-hidden">
+              {user?.avatar ? (
+                 <img 
+                   src={`${import.meta.env.VITE_POCKETBASE_URL || 'http://136.248.77.97:8090'}/api/files/users/${user.id}/${user.avatar}`} 
+                   className="w-full h-full object-cover" 
+                   alt="avatar"
+                 />
+              ) : (
+                 user?.name?.charAt(0).toUpperCase() || 'C'
+              )}
             </div>
             <div>
               <h1 className="text-lg font-bold text-slate-800">Olá, {user?.name?.split(' ')[0]}</h1>
@@ -166,7 +225,7 @@ export default function ClientDashboard() {
                     <span className="truncate max-w-[200px]">{myShop.address || 'Endereço não informado'}</span>
                   </div>
                 </div>
-                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm cursor-pointer hover:bg-white/30 transition-colors" onClick={handleOpenShopSearch} title="Trocar unidade">
                   <StoreIcon className="w-6 h-6 text-white" />
                 </div>
               </div>
@@ -200,7 +259,11 @@ export default function ClientDashboard() {
             </div>
             <h3 className="font-bold text-slate-800 text-lg mb-2">Encontre um local</h3>
             <p className="text-slate-500 text-sm mb-6">Você ainda não está vinculado a nenhuma unidade.</p>
-            <button className="w-full py-3 px-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors">
+            <button 
+              onClick={handleOpenShopSearch}
+              className="w-full py-3 px-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Search className="w-4 h-4" />
               Buscar Estabelecimentos
             </button>
           </div>
@@ -242,11 +305,9 @@ export default function ClientDashboard() {
                           <Calendar className="w-6 h-6" />
                         </div>
                         <div>
-                          {/* CORREÇÃO: Usando formatTimeDisplay para corrigir fuso */}
                           <p className="font-bold text-slate-900 text-lg">
                             {formatTimeDisplay(appt.start_time)}
                           </p>
-                          {/* CORREÇÃO: Usando formatDateDisplay para corrigir fuso */}
                           <p className="text-sm text-slate-500 capitalize">
                             {formatDateDisplay(appt.start_time)}
                           </p>
@@ -308,7 +369,6 @@ export default function ClientDashboard() {
                         {appt.expand?.service_id?.name || 'Serviço'}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {/* CORREÇÃO: Exibição de data/hora ajustada */}
                         {formatDateDisplay(appt.start_time)} - {formatTimeDisplay(appt.start_time)}
                       </p>
                     </div>
@@ -324,7 +384,54 @@ export default function ClientDashboard() {
             )
           )}
         </div>
+
       </main>
+
+      {/* Modal de Seleção de Loja */}
+      {showShopModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[90vh] flex flex-col animate-slide-up">
+             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+               <h3 className="font-bold text-lg text-gray-900">Escolher Unidade</h3>
+               <button onClick={() => setShowShopModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                 <X className="w-5 h-5 text-gray-500" />
+               </button>
+             </div>
+             
+             <div className="p-4 overflow-y-auto">
+               {shopsLoading ? (
+                 <div className="py-12 flex justify-center">
+                   <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                 </div>
+               ) : availableShops.length === 0 ? (
+                 <div className="text-center py-8 text-gray-500">
+                   Nenhuma loja encontrada.
+                 </div>
+               ) : (
+                 <div className="space-y-3">
+                   {availableShops.map(shop => (
+                     <button
+                       key={shop.id}
+                       onClick={() => handleJoinShop(shop)}
+                       disabled={!!joiningShopId}
+                       className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all group relative"
+                     >
+                       <div className="flex justify-between items-start">
+                         <div>
+                           <h4 className="font-bold text-gray-900 group-hover:text-purple-700">{shop.name}</h4>
+                           <p className="text-sm text-gray-500 mt-1 line-clamp-1">{shop.address || 'Endereço não informado'}</p>
+                         </div>
+                         {joiningShopId === shop.id && <Loader2 className="w-5 h-5 animate-spin text-purple-600" />}
+                       </div>
+                     </button>
+                   ))}
+                 </div>
+               )}
+             </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
