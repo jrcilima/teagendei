@@ -6,7 +6,7 @@ import { Shop, Appointment, AppointmentStatus } from '../../shared/types';
 import { Calendar, MapPin, Plus, LogOut, Loader2, Store as StoreIcon, Scissors, XCircle, History, CheckCircle, Search, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 
-// Função para exibir a hora "original" (UTC) sem a conversão automática do navegador
+// Funções auxiliares de formatação de data
 const formatTimeDisplay = (dateString: string) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -33,7 +33,7 @@ export default function ClientDashboard() {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history'>('upcoming');
   const [cancelLoading, setCancelLoading] = useState<string | null>(null);
 
-  // Estados para busca de loja
+  // Estados para busca de loja (Modal)
   const [showShopModal, setShowShopModal] = useState(false);
   const [availableShops, setAvailableShops] = useState<Shop[]>([]);
   const [shopsLoading, setShopsLoading] = useState(false);
@@ -44,7 +44,7 @@ export default function ClientDashboard() {
     setLoading(true);
     try {
       // 1. Carregar Unidade Vinculada
-      // Atualiza o user localmente caso tenha mudado (ex: acabamos de vincular uma loja)
+      // Tenta pegar do authStore atualizado ou do user do contexto
       const currentUser = pb.authStore.model;
       const currentShopId = currentUser?.shop_id || user.shop_id;
 
@@ -54,6 +54,7 @@ export default function ClientDashboard() {
           setMyShop(shopData);
         } catch (e) {
           console.error("Erro ao carregar unidade favorita", e);
+          setMyShop(null);
         }
       }
 
@@ -105,13 +106,15 @@ export default function ClientDashboard() {
     }
   };
 
-  // Lógica para abrir modal e buscar lojas
+  // === LÓGICA DE BUSCA DE LOJAS ===
+
   const handleOpenShopSearch = async () => {
     setShowShopModal(true);
     setShopsLoading(true);
     try {
+      // Busca todas as lojas (em produção, idealmente paginado ou com filtro de busca)
       const shops = await shopsApi.list();
-      // Filtra apenas lojas ativas
+      // Filtra apenas as ativas
       setAvailableShops(shops.filter(s => s.is_active));
     } catch (err) {
       console.error("Erro ao buscar lojas", err);
@@ -121,29 +124,34 @@ export default function ClientDashboard() {
     }
   };
 
-  // Lógica para vincular cliente à loja
   const handleJoinShop = async (shop: Shop) => {
     if (!user) return;
     if (!confirm(`Deseja definir "${shop.name}" como sua unidade preferida?`)) return;
 
     setJoiningShopId(shop.id);
     try {
-      // 1. Atualiza perfil do usuário
+      // 1. Atualiza o perfil do usuário no banco
       await authApi.updateProfile(user.id, { shop_id: shop.id });
       
-      // 2. Atualiza o authStore local do PocketBase para refletir a mudança imediatamente
+      // 2. Força atualização do token local para refletir a mudança
       await pb.collection('users').authRefresh();
 
-      // 3. Fecha modal e recarrega dados
+      // 3. Fecha modal e recarrega a tela
       setShowShopModal(false);
-      await loadData();
+      // Pequeno delay para garantir que o authRefresh propagou
+      setTimeout(() => {
+        window.location.reload(); // Recarrega para garantir estado limpo
+      }, 500);
+      
     } catch (err) {
       console.error(err);
-      alert("Erro ao vincular unidade.");
+      alert("Erro ao vincular unidade. Tente novamente.");
     } finally {
       setJoiningShopId(null);
     }
   };
+
+  // === RENDERIZAÇÃO ===
 
   const getStatusBadge = (status: number | string) => {
     const s = Number(status);
@@ -183,6 +191,7 @@ export default function ClientDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
+      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -214,6 +223,7 @@ export default function ClientDashboard() {
 
       <main className="max-w-md mx-auto px-4 py-6 space-y-6">
         
+        {/* Card da Unidade ou Busca */}
         {myShop ? (
           <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
             <div className="relative z-10">
@@ -225,7 +235,12 @@ export default function ClientDashboard() {
                     <span className="truncate max-w-[200px]">{myShop.address || 'Endereço não informado'}</span>
                   </div>
                 </div>
-                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm cursor-pointer hover:bg-white/30 transition-colors" onClick={handleOpenShopSearch} title="Trocar unidade">
+                {/* Botão para trocar de loja */}
+                <div 
+                  className="bg-white/20 p-2 rounded-lg backdrop-blur-sm cursor-pointer hover:bg-white/30 transition-colors" 
+                  onClick={handleOpenShopSearch} 
+                  title="Trocar unidade"
+                >
                   <StoreIcon className="w-6 h-6 text-white" />
                 </div>
               </div>
@@ -253,12 +268,14 @@ export default function ClientDashboard() {
             <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
           </div>
         ) : (
+          /* Card Vazio: Busca de Loja */
           <div className="bg-white p-8 rounded-2xl shadow-sm text-center border border-slate-100">
             <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <MapPin className="w-8 h-8 text-purple-600" />
             </div>
             <h3 className="font-bold text-slate-800 text-lg mb-2">Encontre um local</h3>
             <p className="text-slate-500 text-sm mb-6">Você ainda não está vinculado a nenhuma unidade.</p>
+            {/* Botão Corrigido com onClick */}
             <button 
               onClick={handleOpenShopSearch}
               className="w-full py-3 px-4 bg-purple-600 text-white rounded-xl font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
@@ -269,6 +286,7 @@ export default function ClientDashboard() {
           </div>
         )}
 
+        {/* Abas */}
         <div className="flex p-1 bg-slate-100 rounded-xl">
           <button
             onClick={() => setActiveTab('upcoming')}
@@ -292,6 +310,7 @@ export default function ClientDashboard() {
           </button>
         </div>
 
+        {/* Listas */}
         <div className="space-y-4">
           {activeTab === 'upcoming' ? (
             upcomingAppointments.length > 0 ? (
