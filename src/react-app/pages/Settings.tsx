@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTenant } from '../contexts/TenantContext';
 import { shopsApi, paymentMethodsApi } from '../lib/api';
-import { Shop, PaymentMethod } from '../../shared/types';
+import { PaymentMethod } from '../../shared/types';
 import {
   Save,
   Loader2,
@@ -56,8 +56,8 @@ export default function Settings() {
     address: '',
     description: '',
     pix_key: '',
-    pix_key_type: 'aleatoria',
-    is_active: false // Novo campo
+    pix_key_type: 'aleatoria' as 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria',
+    is_active: false 
   });
 
   // Horários
@@ -138,15 +138,18 @@ export default function Settings() {
     if (!newMethodName.trim() || !selectedShop) return;
     setCreatingMethod(true);
     try {
-      const newMethod = (await paymentMethodsApi.create({
+      // API retorna RecordModel que é compatível com PaymentMethod
+      const newMethod = await paymentMethodsApi.create({
         name: newMethodName,
         company_id: selectedShop.company_id,
         is_active: true
-      })) as unknown as PaymentMethod;
+      });
 
-      setAvailableMethods([...availableMethods, newMethod]);
-      // Já seleciona automaticamente o novo método criado
-      setSelectedMethodIds([...selectedMethodIds, newMethod.id]);
+      // Conversão segura pois sabemos que o create retorna a estrutura correta
+      const typedMethod = newMethod as unknown as PaymentMethod;
+
+      setAvailableMethods([...availableMethods, typedMethod]);
+      setSelectedMethodIds([...selectedMethodIds, typedMethod.id]);
       setNewMethodName('');
     } catch (err) {
       console.error(err);
@@ -189,7 +192,7 @@ export default function Settings() {
         ...generalData,
         business_hours: schedule,
         accepted_payment_methods: selectedMethodIds
-      } as Partial<Shop>);
+      });
 
       await refreshShops();
       setSuccess('Configurações salvas com sucesso!');
@@ -208,7 +211,6 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        {/* Cabeçalho com Botão de Voltar */}
         <div className="flex items-center gap-4 mb-8">
           <Link
             to="/dashboard"
@@ -241,7 +243,7 @@ export default function Settings() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Nova Seção: Visibilidade */}
+          {/* Seção Visibilidade */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
               <Power className="w-5 h-5 text-purple-600" />
@@ -294,7 +296,7 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Seção 1: Informações Gerais */}
+          {/* Seção Informações Gerais */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
               <MapPin className="w-5 h-5 text-purple-600" />
@@ -351,7 +353,7 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Seção 2: Horário de Funcionamento */}
+          {/* Seção Horário de Funcionamento */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
               <Clock className="w-5 h-5 text-purple-600" />
@@ -423,7 +425,7 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Seção 3: Pagamento (Atualizada) */}
+          {/* Seção Pagamento */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-4">
               <CreditCard className="w-5 h-5 text-purple-600" />

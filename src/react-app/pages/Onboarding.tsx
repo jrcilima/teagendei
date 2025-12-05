@@ -4,37 +4,51 @@ import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Building2, Store, ArrowRight, Loader2, AlertTriangle, Clock, CreditCard } from 'lucide-react';
 import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
-import { Segment, Company, Shop } from '../../shared/types'; // Import Shop type
+import { Segment, Shop } from '../../shared/types';
+import { z } from 'zod';
 
-// Define a local type for the form state that matches the Shop interface but allows for form handling
-interface ShopFormData {
-  name: string;
-  slug: string;
-  segment_id: string;
-  phone: string;
-  address: string;
-  description: string;
-  pix_key_type: 'aleatoria' | 'email' | 'cnpj' | 'cpf' | 'telefone'; // Explicitly typed
-  pix_key: string;
-  min_advance_time: number;
-  max_advance_time: number;
-}
+// --- Schemas de Validação Zod ---
+
+const companySchema = z.object({
+  legal_name: z.string().min(3, "Razão social deve ter no mínimo 3 caracteres"),
+  cnpj: z.string().length(14, "CNPJ deve conter exatamente 14 números"),
+});
+
+const shopSchema = z.object({
+  name: z.string().min(3, "Nome da unidade deve ter no mínimo 3 caracteres"),
+  slug: z.string()
+    .min(3, "URL deve ter no mínimo 3 caracteres")
+    .regex(/^[a-z0-9-]+$/, "URL deve conter apenas letras minúsculas, números e hífens"),
+  segment_id: z.string().min(1, "Selecione um segmento"),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  description: z.string().optional(),
+  pix_key_type: z.enum(['aleatoria', 'email', 'cnpj', 'cpf', 'telefone']),
+  pix_key: z.string().optional(),
+  min_advance_time: z.number().min(0, "Tempo mínimo não pode ser negativo"),
+  max_advance_time: z.number().min(1, "Agenda deve abrir pelo menos 1 dia"),
+});
+
+// Inferência de tipos a partir do schema
+type CompanyFormData = z.infer<typeof companySchema>;
+type ShopFormData = z.infer<typeof shopSchema>;
 
 export default function Onboarding() {
   const { refreshCompany, refreshShops, company, shops } = useTenant();
   const { user } = useAuth();
   const navigate = useNavigate();
+  
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [segments, setSegments] = useState<Segment[]>([]);
 
-  const [companyData, setCompanyData] = useState({
+  // Estados dos formulários
+  const [companyData, setCompanyData] = useState<CompanyFormData>({
     legal_name: '',
     cnpj: '',
   });
 
-  // Initialize state with the correct type
   const [shopData, setShopData] = useState<ShopFormData>({
     name: '',
     slug: '',
@@ -49,35 +63,30 @@ export default function Onboarding() {
   });
 
   useEffect(() => {
-    segmentsApi.list().then((data: any) => {
+    segmentsApi.list().then((data) => {
       setSegments(data);
     }).catch(console.error);
   }, []);
 
-  // AUTO-AVANÇO: Se já existe empresa mas não tem loja, vai direto pro passo 2
+  // Auto-avanço se já existe empresa
   useEffect(() => {
     if (company && shops.length === 0) {
       setStep(2);
     }
   }, [company, shops]);
 
-  const formatValidationErrors = (data: any) => {
-    if (!data) return 'Dados inválidos.';
-    
-    return Object.entries(data)
-      .map(([field, err]: [string, any]) => {
-        const fieldName = field === 'slug' ? 'URL' : 
-                          field === 'min_advance_time' ? 'Tempo Mínimo' : field;
-        return `${fieldName}: ${err.message}`;
-      })
-      .join(' | ');
-  };
-
   const handleCompanySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    
     setError('');
+
+    // Validação Zod
+    const validation = companySchema.safeParse(companyData);
+    if (!validation.success) {
+      setError(validation.error.errors[0].message);
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -86,8 +95,9 @@ export default function Onboarding() {
         owner_id: user.id,
         plan_status: 'trial',
         plan_type: 'empresarial'
-      }) as unknown as Company;
+      });
       
+      // Tipagem segura
       await authApi.updateProfile(user.id, {
         company_id: newCompany.id,
         role: 'dono'
@@ -97,13 +107,7 @@ export default function Onboarding() {
       setStep(2);
     } catch (err: any) {
       console.error("Erro criar empresa:", err);
-      if (err.status === 403) {
-        setError('Permissão negada (403). Verifique regras da coleção "companies".');
-      } else if (err.status === 400) {
-        setError(`Erro de validação: ${formatValidationErrors(err.data?.data)}`);
-      } else {
-        setError(err.message || 'Erro desconhecido.');
-      }
+      setError(err.message || 'Erro ao criar empresa.');
     } finally {
       setLoading(false);
     }
@@ -115,25 +119,25 @@ export default function Onboarding() {
       setError('Empresa não encontrada. Recarregue a página.');
       return;
     }
-
     setError('');
+
+    // Validação Zod
+    const validation = shopSchema.safeParse(shopData);
+    if (!validation.success) {
+      setError(validation.error.errors[0].message);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Cast the payload to Partial<Shop> to satisfy TypeScript
-      const payload: Partial<Shop> = {
+      // Preparação do payload com tipos corretos
+      const apiPayload: Partial<Shop> = {
         ...shopData,
-        min_advance_time: Number(shopData.min_advance_time),
-        max_advance_time: Number(shopData.max_advance_time),
         company_id: company.id,
         manager_id: user.id,
-      } as unknown as Partial<Shop>;
-
-      const apiPayload = {
-        ...payload,
         owner_id: user.id,
         is_active: true,
-        pix_key_type: shopData.pix_key_type as 'aleatoria' | 'email' | 'cnpj' | 'cpf' | undefined
       };
 
       await shopsApi.create(apiPayload);
@@ -142,10 +146,9 @@ export default function Onboarding() {
       navigate('/dashboard');
     } catch (err: any) {
       console.error("Erro criar unidade:", err);
-      if (err.status === 403) {
-        setError('Permissão negada (403). Verifique regras da coleção "shops".');
-      } else if (err.status === 400) {
-        setError(`Erro de validação: ${formatValidationErrors(err.data?.data)}`);
+      // Tratamento de erro de unicidade (slug já existe)
+      if (err.data?.data?.slug) {
+        setError('Esta URL personalizada já está em uso. Escolha outra.');
       } else {
         setError(err.message || 'Erro ao criar unidade.');
       }
@@ -214,17 +217,18 @@ export default function Onboarding() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-200 mb-2">CNPJ</label>
+                  <label className="block text-sm font-medium text-gray-200 mb-2">CNPJ (Apenas números)</label>
                   <input
                     type="text"
                     value={companyData.cnpj}
                     onChange={(e) => {
                       const value = e.target.value.replace(/\D/g, '');
-                      setCompanyData({ ...companyData, cnpj: value });
+                      if (value.length <= 14) {
+                        setCompanyData({ ...companyData, cnpj: value });
+                      }
                     }}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                     placeholder="00000000000000"
-                    maxLength={14}
                     required
                   />
                 </div>
@@ -346,7 +350,8 @@ export default function Onboarding() {
                       <label className="block text-sm font-medium text-gray-200 mb-2">Tipo de Chave</label>
                       <select
                         value={shopData.pix_key_type}
-                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as any })} // Cast para any aqui para o onChange, mas o state é tipado
+                        // Tipagem correta no onChange
+                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as ShopFormData['pix_key_type'] })}
                         className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 [&>option]:text-black"
                       >
                         <option value="cpf">CPF</option>

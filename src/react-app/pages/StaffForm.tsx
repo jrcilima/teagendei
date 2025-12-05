@@ -4,6 +4,29 @@ import { useTenant } from '../contexts/TenantContext';
 import { usersApi } from '../lib/api';
 import { User } from '../../shared/types';
 import { ArrowLeft, Loader2, Save, Upload } from 'lucide-react';
+import { z } from 'zod';
+
+// Schema base para validação
+const staffSchema = z.object({
+  name: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  email: z.string().email("Email inválido"),
+  phone: z.string().optional(),
+  is_professional: z.boolean(),
+  password: z.string().optional(),
+  passwordConfirm: z.string().optional(),
+}).refine(data => {
+  if (data.password && data.password !== data.passwordConfirm) {
+    return false;
+  }
+  return true;
+}, {
+  message: "As senhas não coincidem",
+  path: ["passwordConfirm"],
+});
+
+type StaffFormData = z.infer<typeof staffSchema> & {
+  role: 'barbeiro' | 'dono';
+};
 
 export default function StaffForm() {
   const { id } = useParams();
@@ -18,14 +41,14 @@ export default function StaffForm() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<StaffFormData>({
     name: '',
     email: '',
     phone: '',
     password: '',
     passwordConfirm: '',
     role: 'barbeiro',
-    is_professional: true // Default true para novos cadastros
+    is_professional: true
   });
 
   useEffect(() => {
@@ -38,8 +61,8 @@ export default function StaffForm() {
             phone: data.phone || '',
             password: '',
             passwordConfirm: '',
-            role: data.role,
-            is_professional: data.is_professional // Carrega do banco
+            role: data.role as 'barbeiro' | 'dono',
+            is_professional: data.is_professional 
           });
           if (data.avatar) {
              const url = `${import.meta.env.VITE_POCKETBASE_URL || 'http://136.248.77.97:8090'}/api/files/users/${data.id}/${data.avatar}`;
@@ -67,15 +90,16 @@ export default function StaffForm() {
     if (!selectedShop) return;
     setError('');
 
-    if (!id) {
-      if (formData.password !== formData.passwordConfirm) {
-        setError('As senhas não coincidem.');
-        return;
-      }
-      if (formData.password.length < 8) {
-        setError('A senha deve ter no mínimo 8 caracteres.');
-        return;
-      }
+    // Validação Zod
+    const validation = staffSchema.safeParse(formData);
+    if (!validation.success) {
+      setError(validation.error.errors[0].message);
+      return;
+    }
+
+    if (!id && (!formData.password || formData.password.length < 8)) {
+      setError('A senha deve ter no mínimo 8 caracteres para novos usuários.');
+      return;
     }
 
     setLoading(true);
@@ -83,14 +107,13 @@ export default function StaffForm() {
     try {
       const payload = new FormData();
       payload.append('name', formData.name);
-      payload.append('phone', formData.phone);
-      // Envia o booleano como string para o FormData
+      payload.append('phone', formData.phone || '');
       payload.append('is_professional', String(formData.is_professional));
       
       if (!id) {
         payload.append('email', formData.email);
-        payload.append('password', formData.password);
-        payload.append('passwordConfirm', formData.passwordConfirm);
+        payload.append('password', formData.password || '');
+        payload.append('passwordConfirm', formData.passwordConfirm || '');
         payload.append('role', 'barbeiro');
         payload.append('shop_id', selectedShop.id);
         payload.append('company_id', selectedShop.company_id);

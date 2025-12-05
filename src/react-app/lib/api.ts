@@ -244,15 +244,19 @@ export const usersApi = {
     return await pb.collection('users').getOne<User>(id);
   },
 
-  createStaff: async (data: any) => {
+  // Método atualizado com tipagem segura e lógica de FormData
+  createStaff: async (data: FormData | Record<string, any>) => {
+    // Se for FormData, adicionamos os campos obrigatórios
     if (data instanceof FormData) {
       data.append('emailVisibility', 'true');
+      // Se o form não enviou role, adiciona padrão
       if (!data.has('role')) {
          data.append('role', 'barbeiro');
       }
       return await pb.collection('users').create(data);
     }
 
+    // Se for objeto JSON simples
     return await pb.collection('users').create({
       ...data,
       emailVisibility: true,

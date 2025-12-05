@@ -42,15 +42,16 @@ export interface Shop extends BaseModel {
   company_id: string;
   segment_id: string;
   manager_id?: string;
+  owner_id?: string; // CAMPO ADICIONADO PARA CORRIGIR O ONBOARDING
   logo_url?: string;
   address?: string;
   phone?: string;
   description?: string;
   business_hours?: any;
-  // CORREÇÃO: Nome do campo ajustado para bater com o banco de dados
   accepted_payment_methods?: string[]; 
   pix_key?: string;
-  pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria';
+  // CAMPO ATUALIZADO COM 'telefone' PARA CORRIGIR SETTINGS
+  pix_key_type?: 'cpf' | 'cnpj' | 'email' | 'aleatoria' | 'telefone';
   min_advance_time: number;
   max_advance_time: number;
   is_active: boolean;
@@ -108,11 +109,8 @@ export enum PaymentStatus {
 export interface Appointment extends BaseModel {
   start_time: string;
   end_time: string;
-  // O PocketBase pode retornar status como string ou number dependendo da configuração,
-  // mas para comparações no código usamos o Enum (number).
   status: AppointmentStatus | number; 
   payment_status: PaymentStatus | number;
-  // CORRIGIDO: Agora é singular e aponta para PaymentMethod
   payment_method?: string; 
   total_amount: number;
   notes?: string;
