@@ -251,7 +251,7 @@ export const usersApi = {
       data.append('emailVisibility', 'true');
       // Se o form não enviou role, adiciona padrão
       if (!data.has('role')) {
-         data.append('role', 'barbeiro');
+         data.append('role', 'staff');
       }
       return await pb.collection('users').create(data);
     }
@@ -260,7 +260,7 @@ export const usersApi = {
     return await pb.collection('users').create({
       ...data,
       emailVisibility: true,
-      role: 'barbeiro'
+      role: 'staff'
     });
   },
 
