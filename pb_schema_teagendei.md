@@ -209,7 +209,7 @@
       {
         "system": false,
         "id": "cidjahqh",
-        "name": "payment_methods",
+        "name": "payment_method",
         "type": "relation",
         "required": false,
         "presentable": false,
@@ -220,6 +220,20 @@
           "minSelect": null,
           "maxSelect": 1,
           "displayFields": null
+        }
+      },
+      {
+        "system": false,
+        "id": "yqy1jfhx",
+        "name": "total_amount",
+        "type": "number",
+        "required": false,
+        "presentable": false,
+        "unique": false,
+        "options": {
+          "min": null,
+          "max": null,
+          "noDecimal": false
         }
       },
       {
@@ -305,8 +319,8 @@
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": "@request.auth.id != \"\"",
-    "updateRule": "@request.auth.id != \"\"",
-    "deleteRule": "@request.auth.id != \"\"",
+    "updateRule": "client_id = @request.auth.id || barber_id = @request.auth.id || shop_id.company_id.owner_id = @request.auth.id",
+    "deleteRule": "shop_id.company_id.owner_id = @request.auth.id",
     "options": {}
   },
   {
