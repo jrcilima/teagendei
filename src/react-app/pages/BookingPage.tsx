@@ -306,7 +306,7 @@ export default function BookingPage() {
         status: StatusEnum.AGENDADO, 
         payment_status: PaymentStatusEnum.NAO_PAGO, 
         total_amount: Number(selectedService.price),
-        payment_methods: selectedPaymentMethodId, // Plural
+        payment_method: selectedPaymentMethodId, // Singular
         notes: notes,
         reminder_sent: false,
         confirmation_sent: false
