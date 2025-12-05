@@ -193,7 +193,6 @@ export const appointmentsApi = {
     const startStr = startOfDay.toISOString().replace('T', ' ').substring(0, 19);
     const endStr = endOfDay.toISOString().replace('T', ' ').substring(0, 19);
 
-    // Correção: Usando filtro numérico para status cancelado (0)
     return await pb.collection('appointments').getFullList<Appointment>({
       filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != ${AppointmentStatus.CANCELADO}`,
     });
@@ -218,6 +217,17 @@ export const usersApi = {
   },
 
   createStaff: async (data: any) => {
+    // CORREÇÃO: Verifica se é FormData antes de tentar espalhar propriedades
+    if (data instanceof FormData) {
+      data.append('emailVisibility', 'true');
+      // Se o form não enviou role, adiciona padrão
+      if (!data.has('role')) {
+         data.append('role', 'barbeiro');
+      }
+      return await pb.collection('users').create(data);
+    }
+
+    // Fallback para objeto simples (JSON)
     return await pb.collection('users').create({
       ...data,
       emailVisibility: true,
