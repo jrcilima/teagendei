@@ -7,7 +7,6 @@ import { shopsApi, segmentsApi } from '../lib/api';
 import { Segment, Shop } from '../../shared/types';
 import { z } from 'zod';
 
-// Schema reutilizado do Onboarding para manter consistência e segurança
 const shopSchema = z.object({
   name: z.string().min(3, "Nome da unidade deve ter no mínimo 3 caracteres"),
   slug: z.string()
@@ -68,10 +67,10 @@ export default function ShopForm() {
     setLoading(true);
 
     try {
+      // CORREÇÃO: manager_id removido
       const apiPayload: Partial<Shop> = {
         ...shopData,
         company_id: company.id,
-        manager_id: user.id,
         owner_id: user.id,
         is_active: true,
       };

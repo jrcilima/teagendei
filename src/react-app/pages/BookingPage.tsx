@@ -6,7 +6,9 @@ import {
   Service,
   User,
   Appointment,
-  PaymentMethod
+  PaymentMethod,
+  AppointmentStatus,
+  PaymentStatus
 } from '../../shared/types';
 import {
   User as UserIcon,
@@ -52,19 +54,6 @@ const DAY_KEYS = [
   'friday',
   'saturday'
 ];
-
-const StatusEnum = {
-  CANCELADO: 0,
-  AGENDADO: 1,
-  CONFIRMADO: 2,
-  EM_ANDAMENTO: 3,
-  CONCLUIDO: 4
-};
-
-const PaymentStatusEnum = {
-  NAO_PAGO: 1,
-  PAGO: 2
-};
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -137,12 +126,14 @@ export default function BookingPage() {
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
+        // Constrói objeto Date para a API (que vai converter pra UTC no helper)
         const searchDate = new Date(`${selectedDate}T00:00:00`);
         const appts =
           (await appointmentsApi.listByShopAndDate(shop.id, searchDate)) || [];
 
+        // Filtra cancelados convertendo status para Number
         const activeAppts = Array.isArray(appts)
-          ? appts.filter((a) => Number(a.status) !== StatusEnum.CANCELADO)
+          ? appts.filter((a) => Number(a.status) !== AppointmentStatus.CANCELADO)
           : [];
         setExistingAppointments(activeAppts);
       } catch (err) {
@@ -156,7 +147,7 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
-  // 3. Calcular Slots Disponíveis usando date-fns
+  // 3. Calcular Slots Disponíveis
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
@@ -200,12 +191,9 @@ export default function BookingPage() {
       const isBlocked = existingAppointments.some((appt) => {
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
-        // Converter strings UTC do banco para objetos Date locais para comparação
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
 
-        // Lógica de colisão de intervalos
-        // (StartA < EndB) e (EndA > StartB)
         return isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart);
       });
 
@@ -241,27 +229,24 @@ export default function BookingPage() {
       !user.id ||
       !selectedPaymentMethodId
     ) {
-      alert(
-        'Por favor, preencha todos os campos, incluindo a forma de pagamento.'
-      );
+      alert('Por favor, preencha todos os campos, incluindo a forma de pagamento.');
       return;
     }
 
     setBookingLoading(true);
     try {
-      // Construção Segura da Data
+      // Construção Segura da Data com UTC
       const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
       const [hours, minutes] = selectedTime.split(':').map(Number);
       
       const startDate = setSeconds(setMinutes(setHours(baseDate, hours), minutes), 0);
       const endDate = addMinutes(startDate, selectedService.duration);
 
-      // Verifica novamente se há conflito (Race Condition Check)
-      // Recarrega agendamentos para o dia
+      // Double Check de Conflito (Race Condition)
       const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
       
       const hasConflict = latestAppointments.some(appt => {
-        if (Number(appt.status) === StatusEnum.CANCELADO) return false;
+        if (Number(appt.status) === AppointmentStatus.CANCELADO) return false;
         if (appt.barber_id !== selectedStaff.id) return false;
 
         const apptStart = new Date(appt.start_time);
@@ -272,27 +257,25 @@ export default function BookingPage() {
 
       if (hasConflict) {
         alert("Ops! Este horário acabou de ser ocupado. Por favor, escolha outro.");
-        setExistingAppointments(latestAppointments.filter(a => Number(a.status) !== StatusEnum.CANCELADO));
+        setExistingAppointments(latestAppointments.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO));
         setStep(3); 
         setBookingLoading(false);
         return;
       }
 
-      const payload: Partial<Appointment> | any = {
+      // Payload Tipado com Conversão para String nos Enums
+      const payload = {
         shop_id: shop.id,
         client_id: user.id,
         barber_id: selectedStaff.id,
         service_id: selectedService.id,
-        // Envia ISO String completo (com fuso UTC) para o PocketBase
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        status: StatusEnum.AGENDADO, 
-        payment_status: PaymentStatusEnum.NAO_PAGO, 
+        status: AppointmentStatus.AGENDADO.toString(), 
+        payment_status: PaymentStatus.NAO_PAGO.toString(), 
         total_amount: Number(selectedService.price),
         payment_method: selectedPaymentMethodId, 
         notes: notes,
-        reminder_sent: false,
-        confirmation_sent: false
       };
 
       await appointmentsApi.create(payload);
@@ -321,9 +304,7 @@ export default function BookingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Loja não encontrada
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-800">Loja não encontrada</h1>
         </div>
       </div>
     );

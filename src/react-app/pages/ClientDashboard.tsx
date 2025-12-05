@@ -86,7 +86,8 @@ export default function ClientDashboard() {
 
     setCancelLoading(appt.id);
     try {
-      await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO });
+      // Converte o status numérico do Enum para string ao enviar
+      await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO.toString() });
       await loadData(); 
     } catch (error) {
       console.error(error);
@@ -146,7 +147,7 @@ export default function ClientDashboard() {
   };
 
   const getStatusBadge = (status: number | string) => {
-    const s = Number(status);
+    const s = Number(status); // Converte string do banco para número
     switch(s) {
       case AppointmentStatus.AGENDADO:
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">Agendado</span>;
@@ -167,12 +168,10 @@ export default function ClientDashboard() {
       return <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Pago</span>;
     }
     
-    // Se está concluído mas não pago (Dívida)
     if (as === AppointmentStatus.CONCLUIDO && ps === PaymentStatus.NAO_PAGO) {
       return <span className="text-xs font-bold text-red-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Pendente</span>;
     }
 
-    // NOVO: Se está agendado e não pago (A Pagar) - Antes retornava null
     if (as === AppointmentStatus.AGENDADO && ps === PaymentStatus.NAO_PAGO) {
       return <span className="text-xs font-bold text-amber-600 flex items-center gap-1"><Clock className="w-3 h-3" /> A Pagar</span>;
     }
@@ -357,7 +356,6 @@ export default function ClientDashboard() {
                         <span className="font-bold text-slate-900">
                           {formatCurrency(appt.total_amount || 0)}
                         </span>
-                        {/* Exibe status financeiro */}
                         {getPaymentStatusDisplay(appt)}
                       </div>
                       
@@ -403,7 +401,6 @@ export default function ClientDashboard() {
                         <p className="text-xs text-slate-500 capitalize">
                           {format(new Date(appt.start_time), "dd/MM")} - {format(new Date(appt.start_time), 'HH:mm')}
                         </p>
-                        {/* Indicador de Pagamento no Histórico */}
                         {getPaymentStatusDisplay(appt)}
                       </div>
                     </div>

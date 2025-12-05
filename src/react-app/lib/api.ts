@@ -2,7 +2,27 @@ import { pb } from './pocketbase';
 import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod, AppointmentStatus } from '../../shared/types';
 import { startOfDay, endOfDay } from 'date-fns';
 
-// ... existing authApi ...
+// Utilitário para datas seguras no PocketBase v0.24+
+const getDayRangeUTC = (dateInput: Date | string) => {
+  let targetDate: Date;
+  
+  if (typeof dateInput === 'string') {
+    // Garante que a string seja interpretada corretamente
+    targetDate = new Date(dateInput.includes('T') ? dateInput : `${dateInput}T00:00:00`);
+  } else {
+    targetDate = dateInput;
+  }
+
+  const start = startOfDay(targetDate);
+  const end = endOfDay(targetDate);
+
+  // PocketBase v0.24+ prefere ISO String completo para comparações
+  return { 
+    startStr: start.toISOString(), 
+    endStr: end.toISOString()
+  };
+};
+
 export const authApi = {
   logout: () => {
     pb.authStore.clear();
@@ -21,7 +41,6 @@ export const authApi = {
   }
 };
 
-// ... existing companiesApi ...
 export const companiesApi = {
   create: async (data: Partial<Company>) => {
     return await pb.collection('companies').create(data);
@@ -45,24 +64,16 @@ export const shopsApi = {
     return await pb.collection('shops').create(data);
   },
 
-  // CORREÇÃO CRÍTICA: Filtra apenas lojas que o usuário tem permissão de ver
   list: async () => {
     const user = pb.authStore.model;
     if (!user) return [];
 
-    // Se for DONO: vê lojas da sua empresa
-    // Se for STAFF: vê apenas a loja onde trabalha
+    // Filtros de segurança no frontend
     const filters = [];
-    
-    // Regra 1: É dono da empresa dona da loja
     filters.push(`company_id.owner_id = "${user.id}"`);
-    
-    // Regra 2: Está vinculado à loja (staff)
     if (user.shop_id) {
       filters.push(`id = "${user.shop_id}"`);
     }
-    
-    // Regra 3: É o próprio dono da loja (caso haja relação direta)
     filters.push(`owner_id = "${user.id}"`);
 
     return await pb.collection('shops').getFullList<Shop>({
@@ -100,7 +111,6 @@ export const shopsApi = {
   },
 };
 
-// ... existing paymentMethodsApi ...
 export const paymentMethodsApi = {
   listByCompany: async (companyId: string) => {
     return await pb.collection('payment_methods').getFullList<PaymentMethod>({
@@ -125,7 +135,6 @@ export const paymentMethodsApi = {
   }
 };
 
-// ... existing categoriesApi ...
 export const categoriesApi = {
   listByShop: async (shopId: string) => {
     return await pb.collection('categories').getFullList<Category>({
@@ -138,7 +147,6 @@ export const categoriesApi = {
   }
 };
 
-// ... existing servicesApi ...
 export const servicesApi = {
   create: async (data: Partial<Service>) => {
     return await pb.collection('services').create(data);
@@ -146,7 +154,7 @@ export const servicesApi = {
 
   listByShop: async (shopId: string) => {
     return await pb.collection('services').getFullList<Service>({
-      filter: `shop_id = "${shopId}"`,
+      filter: `shop_id = "${shopId}" && is_active = true`,
       sort: 'name',
       expand: 'category_id'
     });
@@ -165,7 +173,6 @@ export const servicesApi = {
   },
 };
 
-// ... existing segmentsApi ...
 export const segmentsApi = {
   list: async () => {
     return await pb.collection('segments').getFullList<Segment>({
@@ -178,25 +185,6 @@ export const segmentsApi = {
   },
 };
 
-const getDayRangeUTC = (dateInput: Date | string) => {
-  let targetDate: Date;
-  
-  if (typeof dateInput === 'string') {
-    targetDate = new Date(`${dateInput}T00:00:00`);
-  } else {
-    targetDate = dateInput;
-  }
-
-  const start = startOfDay(targetDate);
-  const end = endOfDay(targetDate);
-
-  return { 
-    startStr: start.toISOString().replace('T', ' ').substring(0, 19), 
-    endStr: end.toISOString().replace('T', ' ').substring(0, 19)
-  };
-};
-
-// ... existing appointmentsApi ...
 export const appointmentsApi = {
   listToday: async (shopId: string) => {
     return appointmentsApi.listByShopAndDate(shopId, new Date());
@@ -231,28 +219,36 @@ export const appointmentsApi = {
   },
 
   create: async (data: Partial<Appointment>) => {
-    return await pb.collection('appointments').create(data);
+    // Converte status numérico para string para o banco v0.34
+    const payload: any = { ...data };
+    if (data.status !== undefined) payload.status = String(data.status);
+    if (data.payment_status !== undefined) payload.payment_status = String(data.payment_status);
+    
+    return await pb.collection('appointments').create(payload);
   },
 
   update: async (id: string, data: Partial<Appointment>) => {
-    return await pb.collection('appointments').update(id, data);
+    const payload: any = { ...data };
+    if (data.status !== undefined) payload.status = String(data.status);
+    if (data.payment_status !== undefined) payload.payment_status = String(data.payment_status);
+
+    return await pb.collection('appointments').update(id, payload);
   },
   
   listByStaffAndDate: async (staffId: string, date: Date | string) => {
     const { startStr, endStr } = getDayRangeUTC(date);
 
     return await pb.collection('appointments').getFullList<Appointment>({
-      filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != ${AppointmentStatus.CANCELADO}`,
+      filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != "${AppointmentStatus.CANCELADO}"`,
+      expand: 'service_id,client_id'
     });
   }
 };
 
-// ... existing usersApi ...
 export const usersApi = {
   listStaffByShop: async (shopId: string) => {
     try {
       return await pb.collection('users').getFullList<User>({
-        // Garante que só traz usuários daquela loja específica
         filter: `shop_id = "${shopId}" && role != "cliente"`,
         sort: '-created'
       });

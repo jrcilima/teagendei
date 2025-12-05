@@ -6,7 +6,6 @@ import { appointmentsApi } from '../lib/api';
 import { Appointment, AppointmentStatus, PaymentStatus } from '../../shared/types';
 import {
   Calendar as CalendarIcon,
-  Clock,
   User as UserIcon,
   CheckCircle,
   XCircle,
@@ -16,7 +15,8 @@ import {
   ArrowLeft,
   Scissors,
   CreditCard,
-  DollarSign
+  DollarSign,
+  Clock
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -43,10 +43,11 @@ export default function Appointments() {
         selectedShop.id,
         selectedDate
       );
-      // FILTRAGEM: Remove agendamentos cancelados da visualização
+      
+      // FILTRAGEM: Converte status para Number para comparação segura
       let activeData = data.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO);
 
-      // SEGURANÇA: Se for Staff, filtra apenas os agendamentos DELE
+      // SEGURANÇA: Staff vê apenas os próprios
       if (user.role === 'staff') {
         activeData = activeData.filter(a => a.barber_id === user.id);
       }
@@ -68,7 +69,7 @@ export default function Appointments() {
       newStatus === AppointmentStatus.CONCLUIDO ? 'concluído' : 'cancelado';
     if (!confirm(`Deseja marcar como ${statusText}?`)) return;
     try {
-      await appointmentsApi.update(id, { status: newStatus });
+      await appointmentsApi.update(id, { status: newStatus.toString() });
       loadAppointments();
     } catch (err) {
       console.error(err);
@@ -84,7 +85,7 @@ export default function Appointments() {
     if(!confirm(`Deseja realmente ${actionText}?`)) return;
 
     try {
-      await appointmentsApi.update(appt.id, { payment_status: newStatus });
+      await appointmentsApi.update(appt.id, { payment_status: newStatus.toString() });
       loadAppointments();
     } catch (err) {
       console.error(err);
@@ -96,7 +97,7 @@ export default function Appointments() {
     setSelectedDate(prev => addDays(prev, days));
   };
 
-  const getStatusBadge = (status: any) => {
+  const getStatusBadge = (status: string | number) => {
     const s = Number(status);
     if (s === AppointmentStatus.AGENDADO)
       return (
@@ -117,7 +118,7 @@ export default function Appointments() {
     );
   };
 
-  const getPaymentBadge = (paymentStatus: any, appointmentStatus: any) => {
+  const getPaymentBadge = (paymentStatus: string | number, appointmentStatus: string | number) => {
     const ps = Number(paymentStatus);
     const as = Number(appointmentStatus);
 
@@ -129,7 +130,6 @@ export default function Appointments() {
       );
     }
     
-    // Se já foi concluído e não pagou, é dívida (Vermelho)
     if (as === AppointmentStatus.CONCLUIDO) {
        return (
         <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100">
@@ -138,7 +138,6 @@ export default function Appointments() {
       );
     }
 
-    // Se ainda está agendado, é normal não ter pago (Cinza/Amarelo)
     return (
       <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
          A Pagar
@@ -154,7 +153,6 @@ export default function Appointments() {
     );
   }
 
-  // Filtros para contadores
   const scheduled = appointments.filter(
     (a) => Number(a.status) === AppointmentStatus.AGENDADO
   );
@@ -178,24 +176,16 @@ export default function Appointments() {
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center justify-between">
-          <button
-            onClick={() => changeDate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-          >
+          <button onClick={() => changeDate(-1)} className="p-2 hover:bg-gray-100 rounded-full">
             <ChevronLeft className="w-5 h-5 text-gray-600" />
           </button>
-
           <div className="flex items-center gap-2">
             <CalendarIcon className="w-5 h-5 text-purple-600" />
             <span className="font-semibold text-gray-900 capitalize">
               {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
             </span>
           </div>
-
-          <button
-            onClick={() => changeDate(1)}
-            className="p-2 hover:bg-gray-100 rounded-full"
-          >
+          <button onClick={() => changeDate(1)} className="p-2 hover:bg-gray-100 rounded-full">
             <ChevronRight className="w-5 h-5 text-gray-600" />
           </button>
         </div>
@@ -203,17 +193,11 @@ export default function Appointments() {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
             <span className="text-blue-600 text-sm font-medium">Agendados</span>
-            <p className="text-2xl font-bold text-blue-800">
-              {scheduled.length}
-            </p>
+            <p className="text-2xl font-bold text-blue-800">{scheduled.length}</p>
           </div>
           <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-            <span className="text-green-600 text-sm font-medium">
-              Concluídos
-            </span>
-            <p className="text-2xl font-bold text-green-800">
-              {completed.length}
-            </p>
+            <span className="text-green-600 text-sm font-medium">Concluídos</span>
+            <p className="text-2xl font-bold text-green-800">{completed.length}</p>
           </div>
         </div>
 
@@ -229,10 +213,7 @@ export default function Appointments() {
         ) : (
           <div className="space-y-4">
             {appointments.map((appt) => (
-              <div
-                key={appt.id}
-                className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
+              <div key={appt.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-start gap-4 flex-1">
                   <div className="flex-shrink-0 pt-1 text-center min-w-[70px]">
                     <span className="block text-lg font-bold text-gray-900">
@@ -269,7 +250,6 @@ export default function Appointments() {
 
                 <div className="flex items-center gap-2 border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 md:pl-4 justify-end md:justify-start">
                   
-                  {/* Botão de Pagamento (Alternar Status) */}
                   <button
                     onClick={() => handlePaymentToggle(appt)}
                     title={Number(appt.payment_status) === PaymentStatus.PAGO ? "Marcar como Não Pago" : "Marcar como Pago"}

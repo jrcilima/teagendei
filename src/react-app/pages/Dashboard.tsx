@@ -24,7 +24,6 @@ export default function Dashboard() {
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
 
-  // Estados para as métricas reais
   const [stats, setStats] = useState({
     appointmentsToday: 0,
     revenueToday: 0,
@@ -43,31 +42,24 @@ export default function Dashboard() {
       setStatsLoading(true);
 
       try {
-        // 1. Carregar Serviços
         const servicesData = await servicesApi.listByShop(selectedShop.id);
         if (mounted) setServices(servicesData);
 
-        // 2. Carregar Agendamentos de Hoje e Profissionais
         const appointmentsData = await appointmentsApi.listToday(selectedShop.id);
         const staffData = await usersApi.listStaffByShop(selectedShop.id);
 
         if (mounted) {
-          // FILTRAGEM INICIAL: Apenas agendamentos ativos
+          // CORREÇÃO: Converte status para Number antes de comparar
           let activeAppointments = appointmentsData.filter(appt => Number(appt.status) !== AppointmentStatus.CANCELADO);
 
-          // FILTRAGEM DE SEGURANÇA PARA STAFF
-          // Se for Staff, filtra apenas os agendamentos DELE para os cálculos
           if (user?.role === 'staff') {
             activeAppointments = activeAppointments.filter(appt => appt.barber_id === user.id);
           }
 
-          // Calcular Faturamento (Soma do total_amount dos agendamentos filtrados)
           const revenue = activeAppointments.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
 
-          // Calcular Taxa de Ocupação
-          // Se for staff, a capacidade é baseada apenas nele (1 pessoa * 8 slots). Se for dono, é baseada em toda equipe.
           const staffCount = user?.role === 'staff' ? 1 : staffData.length;
-          const totalCapacity = staffCount * 8; // Estimativa de 8 slots por dia por pessoa
+          const totalCapacity = staffCount * 8; 
           const occupied = activeAppointments.length;
           const occupancy = totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 100) : 0;
 
@@ -175,8 +167,6 @@ export default function Dashboard() {
                       </option>
                     ))}
                   </select>
-                  
-                  {/* REMOVIDO: Botão de adicionar unidade daqui para mover para Settings */}
                 </div>
               )}
               
@@ -199,9 +189,7 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Cards de Métricas */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Card Agendamentos (Visível para todos, mas filtrado para Staff) */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-purple-100 rounded-lg">
@@ -215,7 +203,6 @@ export default function Dashboard() {
             <p className="text-sm text-gray-600">Agendamentos Hoje</p>
           </div>
           
-          {/* Card Faturamento (Visível para todos, mas filtrado para Staff) */}
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <div className="p-2 bg-green-100 rounded-lg">
@@ -231,7 +218,6 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* Cards Administrativos (Visíveis APENAS para DONO) */}
           {user?.role === 'dono' && (
             <>
               <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
@@ -261,10 +247,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Grid de Navegação */}
         <div className={`grid grid-cols-1 md:grid-cols-2 ${user?.role === 'dono' ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6 mb-8`}>
-          
-          {/* Agenda - Visível para todos */}
           <Link
             to="/appointments"
             className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-purple-500"
@@ -276,7 +259,6 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500">Gerenciar agendamentos</p>
           </Link>
 
-          {/* Menus Administrativos - Visíveis APENAS para DONO */}
           {user?.role === 'dono' && (
             <>
               <Link

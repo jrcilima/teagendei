@@ -7,8 +7,6 @@ import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
 import { Segment, Shop } from '../../shared/types';
 import { z } from 'zod';
 
-// --- Schemas de Validação Zod ---
-
 const companySchema = z.object({
   legal_name: z.string().min(3, "Razão social deve ter no mínimo 3 caracteres"),
   cnpj: z.string().length(14, "CNPJ deve conter exatamente 14 números"),
@@ -29,7 +27,6 @@ const shopSchema = z.object({
   max_advance_time: z.number().min(1, "Agenda deve abrir pelo menos 1 dia"),
 });
 
-// Inferência de tipos a partir do schema
 type CompanyFormData = z.infer<typeof companySchema>;
 type ShopFormData = z.infer<typeof shopSchema>;
 
@@ -43,7 +40,6 @@ export default function Onboarding() {
   const [error, setError] = useState('');
   const [segments, setSegments] = useState<Segment[]>([]);
 
-  // Estados dos formulários
   const [companyData, setCompanyData] = useState<CompanyFormData>({
     legal_name: '',
     cnpj: '',
@@ -63,12 +59,9 @@ export default function Onboarding() {
   });
 
   useEffect(() => {
-    segmentsApi.list().then((data) => {
-      setSegments(data);
-    }).catch(console.error);
+    segmentsApi.list().then(setSegments).catch(console.error);
   }, []);
 
-  // Auto-avanço se já existe empresa
   useEffect(() => {
     if (company && shops.length === 0) {
       setStep(2);
@@ -80,7 +73,6 @@ export default function Onboarding() {
     if (!user) return;
     setError('');
 
-    // Validação Zod
     const validation = companySchema.safeParse(companyData);
     if (!validation.success) {
       setError(validation.error.errors[0].message);
@@ -93,11 +85,9 @@ export default function Onboarding() {
       const newCompany = await companiesApi.create({
         ...companyData,
         owner_id: user.id,
-        plan_status: 'trial',
-        plan_type: 'empresarial'
+        plan_status: 'trial'
       });
       
-      // Tipagem segura
       await authApi.updateProfile(user.id, {
         company_id: newCompany.id,
         role: 'dono'
@@ -121,7 +111,6 @@ export default function Onboarding() {
     }
     setError('');
 
-    // Validação Zod
     const validation = shopSchema.safeParse(shopData);
     if (!validation.success) {
       setError(validation.error.errors[0].message);
@@ -131,11 +120,10 @@ export default function Onboarding() {
     setLoading(true);
 
     try {
-      // Preparação do payload com tipos corretos
+      // CORREÇÃO: manager_id removido para compatibilidade com Schema v0.34
       const apiPayload: Partial<Shop> = {
         ...shopData,
         company_id: company.id,
-        manager_id: user.id,
         owner_id: user.id,
         is_active: true,
       };
@@ -146,7 +134,6 @@ export default function Onboarding() {
       navigate('/dashboard');
     } catch (err: any) {
       console.error("Erro criar unidade:", err);
-      // Tratamento de erro de unicidade (slug já existe)
       if (err.data?.data?.slug) {
         setError('Esta URL personalizada já está em uso. Escolha outra.');
       } else {
@@ -171,7 +158,6 @@ export default function Onboarding() {
       <div className="w-full max-w-2xl">
         <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
           
-          {/* Steps Header */}
           <div className="flex items-center justify-center mb-8">
             <div className={`flex items-center ${step === 1 ? 'text-purple-400' : 'text-green-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 1 ? 'bg-purple-500 text-white' : 'bg-green-500 text-white'}`}>
@@ -260,7 +246,6 @@ export default function Onboarding() {
                   </div>
                 )}
                 
-                {/* Informações Básicas */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-200 mb-2">Segmento</label>
@@ -339,7 +324,6 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                {/* Pagamento Pix */}
                 <div className="border-t border-white/10 pt-4">
                   <div className="flex items-center gap-2 mb-4 text-purple-300">
                     <CreditCard className="w-5 h-5" />
@@ -350,8 +334,7 @@ export default function Onboarding() {
                       <label className="block text-sm font-medium text-gray-200 mb-2">Tipo de Chave</label>
                       <select
                         value={shopData.pix_key_type}
-                        // Tipagem correta no onChange
-                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as ShopFormData['pix_key_type'] })}
+                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as any })}
                         className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 [&>option]:text-black"
                       >
                         <option value="cpf">CPF</option>
@@ -374,7 +357,6 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                {/* Regras de Agendamento */}
                 <div className="border-t border-white/10 pt-4">
                   <div className="flex items-center gap-2 mb-4 text-purple-300">
                     <Clock className="w-5 h-5" />
