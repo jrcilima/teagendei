@@ -14,7 +14,8 @@ import {
   Trash2,
   Power,
   Eye,
-  EyeOff
+  EyeOff,
+  Store // Adicionado ícone Store
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -211,21 +212,32 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link
-            to="/dashboard"
-            className="p-2 hover:bg-gray-200 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-6 h-6 text-gray-600" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              Configurações da Loja
-            </h1>
-            <p className="text-gray-500">
-              Gerencie visibilidade, horários e informações de contato
-            </p>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/dashboard"
+              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+            >
+              <ArrowLeft className="w-6 h-6 text-gray-600" />
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Configurações da Loja
+              </h1>
+              <p className="text-gray-500">
+                Gerencie visibilidade, horários e informações de contato
+              </p>
+            </div>
           </div>
+          
+          {/* BOTÃO ADICIONADO: NOVA UNIDADE */}
+          <Link
+            to="/shops/new"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 font-medium rounded-lg hover:bg-purple-200 transition-colors"
+          >
+            <Store className="w-5 h-5" />
+            Nova Unidade
+          </Link>
         </div>
 
         {success && (

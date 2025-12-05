@@ -64,8 +64,10 @@ export default function Dashboard() {
           // Calcular Faturamento (Soma do total_amount dos agendamentos filtrados)
           const revenue = activeAppointments.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
 
-          // Calcular Taxa de Ocupação (Estimativa: 8 agendamentos/dia por profissional)
-          const totalCapacity = staffData.length * 8; 
+          // Calcular Taxa de Ocupação
+          // Se for staff, a capacidade é baseada apenas nele (1 pessoa * 8 slots). Se for dono, é baseada em toda equipe.
+          const staffCount = user?.role === 'staff' ? 1 : staffData.length;
+          const totalCapacity = staffCount * 8; // Estimativa de 8 slots por dia por pessoa
           const occupied = activeAppointments.length;
           const occupancy = totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 100) : 0;
 
@@ -101,7 +103,6 @@ export default function Dashboard() {
   }
 
   if (!company) {
-    // ... (código de onboarding omitido, igual ao original)
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
@@ -124,7 +125,6 @@ export default function Dashboard() {
   }
 
   if (shops.length === 0) {
-     // ... (código de criar unidade omitido, igual ao original)
      return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
@@ -176,16 +176,7 @@ export default function Dashboard() {
                     ))}
                   </select>
                   
-                  {/* Apenas DONO pode criar nova unidade */}
-                  {user?.role === 'dono' && (
-                    <Link 
-                      to="/shops/new" 
-                      className="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
-                      title="Nova Unidade"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </Link>
-                  )}
+                  {/* REMOVIDO: Botão de adicionar unidade daqui para mover para Settings */}
                 </div>
               )}
               
