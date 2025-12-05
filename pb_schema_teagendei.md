@@ -117,7 +117,7 @@
     ],
     "indexes": [],
     "listRule": "shop_id != \"\"",
-    "viewRule": "shop_id != \"\"",
+    "viewRule": "id = @request.auth.id || is_professional = true || @request.auth.role = 'dono' || @request.auth.role = 'staff'",
     "createRule": "",
     "updateRule": "id = @request.auth.id",
     "deleteRule": "id = @request.auth.id",
@@ -315,7 +315,9 @@
         }
       }
     ],
-    "indexes": [],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_Hg7Z1Vm` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`,\n  `status`\n)"
+    ],
     "listRule": "@request.auth.id != \"\"",
     "viewRule": "@request.auth.id != \"\"",
     "createRule": "@request.auth.id != \"\"",
