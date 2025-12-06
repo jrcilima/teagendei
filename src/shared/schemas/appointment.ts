@@ -1,26 +1,20 @@
 import { z } from "zod";
+import { BaseModelSchema } from "./_shared";
 
-export const AppointmentStatus = z.enum([
-  "AGENDADO",
-  "CONFIRMADO",
-  "CANCELADO",
-  "CONCLUIDO",
-]);
+export const AppointmentSchema = BaseModelSchema.extend({
+  client_id: z.string(),
+  staff_id: z.string(),
+  service_id: z.string(),
+  shop_id: z.string(),
 
-export const AppointmentCreateSchema = z.object({
-  client_id: z.string().min(1),
-  shop_id: z.string().min(1),
-  service_id: z.string().min(1),
-  start_time: z
-    .string()
-    .refine((s) => !Number.isNaN(Date.parse(s)), "start_time must be ISO string"),
-  duration: z.number().int().positive(),
-  total_amount: z.number().nonnegative(),
-  status: AppointmentStatus.default("AGENDADO"),
-});
+  start: z.string(),
+  end: z.string(),
 
-export const AppointmentResponseSchema = AppointmentCreateSchema.extend({
-  id: z.string(),
-  created: z.string(),
-  updated: z.string().optional(),
+  status: z.enum(["pending", "confirmed", "canceled"]),
+
+  notes: z.string().optional(),
+  expand: z.record(z.any()).optional()
 }).passthrough();
+
+export type Appointment = z.infer<typeof AppointmentSchema>;
+export default AppointmentSchema;
