@@ -1,4 +1,4 @@
-##Esquema Antigo obsoleto apenas para consulta
+##Esquema Antigo obsoleto apenas para consulta pois o modelo antes da migração funcionava 100% com o forntend
 
 [
   {

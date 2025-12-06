@@ -178,8 +178,8 @@
     "listRule": "id = @request.auth.id || (shop_id = @request.auth.shop_id && role != 'cliente') || (@request.auth.role = 'dono' && company_id = @request.auth.company_id)",
     "viewRule": "id = @request.auth.id || shop_id = @request.auth.shop_id || (@request.auth.role = 'dono' && company_id = @request.auth.company_id)",
     "createRule": "",
-    "updateRule": "id = @request.auth.id",
-    "deleteRule": "id = @request.auth.id",
+    "updateRule": "id = @request.auth.id || (company_id != \"\" && company_id = @request.auth.company_id && @request.auth.role = \"dono\")",
+    "deleteRule": "id = @request.auth.id || (company_id != \"\" && company_id = @request.auth.company_id && @request.auth.role = \"dono\")",
     "name": "users",
     "type": "auth",
     "fields": [
@@ -380,7 +380,7 @@
     "authRule": "",
     "manageRule": null,
     "authAlert": {
-      "enabled": true,
+      "enabled": false,
       "emailTemplate": {
         "subject": "Login from a new location",
         "body": "<p>Hello,</p>\n<p>We noticed a login to your {APP_NAME} account from a new location:</p>\n<p><em>{ALERT_INFO}</em></p>\n<p><strong>If this wasn't you, you should immediately change your {APP_NAME} account password to revoke access from all other locations.</strong></p>\n<p>If this was you, you may disregard this email.</p>\n<p>\n  Thanks,<br/>\n  {APP_NAME} team\n</p>"
@@ -841,9 +841,9 @@
   },
   {
     "id": "pbc_1037645436",
-    "listRule": "shop_id.company_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
-    "viewRule": null,
-    "createRule": "@request.auth.id != \"\"",
+    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
+    "viewRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
+    "createRule": "client_id = @request.auth.id",
     "updateRule": "shop_id.company_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
     "deleteRule": null,
     "name": "appointments",
@@ -1035,7 +1035,8 @@
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX `idx_unique_active_booking` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`\n) WHERE status != 0"
+      "CREATE UNIQUE INDEX `idx_unique_active_booking` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`\n) WHERE status != 0",
+      "CREATE UNIQUE INDEX `idx_unique_client_booking` ON `appointments` (\n  `start_time`,\n  `client_id`\n) WHERE status != '0'"
     ],
     "system": false
   },
@@ -1116,8 +1117,8 @@
   },
   {
     "id": "pbc_3866053794",
-    "listRule": "owner_id = @request.auth.id",
-    "viewRule": "owner_id = @request.auth.id",
+    "listRule": "owner_id = @request.auth.id || id = @request.auth.company_id",
+    "viewRule": "owner_id = @request.auth.id || id = @request.auth.company_id",
     "createRule": "@request.auth.id != \"\"",
     "updateRule": "owner_id = @request.auth.id",
     "deleteRule": "owner_id = @request.auth.id",
@@ -1223,8 +1224,8 @@
   },
   {
     "id": "pbc_568792081",
-    "listRule": "company_id.owner_id = @request.auth.id",
-    "viewRule": "company_id.owner_id = @request.auth.id",
+    "listRule": "is_active = true || company_id.owner_id = @request.auth.id",
+    "viewRule": "is_active = true || company_id.owner_id = @request.auth.id",
     "createRule": "company_id.owner_id = @request.auth.id",
     "updateRule": "company_id.owner_id = @request.auth.id",
     "deleteRule": "company_id.owner_id = @request.auth.id",
