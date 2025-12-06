@@ -1,3 +1,4 @@
+
 ##Estrutura de pastas do projeto
 TEAGENDEI/
 ├── .wrangler/
@@ -11,9 +12,9 @@ TEAGENDEI/
 │   │   │   └── TenantContext.tsx
 │   │   ├── lib/
 │   │   │   ├── api.ts
-│   │   │   ├── apiClient.ts ##novo
+│   │   │   ├── apiClient.ts
 │   │   │   ├── pocketbase.ts
-│   │   │   └── pocketbaseFactory.ts ##novo
+│   │   │   └── pocketbaseFactory.ts
 │   │   ├── pages/
 │   │   │   ├── Appointments.tsx
 │   │   │   ├── BookingPage.tsx
@@ -35,7 +36,11 @@ TEAGENDEI/
 │   │   └── vite-env.d.ts
 │   └── shared/
 │       ├── schemas/
-│   	│   └── appointment.ts ##novo
+│       │   ├── _shared2.ts
+│   	│   ├── appointment.ts
+│   	│   ├── service.ts
+│   	│   ├── shop.ts
+│   	│   └── user.ts
 │       └── types.ts
 ├── .env
 ├── .env.local
