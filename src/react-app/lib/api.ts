@@ -57,7 +57,15 @@ export const companiesApi = {
     return await pb.collection('companies').create(data);
   },
 
-  list: async () => {
+list: async () => {
+    const user = pb.authStore.model;
+    // Se o usuário tem company_id, filtramos diretamente por ela para garantir performance
+    if (user?.company_id) {
+        return await pb.collection('companies').getFullList<Company>({
+            filter: `id = "${user.company_id}"`
+        });
+    }
+    // Fallback para o dono (que pode não ter company_id preenchido no próprio perfil em versões antigas)
     return await pb.collection('companies').getFullList<Company>();
   },
 
