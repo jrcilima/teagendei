@@ -18,7 +18,7 @@ import {
   DollarSign,
   Clock
 } from 'lucide-react';
-import { format, addDays } from 'date-fns';
+import { format, addDays, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const formatCurrency = (value: number) => {
@@ -45,6 +45,11 @@ export default function Appointments() {
       );
       
       let activeData = data.filter(a => a.status !== AppointmentStatus.CANCELADO);
+
+      activeData = activeData.filter(a => {
+        const apptDate = parseISO(a.start_time); // Converte UTC para Local automaticamente
+        return isSameDay(apptDate, selectedDate);
+      });
 
       if (user.role === 'staff') {
         activeData = activeData.filter(a => a.barber_id === user.id);
