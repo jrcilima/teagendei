@@ -1,4 +1,5 @@
 
+
 ##Estrutura de pastas do projeto
 TEAGENDEI/
 ├── .wrangler/
@@ -11,6 +12,11 @@ TEAGENDEI/
 │   │   │   ├── AuthContext.tsx
 │   │   │   └── TenantContext.tsx
 │   │   ├── lib/
+│   │   │   ├── api/
+│   │   │   │   ├── usersApi.ts
+│   │   │   │   ├── shopsApi.ts ##vazio
+│   │   │   │   ├── servicesApi.ts ##vazio
+│   │   │   │   └── appointmentsApi.ts ##vazio
 │   │   │   ├── api.ts
 │   │   │   ├── apiClient.ts
 │   │   │   ├── pocketbase.ts
@@ -36,7 +42,7 @@ TEAGENDEI/
 │   │   └── vite-env.d.ts
 │   └── shared/
 │       ├── schemas/
-│       │   ├── _shared.ts
+│       │   ├── _shared2.ts
 │   	│   ├── appointment.ts
 │   	│   ├── service.ts
 │   	│   ├── shop.ts
