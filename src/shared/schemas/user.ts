@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BaseModelSchema } from "./_shared2";
+import { BaseModelSchema } from "./_shared";
 
 export const UserRoleSchema = z.enum(["dono", "staff", "cliente"]);
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BaseModelSchema } from './_shared2';
+import { BaseModelSchema } from './_shared';
 
 export const ServiceSchema = BaseModelSchema.extend({
   name: z.string().min(1),
