@@ -36,7 +36,7 @@ TEAGENDEI/
 │   │   └── vite-env.d.ts
 │   └── shared/
 │       ├── schemas/
-│       │   ├── _shared2.ts
+│       │   ├── _shared.ts
 │   	│   ├── appointment.ts
 │   	│   ├── service.ts
 │   	│   ├── shop.ts
