@@ -129,7 +129,9 @@ export default function ClientDashboard() {
 
     setJoiningShopId(shop.id);
     try {
-      await authApi.updateProfile(user.id, { shop_id: shop.id });
+      await authApi.updateProfile(user.id, { 
+        shop_id: shop.id,
+        company_id: shop.company_id  });
       await pb.collection('users').authRefresh();
       
       setShowShopModal(false);
