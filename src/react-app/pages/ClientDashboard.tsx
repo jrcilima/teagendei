@@ -86,8 +86,7 @@ export default function ClientDashboard() {
 
     setCancelLoading(appt.id);
     try {
-      // Converte o status numérico do Enum para string ao enviar
-      await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO.toString() });
+      await appointmentsApi.update(appt.id, { status: AppointmentStatus.CANCELADO });
       await loadData(); 
     } catch (error) {
       console.error(error);
@@ -146,9 +145,8 @@ export default function ClientDashboard() {
     }
   };
 
-  const getStatusBadge = (status: number | string) => {
-    const s = Number(status); // Converte string do banco para número
-    switch(s) {
+  const getStatusBadge = (status: string) => {
+    switch(status) {
       case AppointmentStatus.AGENDADO:
         return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">Agendado</span>;
       case AppointmentStatus.CONCLUIDO:
@@ -161,8 +159,8 @@ export default function ClientDashboard() {
   };
 
   const getPaymentStatusDisplay = (appt: Appointment) => {
-    const ps = Number(appt.payment_status);
-    const as = Number(appt.status);
+    const ps = appt.payment_status;
+    const as = appt.status;
 
     if (ps === PaymentStatus.PAGO) {
       return <span className="text-xs font-bold text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Pago</span>;
@@ -183,14 +181,14 @@ export default function ClientDashboard() {
   
   const upcomingAppointments = appointments.filter(
     a => new Date(a.start_time) >= now && 
-         Number(a.status) !== AppointmentStatus.CANCELADO && 
-         Number(a.status) !== AppointmentStatus.CONCLUIDO
+         a.status !== AppointmentStatus.CANCELADO && 
+         a.status !== AppointmentStatus.CONCLUIDO
   ).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
   const historyAppointments = appointments.filter(
     a => new Date(a.start_time) < now || 
-         Number(a.status) === AppointmentStatus.CANCELADO || 
-         Number(a.status) === AppointmentStatus.CONCLUIDO
+         a.status === AppointmentStatus.CANCELADO || 
+         a.status === AppointmentStatus.CONCLUIDO
   ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
 
   if (loading) {
@@ -209,7 +207,8 @@ export default function ClientDashboard() {
             <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center text-purple-700 font-bold overflow-hidden">
               {user?.avatar ? (
                  <img 
-                   src={`${import.meta.env.VITE_POCKETBASE_URL || 'http://136.248.77.97:8090'}/api/files/users/${user.id}/${user.avatar}`} 
+                   // Uso de pb.baseUrl evita erro de import.meta e garante URL correta
+                   src={`${pb.baseUrl}/api/files/users/${user.id}/${user.avatar}`} 
                    className="w-full h-full object-cover" 
                    alt="avatar"
                  />
@@ -389,9 +388,9 @@ export default function ClientDashboard() {
                 <div key={appt.id} className="bg-white p-4 rounded-xl border border-slate-100 flex justify-between items-center opacity-75 hover:opacity-100 transition-opacity">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                      Number(appt.status) === AppointmentStatus.CONCLUIDO ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                      appt.status === AppointmentStatus.CONCLUIDO ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                     }`}>
-                       {Number(appt.status) === AppointmentStatus.CONCLUIDO ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                       {appt.status === AppointmentStatus.CONCLUIDO ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
                     </div>
                     <div>
                       <p className="font-semibold text-slate-800 text-sm">

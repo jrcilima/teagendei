@@ -1,22 +1,33 @@
 import { pb } from './pocketbase';
-import { Company, Shop, Service, Segment, Appointment, User, Category, PaymentMethod, AppointmentStatus } from '../../shared/types';
+import { 
+  Company, 
+  Shop, 
+  Service, 
+  Segment, 
+  Appointment, 
+  User, 
+  Category, 
+  PaymentMethod, 
+  AppointmentStatus 
+} from '../../shared/types';
 import { startOfDay, endOfDay } from 'date-fns';
 
-// Utilitário para datas seguras no PocketBase v0.24+
+// Utilitário para gerar range de datas seguro para o PocketBase
 const getDayRangeUTC = (dateInput: Date | string) => {
   let targetDate: Date;
   
   if (typeof dateInput === 'string') {
-    // Garante que a string seja interpretada corretamente
+    // Garante compatibilidade se vier apenas "YYYY-MM-DD" ou ISO completo
     targetDate = new Date(dateInput.includes('T') ? dateInput : `${dateInput}T00:00:00`);
   } else {
     targetDate = dateInput;
   }
 
+  // PocketBase armazena datas em UTC.
+  // Para filtrar "o dia todo", usamos >= Inicio do Dia e <= Fim do Dia.
   const start = startOfDay(targetDate);
   const end = endOfDay(targetDate);
 
-  // PocketBase v0.24+ prefere ISO String completo para comparações
   return { 
     startStr: start.toISOString(), 
     endStr: end.toISOString()
@@ -68,12 +79,13 @@ export const shopsApi = {
     const user = pb.authStore.model;
     if (!user) return [];
 
-    // Filtros de segurança no frontend
+    // Filtros de segurança redundantes ao Backend, mas úteis para UX
     const filters = [];
     filters.push(`company_id.owner_id = "${user.id}"`);
     if (user.shop_id) {
       filters.push(`id = "${user.shop_id}"`);
     }
+    // Caso seja o dono direto
     filters.push(`owner_id = "${user.id}"`);
 
     return await pb.collection('shops').getFullList<Shop>({
@@ -219,25 +231,19 @@ export const appointmentsApi = {
   },
 
   create: async (data: Partial<Appointment>) => {
-    // Converte status numérico para string para o banco v0.34
-    const payload: any = { ...data };
-    if (data.status !== undefined) payload.status = String(data.status);
-    if (data.payment_status !== undefined) payload.payment_status = String(data.payment_status);
-    
-    return await pb.collection('appointments').create(payload);
+    // Como agora os tipos já são strings no frontend (devido à mudança no types.ts),
+    // não precisamos converter status e payment_status manualmente.
+    return await pb.collection('appointments').create(data);
   },
 
   update: async (id: string, data: Partial<Appointment>) => {
-    const payload: any = { ...data };
-    if (data.status !== undefined) payload.status = String(data.status);
-    if (data.payment_status !== undefined) payload.payment_status = String(data.payment_status);
-
-    return await pb.collection('appointments').update(id, payload);
+    return await pb.collection('appointments').update(id, data);
   },
   
   listByStaffAndDate: async (staffId: string, date: Date | string) => {
     const { startStr, endStr } = getDayRangeUTC(date);
 
+    // Usa a constante de status importada para garantir consistência
     return await pb.collection('appointments').getFullList<Appointment>({
       filter: `barber_id = "${staffId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != "${AppointmentStatus.CANCELADO}"`,
       expand: 'service_id,client_id'
@@ -263,6 +269,7 @@ export const usersApi = {
   },
 
   createStaff: async (data: FormData | Record<string, any>) => {
+    // Garante campos obrigatórios para criação
     if (data instanceof FormData) {
       data.append('emailVisibility', 'true');
       if (!data.has('role')) {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
 import { appointmentsApi } from '../lib/api';
-import { Appointment, AppointmentStatus, PaymentStatus } from '../../shared/types';
+import { Appointment, AppointmentStatus, PaymentStatus, AppointmentStatusType } from '../../shared/types';
 import {
   Calendar as CalendarIcon,
   User as UserIcon,
@@ -44,10 +44,8 @@ export default function Appointments() {
         selectedDate
       );
       
-      // FILTRAGEM: Converte status para Number para comparação segura
-      let activeData = data.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO);
+      let activeData = data.filter(a => a.status !== AppointmentStatus.CANCELADO);
 
-      // SEGURANÇA: Staff vê apenas os próprios
       if (user.role === 'staff') {
         activeData = activeData.filter(a => a.barber_id === user.id);
       }
@@ -64,12 +62,11 @@ export default function Appointments() {
     loadAppointments();
   }, [selectedShop, selectedDate, user]);
 
-  const handleStatusChange = async (id: string, newStatus: number) => {
-    const statusText =
-      newStatus === AppointmentStatus.CONCLUIDO ? 'concluído' : 'cancelado';
+  const handleStatusChange = async (id: string, newStatus: AppointmentStatusType) => {
+    const statusText = newStatus === AppointmentStatus.CONCLUIDO ? 'concluído' : 'cancelado';
     if (!confirm(`Deseja marcar como ${statusText}?`)) return;
     try {
-      await appointmentsApi.update(id, { status: newStatus.toString() });
+      await appointmentsApi.update(id, { status: newStatus });
       loadAppointments();
     } catch (err) {
       console.error(err);
@@ -78,14 +75,14 @@ export default function Appointments() {
   };
 
   const handlePaymentToggle = async (appt: Appointment) => {
-    const currentStatus = Number(appt.payment_status);
+    const currentStatus = appt.payment_status;
     const newStatus = currentStatus === PaymentStatus.PAGO ? PaymentStatus.NAO_PAGO : PaymentStatus.PAGO;
     const actionText = newStatus === PaymentStatus.PAGO ? "MARCAR COMO PAGO" : "MARCAR COMO NÃO PAGO";
 
     if(!confirm(`Deseja realmente ${actionText}?`)) return;
 
     try {
-      await appointmentsApi.update(appt.id, { payment_status: newStatus.toString() });
+      await appointmentsApi.update(appt.id, { payment_status: newStatus });
       loadAppointments();
     } catch (err) {
       console.error(err);
@@ -97,15 +94,14 @@ export default function Appointments() {
     setSelectedDate(prev => addDays(prev, days));
   };
 
-  const getStatusBadge = (status: string | number) => {
-    const s = Number(status);
-    if (s === AppointmentStatus.AGENDADO)
+  const getStatusBadge = (status: string) => {
+    if (status === AppointmentStatus.AGENDADO)
       return (
         <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 border border-blue-200">
           Agendado
         </span>
       );
-    if (s === AppointmentStatus.CONCLUIDO)
+    if (status === AppointmentStatus.CONCLUIDO)
       return (
         <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700 border border-green-200">
           Concluído
@@ -118,11 +114,8 @@ export default function Appointments() {
     );
   };
 
-  const getPaymentBadge = (paymentStatus: string | number, appointmentStatus: string | number) => {
-    const ps = Number(paymentStatus);
-    const as = Number(appointmentStatus);
-
-    if (ps === PaymentStatus.PAGO) {
+  const getPaymentBadge = (paymentStatus: string, appointmentStatus: string) => {
+    if (paymentStatus === PaymentStatus.PAGO) {
       return (
         <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-100">
            Pago
@@ -130,7 +123,7 @@ export default function Appointments() {
       );
     }
     
-    if (as === AppointmentStatus.CONCLUIDO) {
+    if (appointmentStatus === AppointmentStatus.CONCLUIDO) {
        return (
         <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100">
            Pendente
@@ -153,12 +146,8 @@ export default function Appointments() {
     );
   }
 
-  const scheduled = appointments.filter(
-    (a) => Number(a.status) === AppointmentStatus.AGENDADO
-  );
-  const completed = appointments.filter(
-    (a) => Number(a.status) === AppointmentStatus.CONCLUIDO
-  );
+  const scheduled = appointments.filter(a => a.status === AppointmentStatus.AGENDADO);
+  const completed = appointments.filter(a => a.status === AppointmentStatus.CONCLUIDO);
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
@@ -252,9 +241,9 @@ export default function Appointments() {
                   
                   <button
                     onClick={() => handlePaymentToggle(appt)}
-                    title={Number(appt.payment_status) === PaymentStatus.PAGO ? "Marcar como Não Pago" : "Marcar como Pago"}
+                    title={appt.payment_status === PaymentStatus.PAGO ? "Marcar como Não Pago" : "Marcar como Pago"}
                     className={`p-2 rounded-lg transition-colors ${
-                      Number(appt.payment_status) === PaymentStatus.PAGO 
+                      appt.payment_status === PaymentStatus.PAGO 
                       ? 'bg-green-100 text-green-700 hover:bg-green-200' 
                       : 'bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600'
                     }`}
@@ -262,7 +251,7 @@ export default function Appointments() {
                     <DollarSign className="w-5 h-5" />
                   </button>
 
-                  {Number(appt.status) === AppointmentStatus.AGENDADO && (
+                  {appt.status === AppointmentStatus.AGENDADO && (
                     <>
                       <button
                         onClick={() => handleStatusChange(appt.id, AppointmentStatus.CONCLUIDO)}

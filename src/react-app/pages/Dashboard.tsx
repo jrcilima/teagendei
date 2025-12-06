@@ -49,8 +49,8 @@ export default function Dashboard() {
         const staffData = await usersApi.listStaffByShop(selectedShop.id);
 
         if (mounted) {
-          // CORREÇÃO: Converte status para Number antes de comparar
-          let activeAppointments = appointmentsData.filter(appt => Number(appt.status) !== AppointmentStatus.CANCELADO);
+          // ATUALIZADO: Comparação com string
+          let activeAppointments = appointmentsData.filter(appt => appt.status !== AppointmentStatus.CANCELADO);
 
           if (user?.role === 'staff') {
             activeAppointments = activeAppointments.filter(appt => appt.barber_id === user.id);

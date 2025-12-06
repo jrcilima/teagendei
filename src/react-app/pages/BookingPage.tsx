@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
+import { pb } from '../lib/pocketbase';
 import {
   Shop,
   Service,
@@ -30,7 +31,7 @@ import {
   isAfter, 
   setHours, 
   setMinutes, 
-  setSeconds,
+  setSeconds, 
   isSameDay 
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -75,26 +76,20 @@ export default function BookingPage() {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
 
-  // Data selecionada como string YYYY-MM-DD
   const [selectedDate, setSelectedDate] = useState<string>(
     format(new Date(), 'yyyy-MM-dd')
   );
-  // Horário selecionado como string "HH:mm"
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
-  const [selectedPaymentMethodId, setSelectedPaymentMethodId] =
-    useState<string>('');
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
   const [notes, setNotes] = useState('');
 
-  const [existingAppointments, setExistingAppointments] = useState<
-    Appointment[]
-  >([]);
+  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
-  // 1. Carregar dados da loja
   useEffect(() => {
     if (!slug) return;
     const loadData = async () => {
@@ -119,21 +114,17 @@ export default function BookingPage() {
     loadData();
   }, [slug]);
 
-  // 2. Carregar agendamentos para verificar conflitos
   useEffect(() => {
     if (!shop || !selectedDate || step !== 3) return;
 
     const fetchAppointments = async () => {
       setSlotsLoading(true);
       try {
-        // Constrói objeto Date para a API (que vai converter pra UTC no helper)
         const searchDate = new Date(`${selectedDate}T00:00:00`);
-        const appts =
-          (await appointmentsApi.listByShopAndDate(shop.id, searchDate)) || [];
+        const appts = (await appointmentsApi.listByShopAndDate(shop.id, searchDate)) || [];
 
-        // Filtra cancelados convertendo status para Number
         const activeAppts = Array.isArray(appts)
-          ? appts.filter((a) => Number(a.status) !== AppointmentStatus.CANCELADO)
+          ? appts.filter((a) => a.status !== AppointmentStatus.CANCELADO)
           : [];
         setExistingAppointments(activeAppts);
       } catch (err) {
@@ -147,7 +138,6 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
-  // 3. Calcular Slots Disponíveis
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
@@ -155,31 +145,27 @@ export default function BookingPage() {
     const dayOfWeek = dateObj.getDay();
     const dayKey = DAY_KEYS[dayOfWeek];
 
-    const businessHours = shop.business_hours as BusinessHours;
+    const businessHours = (shop.business_hours || {}) as BusinessHours;
 
-    if (
-      !businessHours ||
-      !businessHours[dayKey] ||
-      !businessHours[dayKey].open
-    ) {
+    if (!businessHours[dayKey] || !businessHours[dayKey].open) {
       return [];
     }
 
     const { start, end } = businessHours[dayKey];
-    const slots: string[] = [];
+    if (!start || !end) return [];
 
-    // Parse dos horários de funcionamento
+    const slots: string[] = [];
     const startDate = parse(start, 'HH:mm', dateObj);
     const endDate = parse(end, 'HH:mm', dateObj);
 
     let currentSlot = startDate;
     const now = new Date();
     const isToday = isSameDay(dateObj, now);
+    
+    const minAdvance = shop.min_advance_time ?? 30; 
 
-    // Loop para gerar horários
     while (isBefore(addMinutes(currentSlot, selectedService.duration), endDate) || currentSlot.getTime() === endDate.getTime()) {
-      // Bloqueio de horários passados (se for hoje) + Buffer de 30min
-      if (isToday && isBefore(currentSlot, addMinutes(now, 30))) {
+      if (isToday && isBefore(currentSlot, addMinutes(now, minAdvance))) {
         currentSlot = addMinutes(currentSlot, 30);
         continue;
       }
@@ -187,7 +173,6 @@ export default function BookingPage() {
       const slotStart = currentSlot;
       const slotEnd = addMinutes(currentSlot, selectedService.duration);
 
-      // Verifica colisão com agendamentos existentes
       const isBlocked = existingAppointments.some((appt) => {
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
@@ -201,18 +186,11 @@ export default function BookingPage() {
         slots.push(format(currentSlot, 'HH:mm'));
       }
 
-      // Intervalo de 30 minutos entre slots
       currentSlot = addMinutes(currentSlot, 30);
     }
 
     return slots;
-  }, [
-    shop,
-    selectedDate,
-    selectedService,
-    existingAppointments,
-    selectedStaff
-  ]);
+  }, [shop, selectedDate, selectedService, existingAppointments, selectedStaff]);
 
   const handleBooking = async () => {
     if (!user) {
@@ -221,32 +199,23 @@ export default function BookingPage() {
       return;
     }
 
-    if (
-      !shop?.id ||
-      !selectedService?.id ||
-      !selectedStaff?.id ||
-      !selectedTime ||
-      !user.id ||
-      !selectedPaymentMethodId
-    ) {
+    if (!shop?.id || !selectedService?.id || !selectedStaff?.id || !selectedTime || !user.id || !selectedPaymentMethodId) {
       alert('Por favor, preencha todos os campos, incluindo a forma de pagamento.');
       return;
     }
 
     setBookingLoading(true);
     try {
-      // Construção Segura da Data com UTC
       const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
       const [hours, minutes] = selectedTime.split(':').map(Number);
       
       const startDate = setSeconds(setMinutes(setHours(baseDate, hours), minutes), 0);
       const endDate = addMinutes(startDate, selectedService.duration);
 
-      // Double Check de Conflito (Race Condition)
       const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
       
       const hasConflict = latestAppointments.some(appt => {
-        if (Number(appt.status) === AppointmentStatus.CANCELADO) return false;
+        if (appt.status === AppointmentStatus.CANCELADO) return false;
         if (appt.barber_id !== selectedStaff.id) return false;
 
         const apptStart = new Date(appt.start_time);
@@ -256,14 +225,9 @@ export default function BookingPage() {
       });
 
       if (hasConflict) {
-        alert("Ops! Este horário acabou de ser ocupado. Por favor, escolha outro.");
-        setExistingAppointments(latestAppointments.filter(a => Number(a.status) !== AppointmentStatus.CANCELADO));
-        setStep(3); 
-        setBookingLoading(false);
-        return;
+        throw new Error('SLOT_TAKEN');
       }
 
-      // Payload Tipado com Conversão para String nos Enums
       const payload = {
         shop_id: shop.id,
         client_id: user.id,
@@ -271,8 +235,8 @@ export default function BookingPage() {
         service_id: selectedService.id,
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        status: AppointmentStatus.AGENDADO.toString(), 
-        payment_status: PaymentStatus.NAO_PAGO.toString(), 
+        status: AppointmentStatus.AGENDADO, 
+        payment_status: PaymentStatus.NAO_PAGO, 
         total_amount: Number(selectedService.price),
         payment_method: selectedPaymentMethodId, 
         notes: notes,
@@ -284,9 +248,17 @@ export default function BookingPage() {
       navigate('/client');
     } catch (error: any) {
       console.error('Erro ao agendar:', error);
-      let msg = error?.message || 'Erro desconhecido.';
-      if (error?.data?.data) msg = JSON.stringify(error.data.data);
-      alert(`Falha ao agendar: ${msg}`);
+      
+      if (error.message === 'SLOT_TAKEN' || error?.data?.code === 400 || JSON.stringify(error).includes('unique_active_booking')) {
+        alert("Ops! Este horário acabou de ser ocupado por outra pessoa. A lista será atualizada.");
+        const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
+        const appts = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
+        setExistingAppointments(appts.filter(a => a.status !== AppointmentStatus.CANCELADO));
+        setStep(3);
+      } else {
+        let msg = error?.message || 'Erro desconhecido.';
+        alert(`Falha ao agendar: ${msg}`);
+      }
     } finally {
       setBookingLoading(false);
     }
@@ -311,7 +283,6 @@ export default function BookingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-4">
@@ -339,7 +310,6 @@ export default function BookingPage() {
       </div>
 
       <div className="max-w-2xl mx-auto p-4">
-        {/* Passo 1: Serviço */}
         {step === 1 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -399,7 +369,6 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 2: Profissional */}
         {step === 2 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -424,12 +393,8 @@ export default function BookingPage() {
                   <div className="w-16 h-16 bg-gray-100 rounded-full mb-3 flex items-center justify-center overflow-hidden border-2 border-transparent group-hover:border-purple-200 transition-colors">
                     {professional.avatar ? (
                       <img
-                        src={`${
-                          import.meta.env.VITE_POCKETBASE_URL ||
-                          'http://136.248.77.97:8090'
-                        }/api/files/users/${professional.id}/${
-                          professional.avatar
-                        }`}
+                        // CORREÇÃO: Uso de pb.baseUrl em vez de import.meta
+                        src={`${pb.baseUrl}/api/files/users/${professional.id}/${professional.avatar}`}
                         alt={professional.name}
                         className="w-full h-full object-cover"
                       />
@@ -451,7 +416,6 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 3: Data e Hora */}
         {step === 3 && (
           <div className="space-y-6 animate-fade-in">
             <div className="mb-4">
@@ -538,7 +502,6 @@ export default function BookingPage() {
           </div>
         )}
 
-        {/* Passo 4: Confirmação */}
         {step === 4 && selectedService && selectedStaff && (
           <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-6">
