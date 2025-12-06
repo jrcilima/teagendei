@@ -34,21 +34,30 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     setLoading(true);
 
     try {
+      // ✅ aqui é findById, NÃO getById
       const data = await shopService.findById(user.shop_id);
       const validated = ShopSchema.parse(data);
       setShop(validated);
     } catch (err) {
       console.error("Failed to load shop:", err);
       setShop(null);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
-  // Carrega shop quando usuario muda
+  // recarrega quando o usuário (e o shop_id) mudar
   useEffect(() => {
     loadShop();
   }, [user?.shop_id]);
+
+  // se o authStore mudar (ex: troca de sessão), recarrega também
+  useEffect(() => {
+    const unsub = api.pb.authStore.onChange(() => {
+      loadShop();
+    });
+    return () => unsub();
+  }, []);
 
   return (
     <TenantContext.Provider
