@@ -1,75 +1,97 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '../../shared/types';
-import { pb } from '../lib/pocketbase';
+import { createContext, useContext, useEffect, useState } from 'react';
+import ApiClient from '../lib/apiClient';
+import { usersApi } from '../lib/api/usersApi';
+import UserSchema, { type User } from '../../shared/schemas/user';
+import { ReactNode } from "react";
 
-interface AuthContextType {
+const api = new ApiClient();
+const userService = usersApi(api);
+
+type AuthContextType = {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  register: (data: any) => Promise<void>;
-}
+  refresh: () => Promise<void>;
+};
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  login: async () => {},
+  logout: () => {},
+  refresh: async () => {}
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(pb.authStore.model as User | null);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // 🔥 Sincroniza com o authStore
   useEffect(() => {
-    const unsubscribe = pb.authStore.onChange((_token, model) => {
-      setUser(model as User | null);
+    const unsub = api.pb.authStore.onChange(async (_, model) => {
+      if (model) {
+        try {
+          const validated = UserSchema.parse(model);
+          setUser(validated);
+        } catch {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
     });
-    return () => {
-      unsubscribe();
-    };
+
+    // Carrega sessão existente no boot
+    if (api.pb.authStore.model) {
+      try {
+        const validated = UserSchema.parse(api.pb.authStore.model);
+        setUser(validated);
+      } catch {
+        api.pb.authStore.clear();
+        setUser(null);
+      }
+    }
+
+    setLoading(false);
+    return () => unsub();
   }, []);
 
+  // 🔐 LOGIN
   const login = async (email: string, password: string) => {
     setLoading(true);
-    try {
-      await pb.collection('users').authWithPassword(email, password);
-    } finally {
-      setLoading(false);
-    }
+
+    const auth = await api.pb
+      .collection('users')
+      .authWithPassword(email, password);
+
+    const validated = UserSchema.parse(auth.record);
+    setUser(validated);
+
+    setLoading(false);
   };
 
+  // 🔐 LOGOUT
   const logout = () => {
-    pb.authStore.clear();
+    api.pb.authStore.clear();
+    setUser(null);
   };
 
-  const register = async (data: {
-    email: string;
-    password: string;
-    name: string;
-    phone?: string;
-    // ALTERADO: 'barbeiro' -> 'staff'
-    role: 'dono' | 'staff' | 'cliente';
-    passwordConfirm: string;
-  }) => {
-    setLoading(true);
-    try {
-      await pb.collection('users').create({
-        ...data,
-        emailVisibility: true,
-      });
-      await pb.collection('users').authWithPassword(data.email, data.password);
-    } finally {
-      setLoading(false);
-    }
+  // 🔄 REFRESH
+  const refresh = async () => {
+    if (!api.pb.authStore.model?.id) return;
+
+    const latest = await userService.findById(api.pb.authStore.model.id);
+    setUser(latest);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return useContext(AuthContext);
 }
