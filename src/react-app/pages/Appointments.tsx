@@ -47,7 +47,7 @@ export default function Appointments() {
       let activeData = data.filter(a => a.status !== AppointmentStatus.CANCELADO);
 
       activeData = activeData.filter(a => {
-        const apptDate = parseISO(a.start_time); // Converte UTC para Local automaticamente
+        const apptDate = parseISO(a.start_time); // Converte UTC para Local automaticamente atualizado 06/12/2025
         return isSameDay(apptDate, selectedDate);
       });
 
