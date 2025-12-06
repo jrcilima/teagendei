@@ -14,9 +14,9 @@ TEAGENDEI/
 │   │   ├── lib/
 │   │   │   ├── api/
 │   │   │   │   ├── usersApi.ts
-│   │   │   │   ├── shopsApi.ts ##vazio
-│   │   │   │   ├── servicesApi.ts ##vazio
-│   │   │   │   └── appointmentsApi.ts ##vazio
+│   │   │   │   ├── shopsApi.ts 
+│   │   │   │   ├── servicesApi.ts 
+│   │   │   │   └── appointmentsApi.ts 
 │   │   │   ├── api.ts
 │   │   │   ├── apiClient.ts
 │   │   │   ├── pocketbase.ts
