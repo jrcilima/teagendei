@@ -1,3 +1,4 @@
+// src/react-app/pages/BookingPage.tsx
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
@@ -23,26 +24,38 @@ import {
   FileText
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { 
-  addMinutes, 
-  format, 
-  parse, 
-  isBefore, 
-  isAfter, 
-  setHours, 
-  setMinutes, 
-  setSeconds, 
-  isSameDay 
+import {
+  addMinutes,
+  format,
+  parse,
+  isBefore,
+  isAfter,
+  setHours,
+  setMinutes,
+  setSeconds,
+  isSameDay
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-// 🔹 NOVOS IMPORTS PARA SHOP_HOURS
-import ApiClient from '../lib/apiClient';
-import { shopHoursApi } from '../lib/api/shopHoursApi';
-import type { ShopHour } from '../../shared/schemas/shopHours';
+type ShopHourRecord = {
+  id: string;
+  company_id: string;
+  shop_id: string;
+  weekday: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
+  start_time: string; // "HH:mm"
+  end_time: string;   // "HH:mm"
+  is_closed?: boolean;
+};
 
-// 🔹 Agora usamos códigos compatíveis com shop_hours.weekday
-const DAY_KEYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+const PB_WEEKDAY: ShopHourRecord['weekday'][] = [
+  'dom',
+  'seg',
+  'ter',
+  'qua',
+  'qui',
+  'sex',
+  'sab'
+];
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -50,9 +63,6 @@ const formatCurrency = (value: number) => {
     currency: 'BRL'
   }).format(value);
 };
-
-const apiClient = new ApiClient();
-const shopHoursApiClient = shopHoursApi(apiClient);
 
 export default function BookingPage() {
   const { slug } = useParams();
@@ -63,8 +73,7 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<User[]>([]);
 
-  // 🔹 NOVO: horários vindos da tabela shop_hours
-  const [shopHours, setShopHours] = useState<ShopHour[]>([]);
+  const [shopHours, setShopHours] = useState<ShopHourRecord[]>([]);
 
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -75,33 +84,44 @@ export default function BookingPage() {
   );
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
-  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] =
+    useState<string>('');
   const [notes, setNotes] = useState('');
 
-  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
+  const [existingAppointments, setExistingAppointments] = useState<
+    Appointment[]
+  >([]);
 
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
+  // Carrega loja, serviços, staff e shop_hours
   useEffect(() => {
     if (!slug) return;
+
     const loadData = async () => {
       try {
         const shopData = await shopsApi.getBySlug(slug);
         setShop(shopData);
 
-        const [servicesData, staffData, hoursResp] = await Promise.all([
+        const [servicesData, staffData] = await Promise.all([
           servicesApi.listByShop(shopData.id),
-          usersApi.listStaffByShop(shopData.id),
-          shopHoursApiClient.listByShop(shopData.company_id, shopData.id)
+          usersApi.listStaffByShop(shopData.id)
         ]);
 
         setServices(servicesData.filter((s) => s.is_active));
         setStaff(staffData.filter((u) => u.is_professional));
 
-        // 🔹 horários da tabela shop_hours
-        setShopHours(hoursResp.items ?? []);
+        // carrega horários da tabela shop_hours
+        const hours = await pb
+          .collection('shop_hours')
+          .getFullList<ShopHourRecord>({
+            filter: `shop_id = "${shopData.id}"`,
+            sort: 'weekday,start_time'
+          });
+
+        setShopHours(hours);
       } catch (error) {
         console.error('Erro ao carregar loja:', error);
         alert('Loja não encontrada ou indisponível.');
@@ -109,9 +129,11 @@ export default function BookingPage() {
         setLoading(false);
       }
     };
+
     loadData();
   }, [slug]);
 
+  // Carrega agendamentos existentes do dia selecionado
   useEffect(() => {
     if (!shop || !selectedDate || step !== 3) return;
 
@@ -119,7 +141,8 @@ export default function BookingPage() {
       setSlotsLoading(true);
       try {
         const searchDate = new Date(`${selectedDate}T00:00:00`);
-        const appts = (await appointmentsApi.listByShopAndDate(shop.id, searchDate)) || [];
+        const appts =
+          (await appointmentsApi.listByShopAndDate(shop.id, searchDate)) || [];
 
         const activeAppts = Array.isArray(appts)
           ? appts.filter((a) => a.status !== AppointmentStatus.CANCELADO)
@@ -136,38 +159,37 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
+  // Gera slots com base em shop_hours (e não mais em shop.business_hours)
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
     const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
-    const dayOfWeek = dateObj.getDay(); // 0..6
-    const dayKey = DAY_KEYS[dayOfWeek]; // 'dom'..'sab'
+    const dayOfWeek = dateObj.getDay(); // 0-6
+    const weekdayPb = PB_WEEKDAY[dayOfWeek];
 
-    // 🔹 usa shop_hours da tabela, não mais shop.business_hours
-    const dayHours = shopHours.filter(h => h.weekday === dayKey);
+    const intervals = shopHours.filter(
+      (h) => h.weekday === weekdayPb && !h.is_closed
+    );
 
-    // sem horário configurado ou todos fechados
-    if (dayHours.length === 0 || dayHours.every(h => h.is_closed)) {
-      return [];
-    }
+    if (!intervals.length) return [];
 
     const slots: string[] = [];
     const now = new Date();
     const isToday = isSameDay(dateObj, now);
     const minAdvance = shop.min_advance_time ?? 30;
 
-    for (const h of dayHours) {
-      if (h.is_closed) continue;
+    for (const interval of intervals) {
+      const { start_time, end_time } = interval;
+      if (!start_time || !end_time) continue;
 
-      const startDate = parse(h.start_time, 'HH:mm', dateObj);
-      const endDate = parse(h.end_time, 'HH:mm', dateObj);
-
-      let currentSlot = startDate;
+      let currentSlot = parse(start_time, 'HH:mm', dateObj);
+      const endDate = parse(end_time, 'HH:mm', dateObj);
 
       while (
         isBefore(addMinutes(currentSlot, selectedService.duration), endDate) ||
         currentSlot.getTime() === endDate.getTime()
       ) {
+        // respeita antecedência mínima
         if (isToday && isBefore(currentSlot, addMinutes(now, minAdvance))) {
           currentSlot = addMinutes(currentSlot, 30);
           continue;
@@ -182,7 +204,9 @@ export default function BookingPage() {
           const apptStart = new Date(appt.start_time);
           const apptEnd = new Date(appt.end_time);
 
-          return isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart);
+          return (
+            isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart)
+          );
         });
 
         if (!isBlocked) {
@@ -193,8 +217,16 @@ export default function BookingPage() {
       }
     }
 
-    return slots;
-  }, [shop, selectedDate, selectedService, existingAppointments, selectedStaff, shopHours]);
+    // remove duplicados se houver sobreposição de intervalos
+    return Array.from(new Set(slots)).sort();
+  }, [
+    shop,
+    selectedDate,
+    selectedService,
+    existingAppointments,
+    selectedStaff,
+    shopHours
+  ]);
 
   const handleBooking = async () => {
     if (!user) {
@@ -203,8 +235,17 @@ export default function BookingPage() {
       return;
     }
 
-    if (!shop?.id || !selectedService?.id || !selectedStaff?.id || !selectedTime || !user.id || !selectedPaymentMethodId) {
-      alert('Por favor, preencha todos os campos, incluindo a forma de pagamento.');
+    if (
+      !shop?.id ||
+      !selectedService?.id ||
+      !selectedStaff?.id ||
+      !selectedTime ||
+      !user.id ||
+      !selectedPaymentMethodId
+    ) {
+      alert(
+        'Por favor, preencha todos os campos, incluindo a forma de pagamento.'
+      );
       return;
     }
 
@@ -212,13 +253,16 @@ export default function BookingPage() {
     try {
       const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
       const [hours, minutes] = selectedTime.split(':').map(Number);
-      
+
       const startDate = setSeconds(setMinutes(setHours(baseDate, hours), minutes), 0);
       const endDate = addMinutes(startDate, selectedService.duration);
 
-      const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
-      
-      const hasConflict = latestAppointments.some(appt => {
+      const latestAppointments = await appointmentsApi.listByShopAndDate(
+        shop.id,
+        baseDate
+      );
+
+      const hasConflict = latestAppointments.some((appt) => {
         if (appt.status === AppointmentStatus.CANCELADO) return false;
         if (appt.barber_id !== selectedStaff.id) return false;
 
@@ -239,11 +283,11 @@ export default function BookingPage() {
         service_id: selectedService.id,
         start_time: startDate.toISOString(),
         end_time: endDate.toISOString(),
-        status: AppointmentStatus.AGENDADO, 
-        payment_status: PaymentStatus.NAO_PAGO, 
+        status: AppointmentStatus.AGENDADO,
+        payment_status: PaymentStatus.NAO_PAGO,
         total_amount: Number(selectedService.price),
-        payment_method: selectedPaymentMethodId, 
-        notes: notes,
+        payment_method: selectedPaymentMethodId,
+        notes: notes
       };
 
       await appointmentsApi.create(payload);
@@ -252,15 +296,23 @@ export default function BookingPage() {
       navigate('/client');
     } catch (error: any) {
       console.error('Erro ao agendar:', error);
-      
-      if (error.message === 'SLOT_TAKEN' || error?.data?.code === 400 || JSON.stringify(error).includes('unique_active_booking')) {
-        alert("Ops! Este horário acabou de ser ocupado por outra pessoa. A lista será atualizada.");
+
+      if (
+        error.message === 'SLOT_TAKEN' ||
+        error?.data?.code === 400 ||
+        JSON.stringify(error).includes('unique_active_booking')
+      ) {
+        alert(
+          'Ops! Este horário acabou de ser ocupado por outra pessoa. A lista será atualizada.'
+        );
         const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
-        const appts = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
-        setExistingAppointments(appts.filter(a => a.status !== AppointmentStatus.CANCELADO));
+        const appts = await appointmentsApi.listByShopAndDate(shop!.id, baseDate);
+        setExistingAppointments(
+          appts.filter((a) => a.status !== AppointmentStatus.CANCELADO)
+        );
         setStep(3);
       } else {
-        let msg = error?.message || 'Erro desconhecido.';
+        const msg = error?.message || 'Erro desconhecido.';
         alert(`Falha ao agendar: ${msg}`);
       }
     } finally {
@@ -280,7 +332,9 @@ export default function BookingPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800">Loja não encontrada</h1>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Loja não encontrada
+          </h1>
         </div>
       </div>
     );
@@ -534,8 +588,12 @@ export default function BookingPage() {
                 <div className="flex justify-between">
                   <span className="text-gray-500">Data/Hora</span>
                   <span className="font-medium text-gray-900 text-right capitalize">
-                    {format(parse(selectedDate, 'yyyy-MM-dd', new Date()), "EEE, d 'de' MMM", { locale: ptBR })}
-                    {' '}às {selectedTime}
+                    {format(
+                      parse(selectedDate, 'yyyy-MM-dd', new Date()),
+                      "EEE, d 'de' MMM",
+                      { locale: ptBR }
+                    )}{' '}
+                    às {selectedTime}
                   </span>
                 </div>
               </div>
