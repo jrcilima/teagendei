@@ -25,8 +25,8 @@ export default function ServiceForm() {
     duration: 30,
     category_id: '',
     is_active: true,
-    required_staff: 1,
-    buffer_time: 0
+    //required_staff: 1,
+    //buffer_time: 0
   });
 
   useEffect(() => {

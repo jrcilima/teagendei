@@ -36,16 +36,7 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-type DaySchedule = {
-  open: boolean;
-  start: string;
-  end: string;
-};
-
-type BusinessHours = {
-  [key: string]: DaySchedule;
-};
-
+// Mapeamento para o JSON business_hours salvo pelo Settings.tsx
 const DAY_KEYS = [
   'sunday',
   'monday',
@@ -103,6 +94,7 @@ export default function BookingPage() {
         ]);
 
         setServices(servicesData.filter((s) => s.is_active));
+        // Filtra apenas usuários marcados como profissionais
         setStaff(staffData.filter((u) => u.is_professional));
       } catch (error) {
         console.error('Erro ao carregar loja:', error);
@@ -114,6 +106,7 @@ export default function BookingPage() {
     loadData();
   }, [slug]);
 
+  // Carrega agendamentos existentes quando a data ou staff muda
   useEffect(() => {
     if (!shop || !selectedDate || step !== 3) return;
 
@@ -138,16 +131,19 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
+  // Lógica de Geração de Slots baseada no JSON business_hours
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
 
     const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
-    const dayOfWeek = dateObj.getDay();
-    const dayKey = DAY_KEYS[dayOfWeek];
+    const dayOfWeek = dateObj.getDay(); // 0 (Domingo) a 6 (Sábado)
+    const dayKey = DAY_KEYS[dayOfWeek]; // 'sunday', 'monday'...
 
-    const businessHours = (shop.business_hours || {}) as BusinessHours;
+    // Acessa o JSON business_hours
+    const businessHours = shop.business_hours as any;
 
-    if (!businessHours[dayKey] || !businessHours[dayKey].open) {
+    // Verifica se existe configuração para o dia e se está aberto
+    if (!businessHours || !businessHours[dayKey] || !businessHours[dayKey].open) {
       return [];
     }
 
@@ -161,10 +157,14 @@ export default function BookingPage() {
     let currentSlot = startDate;
     const now = new Date();
     const isToday = isSameDay(dateObj, now);
-    
-    const minAdvance = shop.min_advance_time ?? 30; 
+    const minAdvance = shop.min_advance_time ?? 30;
 
-    while (isBefore(addMinutes(currentSlot, selectedService.duration), endDate) || currentSlot.getTime() === endDate.getTime()) {
+    // Loop para gerar slots
+    while (
+      isBefore(addMinutes(currentSlot, selectedService.duration), endDate) ||
+      currentSlot.getTime() === endDate.getTime()
+    ) {
+      // Regra de antecedência mínima para o dia atual
       if (isToday && isBefore(currentSlot, addMinutes(now, minAdvance))) {
         currentSlot = addMinutes(currentSlot, 30);
         continue;
@@ -173,12 +173,15 @@ export default function BookingPage() {
       const slotStart = currentSlot;
       const slotEnd = addMinutes(currentSlot, selectedService.duration);
 
+      // Verifica conflito com agendamentos existentes
       const isBlocked = existingAppointments.some((appt) => {
+        // Se escolheu um staff específico, ignora agendamentos de outros
         if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
         const apptStart = new Date(appt.start_time);
         const apptEnd = new Date(appt.end_time);
 
+        // Lógica de colisão de horário
         return isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart);
       });
 
@@ -186,6 +189,7 @@ export default function BookingPage() {
         slots.push(format(currentSlot, 'HH:mm'));
       }
 
+      // Intervalo fixo de 30 min entre slots (pode ser parametrizável depois)
       currentSlot = addMinutes(currentSlot, 30);
     }
 
@@ -212,6 +216,7 @@ export default function BookingPage() {
       const startDate = setSeconds(setMinutes(setHours(baseDate, hours), minutes), 0);
       const endDate = addMinutes(startDate, selectedService.duration);
 
+      // Verificação final de conflito no backend (simulada via listagem recente)
       const latestAppointments = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
       
       const hasConflict = latestAppointments.some(appt => {
@@ -251,10 +256,11 @@ export default function BookingPage() {
       
       if (error.message === 'SLOT_TAKEN' || error?.data?.code === 400 || JSON.stringify(error).includes('unique_active_booking')) {
         alert("Ops! Este horário acabou de ser ocupado por outra pessoa. A lista será atualizada.");
+        // Atualiza a lista para o usuário ver o novo bloqueio
         const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
         const appts = await appointmentsApi.listByShopAndDate(shop.id, baseDate);
         setExistingAppointments(appts.filter(a => a.status !== AppointmentStatus.CANCELADO));
-        setStep(3);
+        setStep(3); // Volta para seleção de horário
       } else {
         let msg = error?.message || 'Erro desconhecido.';
         alert(`Falha ao agendar: ${msg}`);
@@ -283,6 +289,7 @@ export default function BookingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Header Fixo */}
       <div className="bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-4">
@@ -310,6 +317,7 @@ export default function BookingPage() {
       </div>
 
       <div className="max-w-2xl mx-auto p-4">
+        {/* STEP 1: Serviços */}
         {step === 1 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -369,6 +377,7 @@ export default function BookingPage() {
           </div>
         )}
 
+        {/* STEP 2: Profissional */}
         {step === 2 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -393,7 +402,6 @@ export default function BookingPage() {
                   <div className="w-16 h-16 bg-gray-100 rounded-full mb-3 flex items-center justify-center overflow-hidden border-2 border-transparent group-hover:border-purple-200 transition-colors">
                     {professional.avatar ? (
                       <img
-                        // CORREÇÃO: Uso de pb.baseUrl em vez de import.meta
                         src={`${pb.baseUrl}/api/files/users/${professional.id}/${professional.avatar}`}
                         alt={professional.name}
                         className="w-full h-full object-cover"
@@ -406,9 +414,7 @@ export default function BookingPage() {
                     {professional.name}
                   </h3>
                   <p className="text-xs text-gray-500 mt-1">
-                    {professional.role === 'dono'
-                      ? 'Especialista'
-                      : 'Profissional'}
+                    {professional.role === 'dono' ? 'Especialista' : 'Profissional'}
                   </p>
                 </div>
               ))}
@@ -416,6 +422,7 @@ export default function BookingPage() {
           </div>
         )}
 
+        {/* STEP 3: Data e Hora */}
         {step === 3 && (
           <div className="space-y-6 animate-fade-in">
             <div className="mb-4">
@@ -482,7 +489,7 @@ export default function BookingPage() {
                   <p className="text-sm text-gray-400">
                     {slotsLoading
                       ? 'Aguarde um instante.'
-                      : 'Tente selecionar outra data.'}
+                      : 'Tente selecionar outra data ou unidade fechada.'}
                   </p>
                 </div>
               )}
@@ -502,6 +509,7 @@ export default function BookingPage() {
           </div>
         )}
 
+        {/* STEP 4: Confirmação */}
         {step === 4 && selectedService && selectedStaff && (
           <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-6">
