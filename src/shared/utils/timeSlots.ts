@@ -1,34 +1,105 @@
-export function generateTimeSlots(
-  businessHours: Record<string, { start: string; end: string }[]>,
+import type { ShopHour } from "../../shared/schemas/shopHours";
+
+export type TimeSlot = {
+  start: Date;
+  end: Date;
+};
+
+/**
+ * Converte "HH:MM" para Date
+ */
+function timeToDate(baseDate: Date, time: string): Date {
+  const [h, m] = time.split(":").map(Number);
+  const result = new Date(baseDate);
+  result.setHours(h, m, 0, 0);
+  return result;
+}
+
+/**
+ * Gera slots entre dois horários
+ */
+function generateSlotsInInterval(
   date: Date,
-  duration: number
-) {
-  const weekday = date.toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+  start: string,
+  end: string,
+  serviceDuration: number
+): TimeSlot[] {
+  const startDate = timeToDate(date, start);
+  const endDate = timeToDate(date, end);
 
-  const dayConfig = businessHours[weekday];
-  if (!dayConfig) return [];
+  const slots: TimeSlot[] = [];
+  let cursor = new Date(startDate);
 
-  const slots: string[] = [];
+  while (cursor.getTime() + serviceDuration * 60000 <= endDate.getTime()) {
+    const slotEnd = new Date(cursor.getTime() + serviceDuration * 60000);
+    slots.push({ start: new Date(cursor), end: slotEnd });
 
-  for (const interval of dayConfig) {
-    const start = toMinutes(interval.start);
-    const end = toMinutes(interval.end);
-
-    for (let t = start; t + duration <= end; t += duration) {
-      slots.push(fromMinutes(t));
-    }
+    cursor = new Date(cursor.getTime() + serviceDuration * 60000);
   }
 
   return slots;
 }
 
-function toMinutes(time: string) {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+/**
+ * Filtra shop_hours por dia da semana
+ */
+export function getHoursForWeekday(
+  allHours: ShopHour[],
+  weekday: string
+): ShopHour[] {
+  return allHours.filter((h) => h.weekday === weekday);
 }
 
-function fromMinutes(total: number) {
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+/**
+ * Gera slots para um dia específico
+ */
+export function generateDailySlots(
+  date: Date,
+  allHours: ShopHour[],
+  serviceDuration: number
+): TimeSlot[] {
+  const weekday = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"][
+    date.getDay()
+  ];
+
+  const dayHours = getHoursForWeekday(allHours, weekday);
+
+  // loja fechada
+  if (dayHours.some((h) => h.is_closed)) {
+    return [];
+  }
+
+  // gerar slots por intervalo
+  const slots: TimeSlot[] = [];
+
+  for (const h of dayHours) {
+    slots.push(
+      ...generateSlotsInInterval(date, h.start_time, h.end_time, serviceDuration)
+    );
+  }
+
+  return slots;
+}
+
+/**
+ * Gera slots para vários dias (ex: 7 dias)
+ */
+export function generateSlotsForRange(
+  startDate: Date,
+  days: number,
+  allHours: ShopHour[],
+  serviceDuration: number
+): Record<string, TimeSlot[]> {
+  const result: Record<string, TimeSlot[]> = {};
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + i);
+
+    const key = date.toISOString().split("T")[0];
+
+    result[key] = generateDailySlots(date, allHours, serviceDuration);
+  }
+
+  return result;
 }
