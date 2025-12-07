@@ -1,5 +1,8 @@
 
 
+organize a linha lógica completa da peça, escreva cada etapa do raciocínio, identifique riscos, fortaleça os pontos que são pontos fracos e só depois desenvolva cada tópico por vez!
+
+
 ##Estrutura de pastas do projeto
 TEAGENDEI/
 ├── .wrangler/
@@ -14,9 +17,9 @@ TEAGENDEI/
 │   │   ├── lib/
 │   │   │   ├── api/
 │   │   │   │   ├── usersApi.ts
-│   │   │   │   ├── shopsApi.ts 
-│   │   │   │   ├── servicesApi.ts 
-│   │   │   │   └── appointmentsApi.ts 
+│   │   │   │   ├── shopsApi.ts ##vazio
+│   │   │   │   ├── servicesApi.ts ##vazio
+│   │   │   │   └── appointmentsApi.ts ##vazio
 │   │   │   ├── api.ts
 │   │   │   ├── apiClient.ts
 │   │   │   ├── pocketbase.ts
@@ -47,6 +50,8 @@ TEAGENDEI/
 │   	│   ├── service.ts
 │   	│   ├── shop.ts
 │   	│   └── user.ts
+│       ├── utils/
+│       │   └── timeSlots.ts
 │       └── types.ts
 ├── .env
 ├── .env.local

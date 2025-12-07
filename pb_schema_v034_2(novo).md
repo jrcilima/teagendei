@@ -1536,6 +1536,136 @@
     "system": false
   },
   {
+    "id": "pbc_3015497551",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "@request.auth.id != \"\" &&\n@request.auth.role = \"dono\" &&\nshop_id.owner_id = @request.auth.id\n",
+    "updateRule": "@request.auth.id != \"\" &&\n@request.auth.role = \"dono\" &&\nshop_id.owner_id = @request.auth.id\n",
+    "deleteRule": "@request.auth.id != \"\" &&\n@request.auth.role = \"dono\" &&\nshop_id.owner_id = @request.auth.id\n",
+    "name": "shop_hours",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_3866053794",
+        "hidden": false,
+        "id": "relation2543524566",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "company_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_3896301928",
+        "hidden": false,
+        "id": "relation1293337821",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "shop_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "select1267652495",
+        "maxSelect": 1,
+        "name": "weekday",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "select",
+        "values": [
+          "dom",
+          "seg",
+          "ter",
+          "qua",
+          "qui",
+          "sex",
+          "sab"
+        ]
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text1345189255",
+        "max": 0,
+        "min": 0,
+        "name": "start_time",
+        "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text1096160257",
+        "max": 0,
+        "min": 0,
+        "name": "end_time",
+        "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
+        "presentable": false,
+        "primaryKey": false,
+        "required": true,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "hidden": false,
+        "id": "bool1418641467",
+        "name": "is_closed",
+        "presentable": false,
+        "required": false,
+        "system": false,
+        "type": "bool"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [],
+    "system": false
+  },
+  {
     "id": "pbc_3896301928",
     "listRule": "is_active = true || owner_id = @request.auth.id || company_id.owner_id = @request.auth.id || id = @request.auth.shop_id",
     "viewRule": "is_active = true || owner_id = @request.auth.id || company_id.owner_id = @request.auth.id || id = @request.auth.shop_id",
