@@ -1611,7 +1611,7 @@
         "max": 0,
         "min": 0,
         "name": "start_time",
-        "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
+        "pattern": "^\\d{2}:\\d{2}$",
         "presentable": false,
         "primaryKey": false,
         "required": true,
@@ -1625,7 +1625,7 @@
         "max": 0,
         "min": 0,
         "name": "end_time",
-        "pattern": "^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$",
+        "pattern": "^\\d{2}:\\d{2}$",
         "presentable": false,
         "primaryKey": false,
         "required": true,
@@ -1662,7 +1662,9 @@
         "type": "autodate"
       }
     ],
-    "indexes": [],
+    "indexes": [
+      "CREATE INDEX `idx_zCmYoRIcSW` ON `shop_hours` (\n  `company_id`,\n  `shop_id`,\n  `weekday`\n)"
+    ],
     "system": false
   },
   {
