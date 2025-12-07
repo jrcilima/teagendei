@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import ApiClient from "../lib/apiClient";
 import { shopsApi } from "../lib/api/shopsApi";
 import ShopSchema, { type Shop } from "../../shared/schemas/shop";
