@@ -36,25 +36,13 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-type DaySchedule = {
-  open: boolean;
-  start: string;
-  end: string;
-};
+// 🔹 NOVOS IMPORTS PARA SHOP_HOURS
+import ApiClient from '../lib/apiClient';
+import { shopHoursApi } from '../lib/api/shopHoursApi';
+import type { ShopHour } from '../../shared/schemas/shopHours';
 
-type BusinessHours = {
-  [key: string]: DaySchedule;
-};
-
-const DAY_KEYS = [
-  'sunday',
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday'
-];
+// 🔹 Agora usamos códigos compatíveis com shop_hours.weekday
+const DAY_KEYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -62,6 +50,9 @@ const formatCurrency = (value: number) => {
     currency: 'BRL'
   }).format(value);
 };
+
+const apiClient = new ApiClient();
+const shopHoursApiClient = shopHoursApi(apiClient);
 
 export default function BookingPage() {
   const { slug } = useParams();
@@ -71,6 +62,9 @@ export default function BookingPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<User[]>([]);
+
+  // 🔹 NOVO: horários vindos da tabela shop_hours
+  const [shopHours, setShopHours] = useState<ShopHour[]>([]);
 
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -97,13 +91,17 @@ export default function BookingPage() {
         const shopData = await shopsApi.getBySlug(slug);
         setShop(shopData);
 
-        const [servicesData, staffData] = await Promise.all([
+        const [servicesData, staffData, hoursResp] = await Promise.all([
           servicesApi.listByShop(shopData.id),
-          usersApi.listStaffByShop(shopData.id)
+          usersApi.listStaffByShop(shopData.id),
+          shopHoursApiClient.listByShop(shopData.company_id, shopData.id)
         ]);
 
         setServices(servicesData.filter((s) => s.is_active));
         setStaff(staffData.filter((u) => u.is_professional));
+
+        // 🔹 horários da tabela shop_hours
+        setShopHours(hoursResp.items ?? []);
       } catch (error) {
         console.error('Erro ao carregar loja:', error);
         alert('Loja não encontrada ou indisponível.');
@@ -142,55 +140,61 @@ export default function BookingPage() {
     if (!shop || !selectedDate || !selectedService) return [];
 
     const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
-    const dayOfWeek = dateObj.getDay();
-    const dayKey = DAY_KEYS[dayOfWeek];
+    const dayOfWeek = dateObj.getDay(); // 0..6
+    const dayKey = DAY_KEYS[dayOfWeek]; // 'dom'..'sab'
 
-    const businessHours = (shop.business_hours || {}) as BusinessHours;
+    // 🔹 usa shop_hours da tabela, não mais shop.business_hours
+    const dayHours = shopHours.filter(h => h.weekday === dayKey);
 
-    if (!businessHours[dayKey] || !businessHours[dayKey].open) {
+    // sem horário configurado ou todos fechados
+    if (dayHours.length === 0 || dayHours.every(h => h.is_closed)) {
       return [];
     }
 
-    const { start, end } = businessHours[dayKey];
-    if (!start || !end) return [];
-
     const slots: string[] = [];
-    const startDate = parse(start, 'HH:mm', dateObj);
-    const endDate = parse(end, 'HH:mm', dateObj);
-
-    let currentSlot = startDate;
     const now = new Date();
     const isToday = isSameDay(dateObj, now);
-    
-    const minAdvance = shop.min_advance_time ?? 30; 
+    const minAdvance = shop.min_advance_time ?? 30;
 
-    while (isBefore(addMinutes(currentSlot, selectedService.duration), endDate) || currentSlot.getTime() === endDate.getTime()) {
-      if (isToday && isBefore(currentSlot, addMinutes(now, minAdvance))) {
+    for (const h of dayHours) {
+      if (h.is_closed) continue;
+
+      const startDate = parse(h.start_time, 'HH:mm', dateObj);
+      const endDate = parse(h.end_time, 'HH:mm', dateObj);
+
+      let currentSlot = startDate;
+
+      while (
+        isBefore(addMinutes(currentSlot, selectedService.duration), endDate) ||
+        currentSlot.getTime() === endDate.getTime()
+      ) {
+        if (isToday && isBefore(currentSlot, addMinutes(now, minAdvance))) {
+          currentSlot = addMinutes(currentSlot, 30);
+          continue;
+        }
+
+        const slotStart = currentSlot;
+        const slotEnd = addMinutes(currentSlot, selectedService.duration);
+
+        const isBlocked = existingAppointments.some((appt) => {
+          if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
+
+          const apptStart = new Date(appt.start_time);
+          const apptEnd = new Date(appt.end_time);
+
+          return isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart);
+        });
+
+        if (!isBlocked) {
+          slots.push(format(currentSlot, 'HH:mm'));
+        }
+
         currentSlot = addMinutes(currentSlot, 30);
-        continue;
       }
-
-      const slotStart = currentSlot;
-      const slotEnd = addMinutes(currentSlot, selectedService.duration);
-
-      const isBlocked = existingAppointments.some((appt) => {
-        if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
-
-        const apptStart = new Date(appt.start_time);
-        const apptEnd = new Date(appt.end_time);
-
-        return isBefore(slotStart, apptEnd) && isAfter(slotEnd, apptStart);
-      });
-
-      if (!isBlocked) {
-        slots.push(format(currentSlot, 'HH:mm'));
-      }
-
-      currentSlot = addMinutes(currentSlot, 30);
     }
 
     return slots;
-  }, [shop, selectedDate, selectedService, existingAppointments, selectedStaff]);
+  }, [shop, selectedDate, selectedService, existingAppointments, selectedStaff, shopHours]);
 
   const handleBooking = async () => {
     if (!user) {
@@ -393,7 +397,6 @@ export default function BookingPage() {
                   <div className="w-16 h-16 bg-gray-100 rounded-full mb-3 flex items-center justify-center overflow-hidden border-2 border-transparent group-hover:border-purple-200 transition-colors">
                     {professional.avatar ? (
                       <img
-                        // CORREÇÃO: Uso de pb.baseUrl em vez de import.meta
                         src={`${pb.baseUrl}/api/files/users/${professional.id}/${professional.avatar}`}
                         alt={professional.name}
                         className="w-full h-full object-cover"
