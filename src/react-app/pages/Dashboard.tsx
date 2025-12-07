@@ -1,407 +1,363 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTenant } from '../contexts/TenantContext';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Building2, Store, ArrowRight, Loader2, AlertTriangle, Clock, CreditCard } from 'lucide-react';
-import { companiesApi, shopsApi, segmentsApi, authApi } from '../lib/api';
-import { Segment, Shop } from '../../shared/types';
-import { z } from 'zod';
+import { useTenant } from '../contexts/TenantContext';
+import { Link } from 'react-router-dom';
+import { 
+  Calendar, 
+  Store, 
+  Users, 
+  Settings, 
+  TrendingUp, 
+  DollarSign,
+  Clock,
+  LogOut,
+  Loader2,
+  Plus
+} from 'lucide-react';
+import { Service, AppointmentStatus } from '../../shared/types';
+import { servicesApi, appointmentsApi, usersApi } from '../lib/api';
 
-const companySchema = z.object({
-  legal_name: z.string().min(3, "Razão social deve ter no mínimo 3 caracteres"),
-  cnpj: z.string().length(14, "CNPJ deve conter exatamente 14 números"),
-});
-
-const shopSchema = z.object({
-  name: z.string().min(3, "Nome da unidade deve ter no mínimo 3 caracteres"),
-  slug: z.string()
-    .min(3, "URL deve ter no mínimo 3 caracteres")
-    .regex(/^[a-z0-9-]+$/, "URL deve conter apenas letras minúsculas, números e hífens"),
-  segment_id: z.string().min(1, "Selecione um segmento"),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  description: z.string().optional(),
-  pix_key_type: z.enum(['aleatoria', 'email', 'cnpj', 'cpf', 'telefone']),
-  pix_key: z.string().optional(),
-  min_advance_time: z.number().min(0, "Tempo mínimo não pode ser negativo"),
-  max_advance_time: z.number().min(1, "Agenda deve abrir pelo menos 1 dia"),
-});
-
-type CompanyFormData = z.infer<typeof companySchema>;
-type ShopFormData = z.infer<typeof shopSchema>;
-
-export default function Onboarding() {
-  const { refreshCompany, refreshShops, company, shops } = useTenant();
-  const { user } = useAuth();
-  const navigate = useNavigate();
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const { company, shops, selectedShop, setSelectedShop, loading: tenantLoading } = useTenant();
   
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [segments, setSegments] = useState<Segment[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [servicesLoading, setServicesLoading] = useState(false);
 
-  const [companyData, setCompanyData] = useState<CompanyFormData>({
-    legal_name: '',
-    cnpj: '',
+  const [stats, setStats] = useState({
+    appointmentsToday: 0,
+    revenueToday: 0,
+    activeProfessionals: 0,
+    occupancyRate: 0
   });
-
-  const [shopData, setShopData] = useState<ShopFormData>({
-    name: '',
-    slug: '',
-    segment_id: '',
-    phone: '',
-    address: '',
-    description: '',
-    pix_key_type: 'aleatoria',
-    pix_key: '',
-    min_advance_time: 30,
-    max_advance_time: 30,
-  });
+  const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
-    segmentsApi.list().then(setSegments).catch(console.error);
-  }, []);
+    let mounted = true;
 
-  useEffect(() => {
-    if (company && shops.length === 0) {
-      setStep(2);
-    }
-  }, [company, shops]);
+    const loadDashboardData = async () => {
+      if (!selectedShop) return;
 
-  const handleCompanySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    setError('');
+      setServicesLoading(true);
+      setStatsLoading(true);
 
-    const validation = companySchema.safeParse(companyData);
-    if (!validation.success) {
-      setError(validation.error.errors[0].message);
-      return;
-    }
-    
-    setLoading(true);
+      try {
+        const servicesData = await servicesApi.listByShop(selectedShop.id);
+        if (mounted) setServices(servicesData);
 
-    try {
-      const newCompany = await companiesApi.create({
-        ...companyData,
-        owner_id: user.id,
-        plan_status: 'trial'
-      });
-      
-      await authApi.updateProfile(user.id, {
-        company_id: newCompany.id,
-        role: 'dono'
-      });
+        const appointmentsData = await appointmentsApi.listToday(selectedShop.id);
+        const staffData = await usersApi.listStaffByShop(selectedShop.id);
 
-      await refreshCompany();
-      setStep(2);
-    } catch (err: any) {
-      console.error("Erro criar empresa:", err);
-      setError(err.message || 'Erro ao criar empresa.');
-    } finally {
-      setLoading(false);
-    }
-  };
+        if (mounted) {
+          // ATUALIZADO: Comparação com string
+          let activeAppointments = appointmentsData.filter(appt => appt.status !== AppointmentStatus.CANCELADO);
 
-  const handleShopSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!company || !user) {
-      setError('Empresa não encontrada. Recarregue a página.');
-      return;
-    }
-    setError('');
+          if (user?.role === 'staff') {
+            activeAppointments = activeAppointments.filter(appt => appt.barber_id === user.id);
+          }
 
-    const validation = shopSchema.safeParse(shopData);
-    if (!validation.success) {
-      setError(validation.error.errors[0].message);
-      return;
-    }
+          const revenue = activeAppointments.reduce((acc: number, curr: any) => acc + (curr.total_amount || 0), 0);
 
-    setLoading(true);
+          const staffCount = user?.role === 'staff' ? 1 : staffData.length;
+          const totalCapacity = staffCount * 8; 
+          const occupied = activeAppointments.length;
+          const occupancy = totalCapacity > 0 ? Math.round((occupied / totalCapacity) * 100) : 0;
 
-    try {
-      // CORREÇÃO: manager_id removido para compatibilidade com Schema v0.34
-      const apiPayload: Partial<Shop> = {
-        ...shopData,
-        company_id: company.id,
-        owner_id: user.id,
-        is_active: true,
-      };
+          setStats({
+            appointmentsToday: activeAppointments.length,
+            revenueToday: revenue,
+            activeProfessionals: staffData.length,
+            occupancyRate: occupancy
+          });
+        }
 
-      await shopsApi.create(apiPayload);
-      
-      await refreshShops();
-      navigate('/dashboard');
-    } catch (err: any) {
-      console.error("Erro criar unidade:", err);
-      if (err.data?.data?.slug) {
-        setError('Esta URL personalizada já está em uso. Escolha outra.');
-      } else {
-        setError(err.message || 'Erro ao criar unidade.');
+      } catch (error) {
+        console.error("Erro ao carregar dados do dashboard:", error);
+      } finally {
+        if (mounted) {
+          setServicesLoading(false);
+          setStatsLoading(false);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
-  };
+    loadDashboardData();
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4 py-12">
-      <div className="w-full max-w-2xl">
-        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
-          
-          <div className="flex items-center justify-center mb-8">
-            <div className={`flex items-center ${step === 1 ? 'text-purple-400' : 'text-green-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 1 ? 'bg-purple-500 text-white' : 'bg-green-500 text-white'}`}>
-                {step === 1 ? '1' : '✓'}
-              </div>
-              <span className="ml-2 font-medium">Empresa</span>
-            </div>
-            <div className="w-12 h-0.5 bg-white/20 mx-4"></div>
-            <div className={`flex items-center ${step === 2 ? 'text-purple-400' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 2 ? 'bg-purple-500 text-white' : 'bg-white/20 text-gray-500'}`}>
-                2
-              </div>
-              <span className="ml-2 font-medium">Unidade</span>
-            </div>
+    return () => { mounted = false; };
+  }, [selectedShop, user]);
+
+  if (tenantLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      </div>
+    );
+  }
+
+  if (!company) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
+          <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Store className="w-8 h-8 text-purple-600" />
           </div>
-
-          {step === 1 && (
-            <div>
-              <div className="flex items-center justify-center mb-6">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-3 rounded-xl">
-                  <Building2 className="w-8 h-8 text-white" />
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold text-white text-center mb-2">Cadastre sua Empresa</h2>
-              <p className="text-gray-300 text-center mb-8">Dados fiscais da sua organização</p>
-
-              <form onSubmit={handleCompanySubmit} className="space-y-6">
-                {error && (
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm flex items-start gap-2">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-200 mb-2">Razão Social</label>
-                  <input
-                    type="text"
-                    value={companyData.legal_name}
-                    onChange={(e) => setCompanyData({ ...companyData, legal_name: e.target.value })}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Minha Empresa LTDA"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-200 mb-2">CNPJ (Apenas números)</label>
-                  <input
-                    type="text"
-                    value={companyData.cnpj}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '');
-                      if (value.length <= 14) {
-                        setCompanyData({ ...companyData, cnpj: value });
-                      }
-                    }}
-                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="00000000000000"
-                    required
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Continuar <ArrowRight className="w-5 h-5" /></>}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div>
-              <div className="flex items-center justify-center mb-6">
-                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-3 rounded-xl">
-                  <Store className="w-8 h-8 text-white" />
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold text-white text-center mb-2">Configure sua Unidade</h2>
-              
-              <form onSubmit={handleShopSubmit} className="space-y-6">
-                {error && (
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-3 text-red-200 text-sm flex items-start gap-2">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                    <span>{error}</span>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-200 mb-2">Segmento</label>
-                    <select
-                      value={shopData.segment_id}
-                      onChange={(e) => setShopData({ ...shopData, segment_id: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 [&>option]:text-black"
-                      required
-                    >
-                      <option value="">Selecione...</option>
-                      {segments.map(segment => (
-                        <option key={segment.id} value={segment.id}>{segment.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-200 mb-2">Nome da Unidade</label>
-                    <input
-                      type="text"
-                      value={shopData.name}
-                      onChange={(e) => {
-                        const name = e.target.value;
-                        setShopData({ ...shopData, name, slug: generateSlug(name) });
-                      }}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="Ex: Unidade Centro"
-                      required
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-200 mb-2">URL Personalizada</label>
-                    <div className="flex items-center">
-                      <span className="px-4 py-3 bg-white/5 border border-white/20 rounded-l-lg text-gray-400 text-sm">teagendei.com/</span>
-                      <input
-                        type="text"
-                        value={shopData.slug}
-                        onChange={(e) => setShopData({ ...shopData, slug: e.target.value })}
-                        className="flex-1 px-4 py-3 bg-white/10 border border-white/20 border-l-0 rounded-r-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-200 mb-2">Telefone</label>
-                    <input
-                      type="tel"
-                      value={shopData.phone}
-                      onChange={(e) => setShopData({ ...shopData, phone: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="(00) 00000-0000"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-200 mb-2">Endereço</label>
-                    <input
-                      type="text"
-                      value={shopData.address}
-                      onChange={(e) => setShopData({ ...shopData, address: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      placeholder="Rua, Número, Bairro"
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-200 mb-2">Descrição</label>
-                    <textarea
-                      value={shopData.description}
-                      onChange={(e) => setShopData({ ...shopData, description: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 h-20 resize-none"
-                      placeholder="Uma breve descrição do seu negócio..."
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t border-white/10 pt-4">
-                  <div className="flex items-center gap-2 mb-4 text-purple-300">
-                    <CreditCard className="w-5 h-5" />
-                    <span className="font-medium">Configuração Pix</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-2">Tipo de Chave</label>
-                      <select
-                        value={shopData.pix_key_type}
-                        onChange={(e) => setShopData({ ...shopData, pix_key_type: e.target.value as any })}
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 [&>option]:text-black"
-                      >
-                        <option value="cpf">CPF</option>
-                        <option value="cnpj">CNPJ</option>
-                        <option value="email">Email</option>
-                        <option value="telefone">Telefone</option>
-                        <option value="aleatoria">Chave Aleatória</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-200 mb-2">Chave Pix</label>
-                      <input
-                        type="text"
-                        value={shopData.pix_key}
-                        onChange={(e) => setShopData({ ...shopData, pix_key: e.target.value })}
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="Insira sua chave Pix"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t border-white/10 pt-4">
-                  <div className="flex items-center gap-2 mb-4 text-purple-300">
-                    <Clock className="w-5 h-5" />
-                    <span className="font-medium">Regras de Agendamento</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-2" title="Tempo mínimo antes do agendamento">
-                        Antecedência Mín. (min)
-                      </label>
-                      <input
-                        type="number"
-                        value={shopData.min_advance_time}
-                        onChange={(e) => setShopData({ ...shopData, min_advance_time: Number(e.target.value) })}
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-200 mb-2" title="Até quantos dias para frente a agenda abre">
-                        Agenda Aberta (dias)
-                      </label>
-                      <input
-                        type="number"
-                        value={shopData.max_advance_time}
-                        onChange={(e) => setShopData({ ...shopData, max_advance_time: Number(e.target.value) })}
-                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="1"
-                      />
-                    </div>
-                  </div>
-                </div>
-                 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all disabled:opacity-50"
-                >
-                  {loading ? 'Finalizando...' : 'Finalizar Cadastro'}
-                </button>
-              </form>
-            </div>
-          )}
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Você ainda não possui uma empresa cadastrada
+          </h2>
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">Complete seu cadastro para começar a usar o sistema e gerenciar seus agendamentos.</p>
+          <Link
+            to="/onboarding"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Cadastrar Empresa <Plus className="w-5 h-5" />
+          </Link>
         </div>
       </div>
+    );
+  }
+
+  if (shops.length === 0) {
+     return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center p-8 bg-white rounded-xl shadow-md border border-gray-200">
+          <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Store className="w-8 h-8 text-orange-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Cadastre sua primeira unidade
+          </h2>
+          <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            Sua empresa <strong>{company.legal_name}</strong> foi criada, mas você precisa adicionar uma unidade (loja) para começar a operar.
+          </p>
+          <Link
+            to="/onboarding"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            Criar Unidade <Plus className="w-5 h-5" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Teagendei</h1>
+              <p className="text-sm text-gray-600">{company.legal_name}</p>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              {shops.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedShop?.id || ''}
+                    onChange={(e) => {
+                      const shop = shops.find(s => s.id === e.target.value);
+                      setSelectedShop(shop || null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                  >
+                    {shops.map(shop => (
+                      <option key={shop.id} value={shop.id}>
+                        {shop.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end">
+                  <span className="text-sm font-medium text-gray-700">{user?.name}</span>
+                  <span className="text-xs text-gray-500 capitalize">{user?.role}</span>
+                </div>
+                <button
+                  onClick={logout}
+                  className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Sair"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2 bg-purple-100 rounded-lg">
+                <Calendar className="w-6 h-6 text-purple-600" />
+              </div>
+              <TrendingUp className="w-5 h-5 text-green-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">
+              {statsLoading ? '-' : stats.appointmentsToday}
+            </h3>
+            <p className="text-sm text-gray-600">Agendamentos Hoje</p>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <DollarSign className="w-6 h-6 text-green-600" />
+              </div>
+              <TrendingUp className="w-5 h-5 text-green-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-1">
+              {statsLoading ? '-' : `R$ ${stats.revenueToday.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            </h3>
+            <p className="text-sm text-gray-600">
+              {user?.role === 'staff' ? 'Meu Faturamento Hoje' : 'Faturamento Hoje'}
+            </p>
+          </div>
+
+          {user?.role === 'dono' && (
+            <>
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+                 <div className="flex items-center justify-between mb-4">
+                   <div className="p-2 bg-blue-100 rounded-lg">
+                     <Users className="w-6 h-6 text-blue-600" />
+                   </div>
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                   {statsLoading ? '-' : stats.activeProfessionals}
+                 </h3>
+                 <p className="text-sm text-gray-600">Profissionais Ativos</p>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
+                 <div className="flex items-center justify-between mb-4">
+                   <div className="p-2 bg-orange-100 rounded-lg">
+                     <Clock className="w-6 h-6 text-orange-600" />
+                   </div>
+                 </div>
+                 <h3 className="text-2xl font-bold text-gray-900 mb-1">
+                   {statsLoading ? '-' : `${stats.occupancyRate}%`}
+                 </h3>
+                 <p className="text-sm text-gray-600">Taxa de Ocupação</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className={`grid grid-cols-1 md:grid-cols-2 ${user?.role === 'dono' ? 'lg:grid-cols-4' : 'lg:grid-cols-1'} gap-6 mb-8`}>
+          <Link
+            to="/appointments"
+            className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-purple-500"
+          >
+            <div className="p-3 bg-purple-100 text-purple-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+              <Calendar className="w-6 h-6" />
+            </div>
+            <h3 className="font-semibold text-gray-900">Agenda</h3>
+            <p className="text-sm text-gray-500">Gerenciar agendamentos</p>
+          </Link>
+
+          {user?.role === 'dono' && (
+            <>
+              <Link
+                to="/services"
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-pink-500"
+              >
+                <div className="p-3 bg-pink-100 text-pink-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Store className="w-6 h-6" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Serviços</h3>
+                <p className="text-sm text-gray-500">Catálogo de serviços</p>
+              </Link>
+
+              <Link
+                to="/staff"
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-blue-500"
+              >
+                <div className="p-3 bg-blue-100 text-blue-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Users className="w-6 h-6" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Equipe</h3>
+                <p className="text-sm text-gray-500">Gerenciar profissionais</p>
+              </Link>
+
+              <Link
+                to="/settings"
+                className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all group flex flex-col items-center text-center hover:border-gray-500"
+              >
+                <div className="p-3 bg-gray-100 text-gray-600 rounded-full mb-3 group-hover:scale-110 transition-transform">
+                  <Settings className="w-6 h-6" />
+                </div>
+                <h3 className="font-semibold text-gray-900">Configurações</h3>
+                <p className="text-sm text-gray-500">Ajustes da unidade</p>
+              </Link>
+            </>
+          )}
+        </div>
+
+        {selectedShop && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Serviços de {selectedShop.name}
+              </h2>
+              {user?.role === 'dono' && (
+                <Link
+                  to="/services/new"
+                  className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Novo Serviço
+                </Link>
+              )}
+            </div>
+            
+            <div className="divide-y divide-gray-200">
+              {servicesLoading ? (
+                <div className="p-8 flex justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                </div>
+              ) : services.length === 0 ? (
+                <div className="px-6 py-12 text-center">
+                  <Store className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-600 mb-4">Nenhum serviço cadastrado ainda</p>
+                  {user?.role === 'dono' && (
+                    <Link
+                      to="/services/new"
+                      className="inline-block px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      Cadastrar Primeiro Serviço
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                services.map((service) => (
+                  <div key={service.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium text-gray-900">{service.name}</h3>
+                        <p className="text-sm text-gray-600 mt-1">{service.description}</p>
+                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                          <span>⏱️ {service.duration} min</span>
+                          {service.expand?.category_id && (
+                            <span>📁 {service.expand.category_id.name}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-purple-600">
+                          R$ {service.price.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }
