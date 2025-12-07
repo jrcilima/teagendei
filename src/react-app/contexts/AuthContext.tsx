@@ -1,133 +1,75 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User } from '../../shared/types';
+import { pb } from '../lib/pocketbase';
 
-import { pb } from "../lib/pocketbase";
-import type { User } from "../../shared/schemas/user";
-
-// Tipagem do contexto
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  refreshUser: () => Promise<void>;
+  register: (data: any) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  loading: true,
-  login: async () => {},
-  logout: () => {},
-  refreshUser: async () => {},
-});
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(pb.authStore.model as User | null);
+  const [loading, setLoading] = useState(false);
 
-  // --------------------------------------------------
-  // 🔥 Helper para carregar o usuário atual do PocketBase
-  // --------------------------------------------------
-  const loadCurrentUser = () => {
-    const model = pb.authStore.model as any;
-
-    if (!model) {
-      setUser(null);
-      return;
-    }
-
-    const typedUser: User = {
-      id: model.id,
-      created: model.created,
-      updated: model.updated,
-      email: model.email,
-      emailVisibility: model.emailVisibility,
-      verified: model.verified,
-      name: model.name || "",
-      avatar: model.avatar || "",
-      role: model.role,
-      phone: model.phone,
-      is_professional: model.is_professional,
-      company_id: model.company_id,
-      shop_id: model.shop_id,
-      expand: model.expand,
+  useEffect(() => {
+    const unsubscribe = pb.authStore.onChange((_token, model) => {
+      setUser(model as User | null);
+    });
+    return () => {
+      unsubscribe();
     };
+  }, []);
 
-    setUser(typedUser);
-  };
-
-  // --------------------------------------------------
-  // 🔥 LOGIN
-  // --------------------------------------------------
   const login = async (email: string, password: string) => {
-    await pb.collection("users").authWithPassword(email, password);
-    loadCurrentUser(); // Carrega o usuário imediatamente
+    setLoading(true);
+    try {
+      await pb.collection('users').authWithPassword(email, password);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // --------------------------------------------------
-  // 🔥 LOGOUT
-  // --------------------------------------------------
   const logout = () => {
     pb.authStore.clear();
-    setUser(null);
   };
 
-  // --------------------------------------------------
-  // 🔄 REFRESH DA SESSÃO
-  // --------------------------------------------------
-  const refreshUser = async () => {
+  const register = async (data: {
+    email: string;
+    password: string;
+    name: string;
+    phone?: string;
+    // ALTERADO: 'barbeiro' -> 'staff'
+    role: 'dono' | 'staff' | 'cliente';
+    passwordConfirm: string;
+  }) => {
+    setLoading(true);
     try {
-      await pb.collection("users").authRefresh();
-      loadCurrentUser();
-    } catch (e) {
-      console.error("Erro ao atualizar sessão:", e);
-      logout();
+      await pb.collection('users').create({
+        ...data,
+        emailVisibility: true,
+      });
+      await pb.collection('users').authWithPassword(data.email, data.password);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // --------------------------------------------------
-  // 🚀 Ao iniciar o app → tenta restaurar a sessão
-  // --------------------------------------------------
-  useEffect(() => {
-    const init = async () => {
-      try {
-        if (pb.authStore.isValid) {
-          await pb.collection("users").authRefresh();
-          loadCurrentUser();
-        } else {
-          setUser(null);
-        }
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    init();
-  }, []);
-
-  // --------------------------------------------------
-  // 🔀 Se a store mudar (login/logout fora do React)
-  // --------------------------------------------------
-  useEffect(() => {
-    return pb.authStore.onChange(() => {
-      loadCurrentUser();
-    });
-  }, []);
-
   return (
-    <AuthContext.Provider
-      value={{ user, loading, login, logout, refreshUser }}
-    >
+    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}

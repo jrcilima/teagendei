@@ -1,4 +1,3 @@
-// src/shared/types.ts
 
 export interface BaseModel {
   id: string;
