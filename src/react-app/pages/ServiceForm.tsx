@@ -1,26 +1,28 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import ApiClient from '../lib/apiClient';
-import { servicesApi } from '../lib/api/servicesApi';
-import { useTenant } from '../contexts/TenantContext';
-import type { Service } from '../../shared/schemas/service';
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+
+import ApiClient from "../lib/apiClient";
+import { servicesApi } from "../lib/api/servicesApi";
+import { useTenant } from "../contexts/TenantContext";
+
+import type { Service } from "../../shared/schemas/service";
 
 const api = new ApiClient();
 const serviceService = servicesApi(api);
 
 export default function ServiceForm() {
-  const { id } = useParams();
-  const navigate = useNavigate();
   const { shop } = useTenant();
+  const navigate = useNavigate();
+  const { id } = useParams();
 
   const isEdit = Boolean(id);
 
-  const [data, setData] = useState<Partial<Service>>({
-    name: '',
+  const [form, setForm] = useState<Partial<Service>>({
+    name: "",
     price: 0,
-    duration: 30,
-    description: '',
-    is_active: true
+    duration: 0,
+    is_active: true,
+    description: "",
   });
 
   const [loading, setLoading] = useState(true);
@@ -32,12 +34,10 @@ export default function ServiceForm() {
     }
 
     try {
-      // 🔴 ANTES: serviceService.getById(id)
-      // ✅ AGORA: findById (que é o que existe no servicesApi.ts)
-      const s = await serviceService.findById(id);
-      setData(s);
+      const data = await serviceService.findById(id);
+      setForm(data);
     } catch (err) {
-      console.error('Erro ao carregar serviço:', err);
+      console.error("Erro ao carregar serviço:", err);
     }
 
     setLoading(false);
@@ -49,83 +49,96 @@ export default function ServiceForm() {
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!shop?.id) return;
+
+    if (!shop?.id) {
+      alert("Erro: nenhuma barbearia ativa.");
+      return;
+    }
 
     try {
       if (isEdit && id) {
-        await serviceService.update(id, { ...data });
+        await serviceService.update(id, form);
       } else {
         await serviceService.create({
-          ...data,
-          shop_id: shop.id
+          ...form,
+          shop_id: shop.id,
         });
       }
 
-      navigate('/services');
+      navigate("/services");
     } catch (err) {
-      console.error('Erro ao salvar serviço:', err);
-      alert('Erro ao salvar.');
+      console.error("Erro ao salvar serviço:", err);
+      alert("Falha ao salvar.");
     }
   };
 
-  if (loading) {
-    return <div className="p-4 text-center">Carregando...</div>;
-  }
+  const updateField = (field: keyof Service, value: any) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  if (loading) return <div className="p-4">Carregando...</div>;
 
   return (
-    <div className="p-6 max-w-lg mx-auto">
+    <div className="max-w-xl mx-auto p-6">
       <h1 className="text-xl font-bold mb-4">
-        {isEdit ? 'Editar Serviço' : 'Novo Serviço'}
+        {isEdit ? "Editar Serviço" : "Novo Serviço"}
       </h1>
 
       <form onSubmit={save} className="space-y-4">
-        <input
-          type="text"
-          placeholder="Nome do serviço"
-          className="border p-2 rounded w-full"
-          value={data.name ?? ''}
-          onChange={(e) => setData({ ...data, name: e.target.value })}
-        />
 
-        <input
-          type="number"
-          placeholder="Preço"
-          className="border p-2 rounded w-full"
-          value={data.price ?? 0}
-          onChange={(e) => setData({ ...data, price: Number(e.target.value) })}
-        />
+        <div>
+          <label className="block text-sm font-semibold">Nome</label>
+          <input
+            type="text"
+            className="border p-2 rounded w-full"
+            value={form.name ?? ""}
+            onChange={(e) => updateField("name", e.target.value)}
+          />
+        </div>
 
-        <input
-          type="number"
-          placeholder="Duração (min)"
-          className="border p-2 rounded w-full"
-          value={data.duration ?? 30}
-          onChange={(e) =>
-            setData({ ...data, duration: Number(e.target.value) })
-          }
-        />
+        <div>
+          <label className="block text-sm font-semibold">Descrição</label>
+          <textarea
+            className="border p-2 rounded w-full"
+            value={form.description ?? ""}
+            onChange={(e) => updateField("description", e.target.value)}
+          />
+        </div>
 
-        <textarea
-          placeholder="Descrição"
-          className="border p-2 rounded w-full"
-          value={data.description ?? ''}
-          onChange={(e) => setData({ ...data, description: e.target.value })}
-        />
+        <div>
+          <label className="block text-sm font-semibold">Preço (R$)</label>
+          <input
+            type="number"
+            className="border p-2 rounded w-full"
+            value={form.price ?? 0}
+            onChange={(e) => updateField("price", Number(e.target.value))}
+          />
+        </div>
 
-        <label className="flex gap-2 items-center">
+        <div>
+          <label className="block text-sm font-semibold">Duração (minutos)</label>
+          <input
+            type="number"
+            className="border p-2 rounded w-full"
+            value={form.duration ?? 0}
+            onChange={(e) => updateField("duration", Number(e.target.value))}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            checked={data.is_active ?? true}
-            onChange={(e) => setData({ ...data, is_active: e.target.checked })}
+            checked={form.is_active ?? true}
+            onChange={(e) => updateField("is_active", e.target.checked)}
           />
-          Ativo
-        </label>
+          <label>Ativo</label>
+        </div>
 
         <button
           type="submit"
           className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
         >
-          {isEdit ? 'Salvar Alterações' : 'Criar Serviço'}
+          {isEdit ? "Salvar Alterações" : "Criar Serviço"}
         </button>
       </form>
     </div>
