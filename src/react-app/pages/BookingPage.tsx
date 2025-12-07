@@ -1,4 +1,4 @@
-// src/react-app/pages/BookingPage.tsx
+// Caminho: src/react-app/pages/BookingPage.tsx
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { shopsApi, servicesApi, usersApi, appointmentsApi } from '../lib/api';
@@ -37,25 +37,16 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// 👉 tipo local para os registros da tabela shop_hours
 type ShopHourRecord = {
   id: string;
   company_id: string;
   shop_id: string;
   weekday: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
-  start_time: string; // "HH:mm"
-  end_time: string;   // "HH:mm"
-  is_closed?: boolean;
+  start_time: string; // "HH:MM"
+  end_time: string;   // "HH:MM"
+  is_closed: boolean;
 };
-
-const PB_WEEKDAY: ShopHourRecord['weekday'][] = [
-  'dom',
-  'seg',
-  'ter',
-  'qua',
-  'qui',
-  'sex',
-  'sab'
-];
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -73,8 +64,6 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [staff, setStaff] = useState<User[]>([]);
 
-  const [shopHours, setShopHours] = useState<ShopHourRecord[]>([]);
-
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
@@ -84,19 +73,20 @@ export default function BookingPage() {
   );
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
 
-  const [selectedPaymentMethodId, setSelectedPaymentMethodId] =
-    useState<string>('');
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string>('');
   const [notes, setNotes] = useState('');
 
-  const [existingAppointments, setExistingAppointments] = useState<
-    Appointment[]
-  >([]);
+  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
-  // Carrega loja, serviços, staff e shop_hours
+  // 👉 horários vindos da tabela shop_hours
+  const [shopHours, setShopHours] = useState<ShopHourRecord[]>([]);
+  const [hoursLoading, setHoursLoading] = useState(false);
+
+  // ========== CARREGA LOJA / SERVIÇOS / STAFF / HORÁRIOS ==========
   useEffect(() => {
     if (!slug) return;
 
@@ -113,15 +103,23 @@ export default function BookingPage() {
         setServices(servicesData.filter((s) => s.is_active));
         setStaff(staffData.filter((u) => u.is_professional));
 
-        // carrega horários da tabela shop_hours
-        const hours = await pb
-          .collection('shop_hours')
-          .getFullList<ShopHourRecord>({
-            filter: `shop_id = "${shopData.id}"`,
-            sort: 'weekday,start_time'
-          });
+        // 🔹 carrega horários da tabela shop_hours
+        setHoursLoading(true);
+        try {
+          const hours = await pb
+            .collection('shop_hours')
+            .getFullList<ShopHourRecord>({
+              filter: `company_id = "${shopData.company_id}" && shop_id = "${shopData.id}"`,
+              sort: 'weekday'
+            });
 
-        setShopHours(hours);
+          setShopHours(hours);
+        } catch (err) {
+          console.error('Erro ao carregar horários da loja (shop_hours):', err);
+          setShopHours([]);
+        } finally {
+          setHoursLoading(false);
+        }
       } catch (error) {
         console.error('Erro ao carregar loja:', error);
         alert('Loja não encontrada ou indisponível.');
@@ -133,7 +131,7 @@ export default function BookingPage() {
     loadData();
   }, [slug]);
 
-  // Carrega agendamentos existentes do dia selecionado
+  // ========== CARREGA AGENDAMENTOS DO DIA SELECIONADO ==========
   useEffect(() => {
     if (!shop || !selectedDate || step !== 3) return;
 
@@ -159,45 +157,63 @@ export default function BookingPage() {
     fetchAppointments();
   }, [shop, selectedDate, step, selectedStaff]);
 
-  // Gera slots com base em shop_hours (e não mais em shop.business_hours)
+  // ========== GERA HORÁRIOS DISPONÍVEIS A PARTIR DE shop_hours ==========
   const availableSlots = useMemo(() => {
     if (!shop || !selectedDate || !selectedService) return [];
+    if (!shopHours.length) return [];
 
     const dateObj = parse(selectedDate, 'yyyy-MM-dd', new Date());
     const dayOfWeek = dateObj.getDay(); // 0-6
-    const weekdayPb = PB_WEEKDAY[dayOfWeek];
 
-    const intervals = shopHours.filter(
-      (h) => h.weekday === weekdayPb && !h.is_closed
+    const weekdayMap: Record<number, ShopHourRecord['weekday']> = {
+      0: 'dom',
+      1: 'seg',
+      2: 'ter',
+      3: 'qua',
+      4: 'qui',
+      5: 'sex',
+      6: 'sab'
+    };
+
+    const weekday = weekdayMap[dayOfWeek];
+
+    const dayHours = shopHours.filter(
+      (h) => h.weekday === weekday && !h.is_closed
     );
 
-    if (!intervals.length) return [];
+    if (!dayHours.length) return [];
 
     const slots: string[] = [];
     const now = new Date();
     const isToday = isSameDay(dateObj, now);
     const minAdvance = shop.min_advance_time ?? 30;
+    const stepMinutes = 30;
 
-    for (const interval of intervals) {
-      const { start_time, end_time } = interval;
-      if (!start_time || !end_time) continue;
+    for (const interval of dayHours) {
+      const startDate = parse(interval.start_time, 'HH:mm', dateObj);
+      const endDate = parse(interval.end_time, 'HH:mm', dateObj);
 
-      let currentSlot = parse(start_time, 'HH:mm', dateObj);
-      const endDate = parse(end_time, 'HH:mm', dateObj);
+      let currentSlot = startDate;
 
       while (
-        isBefore(addMinutes(currentSlot, selectedService.duration), endDate) ||
-        currentSlot.getTime() === endDate.getTime()
+        isBefore(
+          addMinutes(currentSlot, selectedService.duration),
+          addMinutes(endDate, 1) // pequena folga
+        )
       ) {
-        // respeita antecedência mínima
-        if (isToday && isBefore(currentSlot, addMinutes(now, minAdvance))) {
-          currentSlot = addMinutes(currentSlot, 30);
+        // regra de antecedência mínima
+        if (
+          isToday &&
+          isBefore(currentSlot, addMinutes(now, minAdvance))
+        ) {
+          currentSlot = addMinutes(currentSlot, stepMinutes);
           continue;
         }
 
         const slotStart = currentSlot;
         const slotEnd = addMinutes(currentSlot, selectedService.duration);
 
+        // conflito com agendamentos existentes
         const isBlocked = existingAppointments.some((appt) => {
           if (selectedStaff && appt.barber_id !== selectedStaff.id) return false;
 
@@ -213,21 +229,14 @@ export default function BookingPage() {
           slots.push(format(currentSlot, 'HH:mm'));
         }
 
-        currentSlot = addMinutes(currentSlot, 30);
+        currentSlot = addMinutes(currentSlot, stepMinutes);
       }
     }
 
-    // remove duplicados se houver sobreposição de intervalos
-    return Array.from(new Set(slots)).sort();
-  }, [
-    shop,
-    selectedDate,
-    selectedService,
-    existingAppointments,
-    selectedStaff,
-    shopHours
-  ]);
+    return slots;
+  }, [shop, selectedDate, selectedService, existingAppointments, selectedStaff, shopHours]);
 
+  // ========== CONFIRMA AGENDAMENTO ==========
   const handleBooking = async () => {
     if (!user) {
       alert('Você precisa fazer login ou criar uma conta para agendar.');
@@ -243,9 +252,7 @@ export default function BookingPage() {
       !user.id ||
       !selectedPaymentMethodId
     ) {
-      alert(
-        'Por favor, preencha todos os campos, incluindo a forma de pagamento.'
-      );
+      alert('Por favor, preencha todos os campos, incluindo a forma de pagamento.');
       return;
     }
 
@@ -254,7 +261,10 @@ export default function BookingPage() {
       const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
       const [hours, minutes] = selectedTime.split(':').map(Number);
 
-      const startDate = setSeconds(setMinutes(setHours(baseDate, hours), minutes), 0);
+      const startDate = setSeconds(
+        setMinutes(setHours(baseDate, hours), minutes),
+        0
+      );
       const endDate = addMinutes(startDate, selectedService.duration);
 
       const latestAppointments = await appointmentsApi.listByShopAndDate(
@@ -306,13 +316,16 @@ export default function BookingPage() {
           'Ops! Este horário acabou de ser ocupado por outra pessoa. A lista será atualizada.'
         );
         const baseDate = parse(selectedDate, 'yyyy-MM-dd', new Date());
-        const appts = await appointmentsApi.listByShopAndDate(shop!.id, baseDate);
+        const appts = await appointmentsApi.listByShopAndDate(
+          shop!.id,
+          baseDate
+        );
         setExistingAppointments(
           appts.filter((a) => a.status !== AppointmentStatus.CANCELADO)
         );
         setStep(3);
       } else {
-        const msg = error?.message || 'Erro desconhecido.';
+        let msg = error?.message || 'Erro desconhecido.';
         alert(`Falha ao agendar: ${msg}`);
       }
     } finally {
@@ -320,6 +333,7 @@ export default function BookingPage() {
     }
   };
 
+  // ========== RENDER ==========
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -362,12 +376,18 @@ export default function BookingPage() {
                   {shop.address || 'Endereço não informado'}
                 </span>
               </div>
+              {hoursLoading && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Carregando horários de funcionamento...
+                </p>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-2xl mx-auto p-4">
+        {/* ETAPA 1 - SERVIÇO */}
         {step === 1 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -427,6 +447,7 @@ export default function BookingPage() {
           </div>
         )}
 
+        {/* ETAPA 2 - PROFISSIONAL */}
         {step === 2 && (
           <div className="space-y-4 animate-fade-in">
             <div className="mb-6">
@@ -473,6 +494,7 @@ export default function BookingPage() {
           </div>
         )}
 
+        {/* ETAPA 3 - DATA / HORÁRIO */}
         {step === 3 && (
           <div className="space-y-6 animate-fade-in">
             <div className="mb-4">
@@ -559,6 +581,7 @@ export default function BookingPage() {
           </div>
         )}
 
+        {/* ETAPA 4 - RESUMO / PAGAMENTO */}
         {step === 4 && selectedService && selectedStaff && (
           <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-6">
