@@ -150,3 +150,12 @@ export interface Segment extends BaseModel {
   slug: string;
   icon?: string;
 }
+// Adicione isso ao final do arquivo:
+export interface ShopHour extends BaseModel {
+  company_id: string;
+  shop_id: string;
+  weekday: 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
+  start_time: string;
+  end_time: string;
+  is_closed: boolean;
+}
