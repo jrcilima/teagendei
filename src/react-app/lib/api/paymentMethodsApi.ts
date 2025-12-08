@@ -23,3 +23,5 @@ export function paymentMethodsApi(api: ApiClient) {
     }
   };
 }
+// Adicione no final do arquivo:
+export type PaymentMethodsApi = ReturnType<typeof paymentMethodsApi>;

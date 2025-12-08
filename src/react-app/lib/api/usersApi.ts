@@ -46,3 +46,4 @@ export function usersApi(api: ApiClient) {
     }
   };
 }
+export type UsersApi = ReturnType<typeof usersApi>;

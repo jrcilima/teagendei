@@ -1,6 +1,7 @@
 // Caminho: src/react-app/lib/api/shopsApi.ts
 import ApiClient from "../api/apiClient";
 import type { Shop } from "../../../shared/types";
+import { use } from "hono/jsx";
 
 const COLLECTION = "shops";
 
@@ -44,3 +45,5 @@ export function shopsApi(api: ApiClient) {
     }
   };
 }
+// Adicione no final do arquivo:
+export type ShopsApi = ReturnType<typeof shopsApi>;

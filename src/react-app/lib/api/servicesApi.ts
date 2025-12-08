@@ -43,3 +43,6 @@ export function servicesApi(api: ApiClient) {
     }
   };
 }
+
+// Adicione no final do arquivo:
+export type ServicesApi = ReturnType<typeof servicesApi>;

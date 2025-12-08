@@ -1,100 +1,104 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Company, Shop } from '../../shared/types';
-import { useAuth } from './AuthContext';
-import { companiesApi, shopsApi } from '../lib/api';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useAuth } from "./AuthContext";
+import ApiClient from "../lib/api/apiClient";
 
-interface TenantContextType {
-  company: Company | null;
-  shops: Shop[];
-  selectedShop: Shop | null;
-  setSelectedShop: (shop: Shop | null) => void;
-  refreshCompany: () => Promise<void>;
-  refreshShops: () => Promise<void>;
+// Importando as fábricas de serviços
+import { usersApi } from "../lib/api/usersApi";
+import { shopsApi } from "../lib/api/shopsApi";
+import { servicesApi } from "../lib/api/servicesApi";
+import { appointmentsApi } from "../lib/api/appointmentsApi";
+import { shopHoursApi } from "../lib/api/shopHoursApi";
+import { paymentMethodsApi } from "../lib/api/paymentMethodsApi";
+
+// Importando Tipos e Schemas
+import type { Shop } from "../../shared/schemas/shop";
+import type { User } from "../../shared/schemas/user"; // Importante para o cast
+
+// Instância única do cliente API
+const api = new ApiClient();
+
+// Criando as instâncias dos serviços
+const userServiceInstance = usersApi(api);
+const shopServiceInstance = shopsApi(api);
+const servicesApiInstance = servicesApi(api);
+const appointmentsApiInstance = appointmentsApi(api);
+const shopHoursApiInstance = shopHoursApi(api);
+const paymentMethodsApiInstance = paymentMethodsApi(api);
+
+// Tipo do Contexto (Inferindo tipos automaticamente das instâncias)
+interface TenantContextData {
+  shop: Shop | null;
   loading: boolean;
+  refreshShop: () => Promise<void>;
+  
+  // Expondo os serviços e o cliente
+  api: ApiClient;
+  userService: typeof userServiceInstance;
+  shopService: typeof shopServiceInstance;
+  servicesService: typeof servicesApiInstance;
+  appointmentsService: typeof appointmentsApiInstance;
+  shopHoursService: typeof shopHoursApiInstance;
+  paymentMethodsService: typeof paymentMethodsApiInstance;
 }
 
-const TenantContext = createContext<TenantContextType | undefined>(undefined);
+const TenantContext = createContext<TenantContextData>({} as TenantContextData);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const [company, setCompany] = useState<Company | null>(null);
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth(); // O user aqui pode vir com tipagem genérica
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const refreshCompany = async () => {
-    if (!user) return;
-    try {
-      const companies = await companiesApi.list();
-      // Assumes the owner has only one company for now
-      if (companies && companies.length > 0) {
-        setCompany(companies[0]);
-      } else {
-        setCompany(null);
-      }
-    } catch (error) {
-      console.error('Error fetching company:', error);
-      setCompany(null);
+  const loadShop = async () => {
+    // Casting de segurança: Tratamos o user como nosso tipo User completo
+    const currentUser = user as unknown as User;
+
+    if (!currentUser) {
+      setShop(null);
+      setLoading(false);
+      return;
     }
-  };
 
-  const refreshShops = async () => {
-    if (!user) return;
     try {
-      const shopsList = await shopsApi.list();
-      setShops(shopsList);
-      
-      if (shopsList.length > 0) {
-        // Se não tiver loja selecionada, seleciona a primeira
-        if (!selectedShop) {
-          setSelectedShop(shopsList[0]);
-        } else {
-          // SE JÁ TIVER, ATUALIZA OS DADOS DELA COM A VERSÃO NOVA DO BANCO
-          // Isso corrige o bug de "salvei mas a tela mostra dados antigos"
-          const updatedSelected = shopsList.find(s => s.id === selectedShop.id);
-          if (updatedSelected) {
-            setSelectedShop(updatedSelected);
-          }
-        }
+      // 1. Tenta carregar pelo ID vinculado direto no usuário (ideal)
+      if (currentUser.shop_id) {
+        const data = await shopServiceInstance.findById(currentUser.shop_id);
+        setShop(data);
+      } 
+      // 2. Fallback: Se for dono, busca a loja onde ele é owner
+      else if (currentUser.role === 'dono') {
+        const shops = await api.list<Shop>('shops', {
+          filter: `owner_id = "${currentUser.id}"`,
+          perPage: 1
+        });
+        setShop(shops.items[0] || null);
+      } else {
+        setShop(null);
       }
-    } catch (error) {
-      console.error('Error fetching shops:', error);
-      setShops([]);
+    } catch (err) {
+      console.error("Erro ao carregar loja:", err);
+      setShop(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
-    const loadData = async () => {
-      if (user && mounted) {
-        setLoading(true);
-        await Promise.all([refreshCompany(), refreshShops()]);
-        setLoading(false);
-      } else if (!user && mounted) {
-        setCompany(null);
-        setShops([]);
-        setSelectedShop(null);
-      }
-    };
-
-    loadData();
-
-    return () => {
-      mounted = false;
-    };
+    loadShop();
   }, [user]);
 
   return (
     <TenantContext.Provider
       value={{
-        company,
-        shops,
-        selectedShop,
-        setSelectedShop,
-        refreshCompany,
-        refreshShops,
-        loading
+        shop,
+        loading,
+        refreshShop: loadShop,
+        api,
+        userService: userServiceInstance,
+        shopService: shopServiceInstance,
+        servicesService: servicesApiInstance,
+        appointmentsService: appointmentsApiInstance,
+        shopHoursService: shopHoursApiInstance,
+        paymentMethodsService: paymentMethodsApiInstance,
       }}
     >
       {children}
@@ -102,10 +106,4 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useTenant() {
-  const context = useContext(TenantContext);
-  if (!context) {
-    throw new Error('useTenant must be used within a TenantProvider');
-  }
-  return context;
-}
+export const useTenant = () => useContext(TenantContext);

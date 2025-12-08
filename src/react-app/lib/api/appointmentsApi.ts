@@ -63,3 +63,5 @@ export function appointmentsApi(api: ApiClient) {
     }
   };
 }
+// Adicione no final do arquivo:
+export type AppointmentsApi = ReturnType<typeof appointmentsApi>;

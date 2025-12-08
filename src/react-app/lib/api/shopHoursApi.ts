@@ -30,3 +30,5 @@ export function shopHoursApi(api: ApiClient) {
     }
   };
 }
+// Adicione no final do arquivo:
+export type ShopHoursApi = ReturnType<typeof shopHoursApi>;
