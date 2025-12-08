@@ -3,7 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useTenant } from "../contexts/TenantContext";
 import { Link } from "react-router-dom";
 
-import ApiClient from "../lib/apiClient";
+import ApiClient from "../lib/api/apiClient";
 import { usersApi } from "../lib/api/usersApi";
 import { shopsApi } from "../lib/api/shopsApi";
 import { shopHoursApi } from "../lib/api/shopHoursApi"; // API da nova tabela
