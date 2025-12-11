@@ -1,128 +1,156 @@
-// Caminho: src/react-app/lib/api/register.ts
+// src/react-app/lib/api/register.ts
 import {pb} from "./pocketbase";
-import type { Company, Shop, User } from "@/shared/types";
+import type { RegisterOwnerInput, RegisterClientInput, ShopWithCompany } from "@/shared/types";
 
-export interface RegisterOwnerInput {
-  name: string;
-  email: string;
-  password: string;
-  phone?: string;
-}
-
-export interface RegisterClientInput {
-  name: string;
-  email: string;
-  password: string;
-  phone?: string;
-  companyId: string;
-  shopId: string;
-}
-
-/**
- * Registra um DONO (role = 'dono')
- * Não cria empresa nem unidade aqui – isso é papel do onboarding.
- */
-export async function registerOwner(data: RegisterOwnerInput): Promise<User> {
-  const payload: Record<string, any> = {
-    email: data.email,
-    password: data.password,
-    passwordConfirm: data.password,
-    name: data.name,
-    phone: data.phone ?? "",
-    role: "dono", // compatível com seu schema (select users.role)
+/* ============================================================
+   1) DONO DO NEGÓCIO — Fluxo:
+      - Criar usuário
+      - Login feito fora desta função
+      - Onboarding criará empresa + unidade
+   ============================================================ */
+export async function registerOwner(input: RegisterOwnerInput) {
+  const payload = {
+    email: input.email.trim(),
+    name: input.name.trim(),
+    phone: input.phone ?? "",
+    password: input.password,
+    passwordConfirm: input.password,
+    role: "dono",
   };
 
-  const record = await pb.collection("users").create(payload);
-  return record as unknown as User;
+  const user = await pb.collection("users").create(payload);
+  return user;
 }
 
-/**
- * Registra um CLIENTE já amarrado a company_id + shop_id
- */
-export async function registerClient(
-  data: RegisterClientInput
-): Promise<User> {
-  const payload: Record<string, any> = {
-    email: data.email,
-    password: data.password,
-    passwordConfirm: data.password,
-    name: data.name,
-    phone: data.phone ?? "",
-    role: "cliente",
-    company_id: data.companyId,
-    shop_id: data.shopId,
-  };
-
-  const record = await pb.collection("users").create(payload);
-  return record as unknown as User;
-}
-
-/**
- * Estrutura interna para exibir as unidades na tela de cliente
- */
-export interface ShopWithCompany {
-  shop: Shop;
-  company: Company | null;
-}
-
-/**
- * Lista todas as SHOPS ativas e resolve a empresa de cada uma
- * via company_id
- */
-export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
-  // Busca todas as unidades ativas
-  const shops = await pb.collection("shops").getFullList<Shop>({
-    filter: 'is_active = true',
-    sort: "name",
-  });
-
-  const companyIds = Array.from(
-    new Set(shops.map((s) => s.company_id).filter(Boolean))
-  ) as string[];
-
-  const companiesById = new Map<string, Company>();
-
-  await Promise.all(
-    companyIds.map(async (id) => {
-      try {
-        const company = await pb
-          .collection("companies")
-          .getOne<Company>(id);
-        companiesById.set(id, company);
-      } catch {
-        // se der erro pra alguma company isolada, apenas ignora
-      }
-    })
-  );
-
-  return shops.map((shop) => ({
-    shop,
-    company: shop.company_id
-      ? companiesById.get(shop.company_id) ?? null
-      : null,
-  }));
-}
-
-/**
- * Busca uma unidade específica por ID (para link /register?shopId=...)
- */
-export async function getShopById(id: string): Promise<Shop | null> {
+/* ============================================================
+  UTILITÁRIO — achar usuário por email
+============================================================ */
+export async function findUserByEmail(email: string): Promise<any | null> {
   try {
-    const shop = await pb.collection("shops").getOne<Shop>(id);
-    return shop;
+    const user = await pb
+      .collection("users")
+      .getFirstListItem(`email="${email}"`);
+    return user;
   } catch {
     return null;
   }
 }
 
-/**
- * Busca uma unidade específica por slug (para link /register?slug=...)
- */
-export async function getShopBySlug(slug: string): Promise<Shop | null> {
-  const res = await pb.collection("shops").getList<Shop>(1, 1, {
-    filter: `slug = "${slug}" && is_active = true`,
+/* ============================================================
+  UTILITÁRIO — verificar se user já está vinculado a empresa
+============================================================ */
+export async function isUserLinkedToCompany(
+  userId: string,
+  companyId: string
+): Promise<boolean> {
+  try {
+    await pb
+      .collection("client_companies")
+      .getFirstListItem(`user_id="${userId}" && company_id="${companyId}"`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* ============================================================
+  UTILITÁRIO — criar vínculo cliente <-> empresa/unidade
+============================================================ */
+export async function linkUserToCompany(
+  userId: string,
+  companyId: string,
+  shopId: string
+) {
+  const payload = {
+    user_id: userId,
+    company_id: companyId,
+    shop_id: shopId,
+  };
+
+  const link = await pb.collection("client_companies").create(payload);
+  return link;
+}
+
+/* ============================================================
+   2) CLIENTE — Fluxo Real:
+      - Checar se email já existe
+         - Se existir → perguntar
+         - Se confirmar → criar vínculo novo
+      - Se não existir → criar user + vínculo
+   ============================================================ */
+export async function registerClient(input: RegisterClientInput) {
+  const { email, password, name, phone, companyId, shopId } = input;
+
+  const existingUser = await findUserByEmail(email);
+
+  // --------------- Já existe usuário com mesmo email ---------------
+  if (existingUser) {
+    // Existe vínculo com esta empresa?
+    const alreadyLinked = await isUserLinkedToCompany(
+      existingUser.id,
+      companyId
+    );
+
+    if (!alreadyLinked) {
+      // Cria novo vínculo
+      await linkUserToCompany(existingUser.id, companyId, shopId);
+    }
+
+    // Retorna o user já existente
+    return existingUser;
+  }
+
+  // --------------- Criar novo usuário cliente ---------------
+  const payload = {
+    email,
+    name,
+    phone: phone ?? "",
+    password,
+    passwordConfirm: password,
+    role: "cliente",
+  };
+
+  const user = await pb.collection("users").create(payload);
+
+  // Criar vínculo obrigatório
+  await linkUserToCompany(user.id, companyId, shopId);
+
+  return user;
+}
+
+/* ============================================================
+   3) Buscar shops ativos + empresa
+============================================================ */
+export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
+  const shops = await pb.collection("shops").getFullList({
+    filter: `status = true`,
+    sort: "name",
   });
 
-  if (!res.items.length) return null;
-  return res.items[0];
+  const result: ShopWithCompany[] = [];
+
+  for (const shop of shops) {
+    const company = await pb.collection("companies").getOne(shop.company_id);
+    result.push({ shop, company });
+  }
+
+  return result;
+}
+
+/* ============================================================
+   4) Buscar unidade por ID
+============================================================ */
+export async function getShopById(id: string) {
+  return await pb.collection("shops").getOne(id);
+}
+
+/* ============================================================
+   5) Buscar unidade por slug
+============================================================ */
+export async function getShopBySlug(slug: string) {
+  const list = await pb.collection("shops").getFullList({
+    filter: `slug="${slug}"`,
+  });
+
+  return list.length > 0 ? list[0] : null;
 }

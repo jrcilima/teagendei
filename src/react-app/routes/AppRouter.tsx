@@ -1,44 +1,55 @@
-// Caminho: src/react-app/routes/AppRouter.tsx
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+// src/react-app/routes/AppRouter.tsx
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+import LandingPage from "../pages/public/LandingPage";
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
+
 import BookPage from "../pages/booking/BookPage";
-import OnboardingPage from "../pages/onboarding/OnboardingPage";
-import DashboardPage from "../pages/owner/DashboardPage";
+
+import OnboardingRouter from "../pages/onboarding/OnboardingRouter";
+import DashboardHome from "../pages/dashboard/DashboardHome";
+
 import StaffAgendaPage from "../pages/staff/StaffAgendaPage";
 import ClientPanelPage from "../pages/client/ClientPanelPage";
-import ProtectedRoute  from "./ProtectedRoute";
+
+import ProtectedRoute from "./ProtectedRoute";
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Públicas */}
+        {/* PÚBLICA RAIZ */}
+        <Route path="/" element={<LandingPage />} />
+
+        {/* AUTH */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+
+        {/* BOOKING PÚBLICO */}
         <Route path="/book/:slug" element={<BookPage />} />
 
-        {/* Onboarding do dono (já autenticado, mas sem empresa) */}
+        {/* ONBOARDING MULTI-ETAPA (DONO) */}
         <Route
-          path="/onboarding"
+          path="/onboarding/*"
           element={
             <ProtectedRoute allowedRoles={["dono"]}>
-              <OnboardingPage />
+              <OnboardingRouter />
             </ProtectedRoute>
           }
         />
 
-        {/* Painel do dono */}
+        {/* DASHBOARD DO DONO */}
         <Route
           path="/owner/dashboard"
           element={
             <ProtectedRoute allowedRoles={["dono"]}>
-              <DashboardPage />
+              <DashboardHome />
             </ProtectedRoute>
           }
         />
 
-        {/* Agenda do staff */}
+        {/* AGENDA DO PROFISSIONAL */}
         <Route
           path="/staff/agenda"
           element={
@@ -48,7 +59,7 @@ export default function AppRouter() {
           }
         />
 
-        {/* Painel do cliente */}
+        {/* PAINEL DO CLIENTE */}
         <Route
           path="/client"
           element={
@@ -61,3 +72,4 @@ export default function AppRouter() {
     </BrowserRouter>
   );
 }
+

@@ -115,9 +115,6 @@ export interface Shop extends BaseRecord {
 
   segment_id?: string | null;
 
-  // ❌ N ÃO existe mais business_hours JSON no schema
-  // business_hours?: any;
-
   min_advance_time?: number | null;
   max_advance_time?: number | null;
 
@@ -273,4 +270,32 @@ export interface ProfessionalOption {
   id: string;
   name: string;
   avatar?: string;
+}
+
+// Vinculo cliente <-> empresa
+export interface ClientCompanyLink extends BaseRecord {
+  user_id: string;      // relation → users
+  company_id: string;   // relation → companies
+  shop_id?: string | null; // opcional
+}
+
+export interface RegisterOwnerInput {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+}
+
+export interface RegisterClientInput {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  companyId: string;
+  shopId: string;
+}
+
+export interface ShopWithCompany {
+  shop: any;
+  company: any;
 }

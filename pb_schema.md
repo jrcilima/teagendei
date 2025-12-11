@@ -1114,6 +1114,95 @@
     "system": false
   },
   {
+    "id": "pbc_1997259952",
+    "listRule": "user_id = @request.auth.id\n",
+    "viewRule": "user_id = @request.auth.id\n",
+    "createRule": "@request.auth.id != \"\" \n&& \nuser_id = @request.auth.id\n",
+    "updateRule": "user_id = @request.auth.id\n",
+    "deleteRule": "user_id = @request.auth.id\n",
+    "name": "client_companies",
+    "type": "base",
+    "fields": [
+      {
+        "autogeneratePattern": "[a-z0-9]{15}",
+        "hidden": false,
+        "id": "text3208210256",
+        "max": 15,
+        "min": 15,
+        "name": "id",
+        "pattern": "^[a-z0-9]+$",
+        "presentable": false,
+        "primaryKey": true,
+        "required": true,
+        "system": true,
+        "type": "text"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "_pb_users_auth_",
+        "hidden": false,
+        "id": "relation2809058197",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "user_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_3866053794",
+        "hidden": false,
+        "id": "relation2543524566",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "company_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "cascadeDelete": false,
+        "collectionId": "pbc_3896301928",
+        "hidden": false,
+        "id": "relation1293337821",
+        "maxSelect": 1,
+        "minSelect": 0,
+        "name": "shop_id",
+        "presentable": false,
+        "required": true,
+        "system": false,
+        "type": "relation"
+      },
+      {
+        "hidden": false,
+        "id": "autodate2990389176",
+        "name": "created",
+        "onCreate": true,
+        "onUpdate": false,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      },
+      {
+        "hidden": false,
+        "id": "autodate3332085495",
+        "name": "updated",
+        "onCreate": true,
+        "onUpdate": true,
+        "presentable": false,
+        "system": false,
+        "type": "autodate"
+      }
+    ],
+    "indexes": [
+      "CREATE INDEX `idx_PQB5sTm0hQ` ON `client_companies` (\n  `user_id`,\n  `company_id`\n)"
+    ],
+    "system": false
+  },
+  {
     "id": "pbc_3866053794",
     "listRule": "owner_id = @request.auth.id || id = @request.auth.company_id",
     "viewRule": "owner_id = @request.auth.id || id = @request.auth.company_id",
