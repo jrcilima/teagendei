@@ -122,16 +122,23 @@ export async function registerClient(input: RegisterClientInput) {
    3) Buscar shops ativos + empresa
 ============================================================ */
 export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
+  // CORREÇÃO: O campo no banco é 'is_active', não 'status'
   const shops = await pb.collection("shops").getFullList({
-    filter: `status = true`,
+    filter: `is_active = true`, 
     sort: "name",
   });
 
   const result: ShopWithCompany[] = [];
 
   for (const shop of shops) {
-    const company = await pb.collection("companies").getOne(shop.company_id);
-    result.push({ shop, company });
+    try {
+        const company = await pb.collection("companies").getOne(shop.company_id);
+        result.push({ shop, company });
+    } catch (err) {
+        console.warn(`Empresa não encontrada para a loja ${shop.id}`, err);
+        // Opcional: Adicionar mesmo sem empresa ou ignorar
+        result.push({ shop, company: { legal_name: "Empresa não identificada" } });
+    }
   }
 
   return result;

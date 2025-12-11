@@ -55,6 +55,7 @@ export default function RegisterPage() {
 
     async function load() {
       setLoadingShops(true);
+      // Limpa erro anterior para não confundir o usuário
       setError(null);
 
       try {
@@ -62,8 +63,12 @@ export default function RegisterPage() {
         const slug = searchParams.get("slug");
 
         const allShops = await fetchActiveShopsWithCompany();
+        
+        if (cancelled) return;
+
         let preselected = null;
 
+        // Se tiver ID ou Slug na URL, tenta achar a loja específica
         if (shopId) {
           preselected = await getShopById(shopId);
         } else if (slug) {
@@ -71,26 +76,32 @@ export default function RegisterPage() {
         }
 
         setShops(allShops);
-        if (cancelled) return;
 
         if (preselected) {
           setSelectedShopId(preselected.id);
         } else if (allShops.length > 0) {
           setSelectedShopId(allShops[0].shop.id);
         }
-      } catch (err) {
-        console.error(err);
-        setError("Não foi possível carregar as unidades disponíveis.");
+      } catch (err: any) {
+        // CORREÇÃO: Ignora erro se for cancelamento automático do PocketBase (status 0)
+        if (err.status !== 0 && !cancelled) {
+          console.error("Erro ao carregar lojas:", err);
+          setError("Não foi possível carregar as unidades disponíveis.");
+        }
       } finally {
         if (!cancelled) setLoadingShops(false);
       }
     }
 
-    load();
+    // Se estiver no modo cliente, carrega as lojas
+    if (mode === "client") {
+        load();
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, [searchParams, mode]); // Adicionado 'mode' para recarregar se trocar de aba
 
   const selectedShop = useMemo(
     () => shops.find((s) => s.shop.id === selectedShopId) ?? null,
@@ -145,9 +156,7 @@ export default function RegisterPage() {
         });
 
         const user = await login(email.trim(), password);
-
         await reloadTenants();
-
         navigate("/onboarding", { replace: true });
         return;
       }
@@ -179,10 +188,10 @@ export default function RegisterPage() {
         shopId,
       });
 
-      const logged = await login(email.trim(), password);
-
+      await login(email.trim(), password);
       const slug = selectedShop.shop.slug;
       navigate(`/book/${slug}`, { replace: true });
+
     } catch (err: any) {
       console.error(err);
       setError(
@@ -213,8 +222,7 @@ export default function RegisterPage() {
         shopId: pendingShopId,
       });
 
-      const logged = await login(email.trim(), password);
-
+      await login(email.trim(), password);
       const slug = selectedShop.shop.slug;
       navigate(`/book/${slug}`, { replace: true });
     } catch (err: any) {
@@ -393,7 +401,7 @@ export default function RegisterPage() {
                 {loadingShops ? (
                   <div className="text-xs text-slate-400">Carregando unidades...</div>
                 ) : shops.length === 0 ? (
-                  <div className="text-xs text-slate-400">Nenhuma unidade disponível.</div>
+                  <div className="text-xs text-slate-400">Nenhuma unidade disponível no momento.</div>
                 ) : (
                   <select
                     value={selectedShopId}
@@ -482,7 +490,7 @@ export default function RegisterPage() {
 
               <button
                 onClick={confirmLink}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"
+                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"
                 disabled={submitting}
               >
                 Sim, cadastrar também

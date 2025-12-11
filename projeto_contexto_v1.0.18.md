@@ -1,5 +1,6 @@
-CONTEXTO DO PROJETO - VERSÃO 1.0.9
-Data de Geração: 11/12/2025 01:09:00
+CONTEXTO DO PROJETO - VERSÃO 1.0.18
+Data de Geração: 11/12/2025 12:33:46
+### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
 ESTRUTURA DE DIRETÓRIOS:
@@ -7,7 +8,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── index.html
 ├── package.json
 ├── pb_schema.md
-├── projeto_contexto_v1.0.8.md
+├── projeto_contexto_v1.0.17.md
 ├── Projeto_TeAgendei_v2.1.md
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -16,12 +17,16 @@ ESTRUTURA DE DIRETÓRIOS:
 │   ├── worktrees.json
 ├── public/
 ├── src/
+│   ├── index.css
 │   ├── vite-end.d.ts
 │   ├── react-app/
 │   │   ├── App.tsx
 │   │   ├── main.tsx
 │   │   ├── components/
 │   │   │   ├── booking/
+│   │   │   │   ├── StepConfirm.tsx
+│   │   │   │   ├── StepDateTime.tsx
+│   │   │   │   ├── StepProfessional.tsx
 │   │   │   │   ├── StepService.tsx
 │   │   │   ├── common/
 │   │   │   ├── layout/
@@ -30,18 +35,24 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   ├── TenantContext.tsx
 │   │   ├── lib/
 │   │   │   ├── api/
+│   │   │   │   ├── appointments.ts
+│   │   │   │   ├── availability.ts
 │   │   │   │   ├── client.ts
 │   │   │   │   ├── dashboard.ts
 │   │   │   │   ├── onboarding.ts
 │   │   │   │   ├── pocketbase.ts
 │   │   │   │   ├── register.ts
 │   │   │   │   ├── services.ts
+│   │   │   │   ├── shop-hours.ts
+│   │   │   │   ├── staff.ts
 │   │   │   ├── utils/
+│   │   │   │   ├── slots.ts
 │   │   ├── pages/
 │   │   │   ├── auth/
 │   │   │   │   ├── LoginPage.tsx
 │   │   │   │   ├── RegisterPage.tsx
 │   │   │   ├── booking/
+│   │   │   │   ├── BookPage.tsx
 │   │   │   ├── client/
 │   │   │   │   ├── ClientPanelPage.tsx
 │   │   │   ├── dashboard/
@@ -53,10 +64,11 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   │   ├── OwnerProfessionalStep.tsx
 │   │   │   │   ├── ShopStep.tsx
 │   │   │   ├── owner/
+│   │   │   │   ├── SettingsPage.tsx
 │   │   │   ├── public/
 │   │   │   │   ├── LandingPage.tsx
 │   │   │   ├── staff/
-│   │   │   │   ├── AgendaPage.tsx
+│   │   │   │   ├── StaffAgendaPage.tsx
 │   │   ├── routes/
 │   │   │   ├── AppRouter.tsx
 │   │   │   ├── ProtectedRoute.tsx
@@ -82,21 +94,27 @@ Path: index.html
 
     <title>TeAgendei</title>
 
-    <!-- Tailwind (opcional – caso esteja usando CDN para testes rápidos) -->
-    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- Ícones PWA/favicons podem ser colocados depois -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+          }
+        }
+      }
+    </script>
   </head>
 
   <body>
-    <!-- root principal onde o React renderiza tudo -->
     <div id="root"></div>
 
-    <!-- entrada do Vite que inicializa o React -->
     <script type="module" src="/src/react-app/main.tsx"></script>
   </body>
 </html>
-
 --- FIM DO ARQUIVO: index.html ---
 
 
@@ -2335,11 +2353,11 @@ Path: pb_schema.md
 --- FIM DO ARQUIVO: pb_schema.md ---
 
 
---- INICIO DO ARQUIVO: projeto_contexto_v1.0.8.md ---
-Path: projeto_contexto_v1.0.8.md
+--- INICIO DO ARQUIVO: projeto_contexto_v1.0.17.md ---
+Path: projeto_contexto_v1.0.17.md
 ------------------------------
 
---- FIM DO ARQUIVO: projeto_contexto_v1.0.8.md ---
+--- FIM DO ARQUIVO: projeto_contexto_v1.0.17.md ---
 
 
 --- INICIO DO ARQUIVO: Projeto_TeAgendei_v2.1.md ---
@@ -2896,6 +2914,27 @@ Path: .cursor\worktrees.json
 --- FIM DO ARQUIVO: .cursor\worktrees.json ---
 
 
+--- INICIO DO ARQUIVO: src\index.css ---
+Path: src\index.css
+------------------------------
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  /* Força o esquema dark já que o design usa cores escuras */
+  color-scheme: dark; 
+  background-color: #020617; /* slate-950 aproximado */
+  color: rgba(255, 255, 255, 0.87);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+--- FIM DO ARQUIVO: src\index.css ---
+
+
 --- INICIO DO ARQUIVO: src\vite-end.d.ts ---
 Path: src\vite-end.d.ts
 ------------------------------
@@ -2942,6 +2981,446 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 );
 
 --- FIM DO ARQUIVO: src\react-app\main.tsx ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\components\booking\StepConfirm.tsx ---
+Path: src\react-app\components\booking\StepConfirm.tsx
+------------------------------
+// Caminho: src/react-app/components/booking/StepConfirm.tsx
+import { useState } from "react";
+import type { Shop, Service, User } from "@/shared/types";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { createAppointment } from "@/react-app/lib/api/appointments";
+import { useNavigate } from "react-router-dom";
+
+type Props = {
+  shop: Shop;
+  service: Service;
+  professional: User;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  onBack: () => void;
+};
+
+export default function StepConfirm({ shop, service, professional, date, time, onBack }: Props) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Formatar data para exibição amigável
+  const dateDisplay = new Date(date + "T00:00:00").toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+
+  // Calcular horário de término estimado
+  function calculateEndTime() {
+    const [h, m] = time.split(":").map(Number);
+    const dateObj = new Date();
+    dateObj.setHours(h, m + service.duration);
+    return dateObj.toTimeString().slice(0, 5);
+  }
+
+  const endTime = calculateEndTime();
+
+  async function handleConfirm() {
+    // Validação de login: O cliente precisa estar logado para agendar?
+    // Se sim, aqui verificamos. Se não, precisaríamos de um form de "Guest".
+    // Pelo contexto atual, vamos assumir que ele precisa estar logado (ClientPanelPage existe).
+    
+    if (!user) {
+      // Redirecionar para login salvando o estado seria o ideal, 
+      // mas por simplicidade vamos pedir login.
+      alert("Você precisa fazer login ou criar conta para finalizar.");
+      navigate("/login"); 
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      // Montar data ISO completa para o banco
+      const startIso = `${date} ${time}:00`;
+      
+      // Calcular end_time ISO (opcional, mas bom ter)
+      // Simplificação: apenas string para o PB aceitar, idealmente calcularia real
+      
+      await createAppointment({
+        shop_id: shop.id,
+        service_id: service.id,
+        barber_id: professional.id,
+        client_id: user.id,
+        start_time: startIso,
+        total_amount: service.price,
+        notes: "Agendamento via App"
+      });
+
+      // Sucesso! Redirecionar para painel do cliente
+      navigate("/client");
+      
+    } catch (err: any) {
+      console.error(err);
+      setError("Erro ao confirmar agendamento. Tente novamente.");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2 transition">← Voltar</button>
+        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">Passo 4 • Confirmação</p>
+        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">Confira os detalhes</h2>
+      </div>
+
+      <div className="bg-slate-950/50 rounded-2xl p-5 border border-white/5 space-y-4 text-sm">
+        <div className="flex justify-between border-b border-white/5 pb-3">
+          <span className="text-slate-400">Serviço</span>
+          <span className="font-medium text-white">{service.name}</span>
+        </div>
+        <div className="flex justify-between border-b border-white/5 pb-3">
+          <span className="text-slate-400">Profissional</span>
+          <span className="font-medium text-white">{professional.name}</span>
+        </div>
+        <div className="flex justify-between border-b border-white/5 pb-3">
+          <span className="text-slate-400">Data</span>
+          <span className="font-medium text-white capitalize">{dateDisplay}</span>
+        </div>
+        <div className="flex justify-between border-b border-white/5 pb-3">
+          <span className="text-slate-400">Horário</span>
+          <span className="font-medium text-emerald-400">{time} - {endTime}</span>
+        </div>
+        <div className="flex justify-between pt-1">
+          <span className="text-slate-400">Valor Total</span>
+          <span className="font-bold text-lg text-white">
+            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(service.price)}
+          </span>
+        </div>
+      </div>
+
+      {!user && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl text-xs text-yellow-200">
+          Você precisará fazer login na próxima etapa para confirmar.
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-xs text-red-200">
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={handleConfirm}
+        disabled={submitting}
+        className="w-full rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {submitting ? "Confirmando..." : "Confirmar Agendamento"}
+      </button>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\components\booking\StepConfirm.tsx ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\components\booking\StepDateTime.tsx ---
+Path: src\react-app\components\booking\StepDateTime.tsx
+------------------------------
+// Caminho: src/react-app/components/booking/StepDateTime.tsx
+import { useEffect, useState } from "react";
+import type { Shop, Service, User, TimeSlot, ShopHour } from "@/shared/types";
+import { getShopHours, getProfessionalAppointments } from "@/react-app/lib/api/availability";
+import { generateSlots } from "@/react-app/lib/utils/slots";
+
+type Props = {
+  shop: Shop;
+  service: Service;
+  professional: User;
+  onBack: () => void;
+  onNext: (date: string, time: string) => void;
+};
+
+export default function StepDateTime({ shop, service, professional, onBack, onNext }: Props) {
+  const [selectedDate, setSelectedDate] = useState<string>(""); // YYYY-MM-DD
+  const [slots, setSlots] = useState<TimeSlot[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [shopHours, setShopHours] = useState<ShopHour[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+
+  // 1. Carrega horários da loja ao montar
+  useEffect(() => {
+    getShopHours(shop.id).then(setShopHours);
+    
+    // Seta data de hoje como padrão
+    const today = new Date().toISOString().split('T')[0];
+    setSelectedDate(today);
+  }, [shop.id]);
+
+  // 2. Quando muda a data, recalcula slots
+  useEffect(() => {
+    if (!selectedDate || shopHours.length === 0) return;
+
+    async function loadSlots() {
+      setLoading(true);
+      const appointments = await getProfessionalAppointments(professional.id, selectedDate);
+      
+      const generated = generateSlots(
+        selectedDate,
+        service.duration,
+        shopHours,
+        appointments
+      );
+      
+      setSlots(generated);
+      setLoading(false);
+    }
+
+    loadSlots();
+  }, [selectedDate, shopHours, professional.id, service.duration]);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2 transition flex items-center gap-1">← Voltar</button>
+        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">Passo 3 • Data e Hora</p>
+        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">Quando será o atendimento?</h2>
+        <p className="text-sm text-slate-300 mt-1">
+          Profissional: <span className="text-emerald-300">{professional.name}</span> • Duração: {service.duration} min
+        </p>
+      </div>
+
+      {/* Seletor de Data Simples (Nativo por enquanto) */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-slate-400">Selecione o dia</label>
+        <input 
+          type="date" 
+          value={selectedDate}
+          onChange={(e) => {
+            setSelectedDate(e.target.value);
+            setSelectedSlot(null);
+          }}
+          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+        />
+      </div>
+
+      {/* Grid de Horários */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-slate-400">Horários disponíveis</label>
+        
+        {loading ? (
+          <div className="py-8 text-center text-slate-500 text-sm animate-pulse">Calculando agenda...</div>
+        ) : slots.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-sm bg-slate-950/30 rounded-xl border border-white/5">
+            Nenhum horário disponível nesta data.
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 md:grid-cols-6">
+            {slots.map((slot) => (
+              <button
+                key={slot.time}
+                disabled={!slot.isAvailable}
+                onClick={() => setSelectedSlot(slot.time)}
+                className={`
+                  py-2 px-1 rounded-lg text-sm font-medium transition
+                  ${!slot.isAvailable 
+                    ? "bg-slate-800/50 text-slate-600 cursor-not-allowed line-through" 
+                    : selectedSlot === slot.time
+                      ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-105"
+                      : "bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
+                  }
+                `}
+              >
+                {slot.time}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-end pt-4 border-t border-white/5">
+        <button
+          onClick={() => selectedSlot && onNext(selectedDate, selectedSlot)}
+          disabled={!selectedSlot}
+          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Confirmar Horário
+          <span>⟶</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\components\booking\StepDateTime.tsx ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\components\booking\StepProfessional.tsx ---
+Path: src\react-app\components\booking\StepProfessional.tsx
+------------------------------
+// Caminho: src/react-app/components/booking/StepProfessional.tsx
+import { useEffect, useState } from "react";
+import type { User, Shop, Service } from "@/shared/types";
+import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
+
+type StepProfessionalProps = {
+  shop: Shop;
+  service: Service;
+  professional: User | null;
+  onChange: (data: Partial<{ professional: User | null }>) => void;
+  onBack: () => void;
+  onNext: () => void;
+};
+
+export default function StepProfessional({
+  shop,
+  service,
+  professional,
+  onChange,
+  onBack,
+  onNext,
+}: StepProfessionalProps) {
+  const [professionals, setProfessionals] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      const list = await getProfessionalsByShop(shop.id);
+      if (!cancelled) {
+        setProfessionals(list);
+        setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [shop.id]);
+
+  const handleSelect = (user: User) => {
+    onChange({ professional: user });
+  };
+
+  if (loading) {
+    return (
+      <div className="py-10 text-sm text-slate-300 animate-pulse">
+        Buscando profissionais disponíveis...
+      </div>
+    );
+  }
+
+  if (professionals.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="py-6 px-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">
+          Nenhum profissional disponível para atendimento nesta unidade no momento.
+        </div>
+        <button
+          onClick={onBack}
+          className="text-sm text-slate-400 hover:text-white transition"
+        >
+          ← Voltar e escolher outro serviço
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <button
+          onClick={onBack}
+          className="text-xs text-slate-400 hover:text-white mb-2 transition flex items-center gap-1"
+        >
+          ← Voltar
+        </button>
+        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">
+          Passo 2 • Profissional
+        </p>
+        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">
+          Com quem você quer realizar este serviço?
+        </h2>
+        <p className="text-sm text-slate-300 mt-1">
+          Serviço selecionado:{" "}
+          <span className="font-medium text-emerald-300">{service.name}</span>
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {professionals.map((p) => {
+          const isSelected = professional?.id === p.id;
+
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => handleSelect(p)}
+              className={[
+                "relative w-full text-left rounded-2xl border px-4 py-4 transition group",
+                "bg-slate-950/60 hover:bg-slate-900/80",
+                "border-white/10 hover:border-emerald-400/50",
+                isSelected
+                  ? "ring-2 ring-emerald-400/80 border-emerald-400/80 bg-emerald-950/20"
+                  : "",
+              ].join(" ")}
+            >
+              <div className="flex items-center gap-4">
+                <div
+                  className={`h-12 w-12 rounded-full flex items-center justify-center text-lg font-bold shadow-inner ${
+                    isSelected
+                      ? "bg-emerald-500 text-slate-950"
+                      : "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-200"
+                  }`}
+                >
+                  {p.avatar ? (
+                    <img
+                      src={p.avatar}
+                      alt={p.name}
+                      className="h-full w-full rounded-full object-cover"
+                    />
+                  ) : (
+                    (p.name?.[0] || p.email[0] || "?").toUpperCase()
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm font-semibold truncate ${
+                      isSelected ? "text-white" : "text-slate-200"
+                    }`}
+                  >
+                    {p.name || "Profissional sem nome"}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {p.role === "dono" ? "Sócio / Profissional" : "Staff"}
+                  </p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex items-center justify-end pt-4 border-t border-white/5">
+        <button
+          type="button"
+          onClick={onNext}
+          disabled={!professional}
+          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+        >
+          Ver horários disponíveis
+          <span>⟶</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\components\booking\StepProfessional.tsx ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepService.tsx ---
@@ -3371,6 +3850,84 @@ export const useTenant = (): TenantContextType => {
 --- FIM DO ARQUIVO: src\react-app\contexts\TenantContext.tsx ---
 
 
+--- INICIO DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
+Path: src\react-app\lib\api\appointments.ts
+------------------------------
+// Caminho: src/react-app/lib/api/appointments.ts
+import { pb } from "./pocketbase";
+import type { CreateAppointmentDTO, Appointment } from "@/shared/types";
+
+/**
+ * Cria um novo agendamento
+ */
+export async function createAppointment(data: CreateAppointmentDTO): Promise<Appointment> {
+  // O PocketBase espera o formato de data ISO UTC. 
+  // O DTO já deve vir com a string correta (ex: "2023-12-25 14:30:00")
+  
+  const record = await pb.collection("appointments").create({
+    start_time: data.start_time,
+    end_time: data.end_time,
+    client_id: data.client_id,
+    barber_id: data.barber_id,
+    service_id: data.service_id,
+    shop_id: data.shop_id,
+    status: "1", // 1 = Pendente/Confirmado (dependendo da sua regra)
+    payment_status: "1", // 1 = A Pagar
+    total_amount: data.total_amount,
+    notes: data.notes
+  });
+
+  return record as unknown as Appointment;
+}
+--- FIM DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\lib\api\availability.ts ---
+Path: src\react-app\lib\api\availability.ts
+------------------------------
+// Caminho: src/react-app/lib/api/availability.ts
+import { pb } from "./pocketbase";
+import type { Appointment, ShopHour } from "@/shared/types";
+
+/**
+ * Busca os horários de funcionamento da loja
+ */
+export async function getShopHours(shopId: string): Promise<ShopHour[]> {
+  try {
+    return await pb.collection("shop_hours").getFullList<ShopHour>({
+      filter: `shop_id = "${shopId}"`,
+    });
+  } catch (error) {
+    console.error("Erro ao buscar horários:", error);
+    return [];
+  }
+}
+
+/**
+ * Busca agendamentos de um profissional em uma data específica
+ * para verificar conflitos.
+ */
+export async function getProfessionalAppointments(
+  professionalId: string,
+  date: string // Formato YYYY-MM-DD
+): Promise<Appointment[]> {
+  try {
+    // O filtro busca agendamentos que começam no dia especificado
+    // status != '0' (0 geralmente é cancelado)
+    const startOfDay = `${date} 00:00:00`;
+    const endOfDay = `${date} 23:59:59`;
+
+    return await pb.collection("appointments").getFullList<Appointment>({
+      filter: `barber_id = "${professionalId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
+    });
+  } catch (error) {
+    console.error("Erro ao buscar agendamentos:", error);
+    return [];
+  }
+}
+--- FIM DO ARQUIVO: src\react-app\lib\api\availability.ts ---
+
+
 --- INICIO DO ARQUIVO: src\react-app\lib\api\client.ts ---
 Path: src\react-app\lib\api\client.ts
 ------------------------------
@@ -3554,7 +4111,6 @@ function asShop(record: any): Shop {
     company_id: record.company_id,
     name: record.name,
     slug: record.slug,
-    // Tratamento de campos opcionais para garantir string
     owner_id: record.owner_id,
     logo: record.logo || undefined,
     address: record.address || "",
@@ -3565,7 +4121,6 @@ function asShop(record: any): Shop {
   };
 }
 
-// Helper para User (Profissional)
 function asUser(record: any): User {
   return {
     id: record.id,
@@ -3584,26 +4139,35 @@ function asUser(record: any): User {
 
 /**
  * 1️⃣ Criar empresa
+ * CORREÇÃO: Campos de data agora enviam string vazia "" em vez de null
  */
 export async function onboardingCreateCompany(data: {
   legal_name: string;
-  cnpj: string;
+  cnpj?: string; 
   owner_id: string;
 }): Promise<Company> {
-  const record = await pb.collection("companies").create({
-    legal_name: data.legal_name,
-    cnpj: data.cnpj,
-    owner_id: data.owner_id,
-    plan_status: "trial",
-    // Valores padrão para o plano trial
-    trial_expires_at: null,
-    plan: "trial",
-    max_shops: 1,
-    max_professionals: 3,
-    billing_cycle: null, 
-  });
+  try {
+    const record = await pb.collection("companies").create({
+      legal_name: data.legal_name,
+      cnpj: data.cnpj ?? "", // Envia string vazia se for undefined
+      owner_id: data.owner_id,
+      plan_status: "trial",
+      
+      // CORREÇÃO CRÍTICA: PocketBase prefere "" para datas vazias
+      trial_expires_at: "", 
+      billing_cycle: "", 
+      
+      plan: "trial",
+      max_shops: 1,
+      max_professionals: 3,
+    });
 
-  return asCompany(record);
+    return asCompany(record);
+  } catch (err: any) {
+    // Log detalhado para debug do erro 400
+    console.error("Erro detalhado do PocketBase:", err.data);
+    throw err;
+  }
 }
 
 /**
@@ -3625,16 +4189,12 @@ export async function onboardingCreateShop(data: {
     address: data.address ?? "",
     segment_id: data.segment_id ?? "",
     is_active: true,
-    // owner_id será preenchido automaticamente pelo Hook do PocketBase ou API Rule se configurado,
-    // mas idealmente passamos se tivermos o contexto. 
-    // OBS: No seu schema, shops tem owner_id. Se a regra não preencher, precisamos passar aqui.
-    // Vou assumir que o backend resolve ou que vamos passar no createInitialShop abaixo.
   });
 
   return asShop(record);
 }
 
-// Wrapper para criar Shop já com owner_id (mais seguro)
+// Wrapper para criar Shop já com owner_id
 export async function createInitialShop(
   companyId: string, 
   ownerId: string, 
@@ -3651,13 +4211,11 @@ export async function createInitialShop(
 
 /**
  * 3️⃣ Transformar o Dono em Profissional
- * ATENÇÃO: Atualiza o User existente, NÃO cria registro novo em tabela inexistente.
  */
 export async function onboardingCreateProfessional(data: {
   ownerId: string;
   shopId: string;
 }): Promise<User> {
-  // Atualizamos o próprio usuário dono para dizer que ele atende na loja
   const record = await pb.collection("users").update(data.ownerId, {
     is_professional: true,
     shop_id: data.shopId,
@@ -3693,10 +4251,9 @@ export async function getShopsByCompany(companyId: string): Promise<Shop[]> {
 }
 
 /**
- * 6️⃣ Buscar profissionais por empresa (Correção: Busca em USERS)
+ * 6️⃣ Buscar profissionais por empresa
  */
 export async function getProfessionalsByCompany(companyId: string): Promise<User[]> {
-  // Busca usuários que pertencem à empresa E têm a flag is_professional = true
   const list = await pb.collection("users").getFullList({
     filter: `company_id = "${companyId}" && is_professional = true`,
     sort: "+created",
@@ -3983,16 +4540,23 @@ export async function registerClient(input: RegisterClientInput) {
    3) Buscar shops ativos + empresa
 ============================================================ */
 export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
+  // CORREÇÃO: O campo no banco é 'is_active', não 'status'
   const shops = await pb.collection("shops").getFullList({
-    filter: `status = true`,
+    filter: `is_active = true`, 
     sort: "name",
   });
 
   const result: ShopWithCompany[] = [];
 
   for (const shop of shops) {
-    const company = await pb.collection("companies").getOne(shop.company_id);
-    result.push({ shop, company });
+    try {
+        const company = await pb.collection("companies").getOne(shop.company_id);
+        result.push({ shop, company });
+    } catch (err) {
+        console.warn(`Empresa não encontrada para a loja ${shop.id}`, err);
+        // Opcional: Adicionar mesmo sem empresa ou ignorar
+        result.push({ shop, company: { legal_name: "Empresa não identificada" } });
+    }
   }
 
   return result;
@@ -4015,7 +4579,6 @@ export async function getShopBySlug(slug: string) {
 
   return list.length > 0 ? list[0] : null;
 }
-
 --- FIM DO ARQUIVO: src\react-app\lib\api\register.ts ---
 
 
@@ -4064,6 +4627,236 @@ export async function getServiceById(
 }
 
 --- FIM DO ARQUIVO: src\react-app\lib\api\services.ts ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\lib\api\shop-hours.ts ---
+Path: src\react-app\lib\api\shop-hours.ts
+------------------------------
+// Caminho: src/react-app/lib/api/shop-hours.ts
+import { pb } from "./pocketbase";
+import type { ShopHour, Weekday } from "@/shared/types";
+
+// Helper para converter record em ShopHour
+function asShopHour(record: any): ShopHour {
+  return {
+    id: record.id,
+    shop_id: record.shop_id,
+    company_id: record.company_id,
+    weekday: record.weekday,
+    start_time: record.start_time,
+    end_time: record.end_time,
+    is_closed: record.is_closed,
+    created: record.created,
+    updated: record.updated,
+  };
+}
+
+/**
+ * Busca todos os horários configurados para uma loja
+ */
+export async function getShopHours(shopId: string): Promise<ShopHour[]> {
+  const records = await pb.collection("shop_hours").getFullList({
+    filter: `shop_id = "${shopId}"`,
+    sort: "weekday", // Podemos ordenar depois no front se precisar
+  });
+  return records.map(asShopHour);
+}
+
+/**
+ * Salva ou Atualiza um horário de funcionamento
+ * (Se já existir registro para aquele dia, atualiza. Se não, cria.)
+ */
+export async function upsertShopHour(data: {
+  shopId: string;
+  companyId: string;
+  weekday: Weekday;
+  startTime: string; // "09:00"
+  endTime: string;   // "18:00"
+  isClosed: boolean;
+}): Promise<ShopHour> {
+  
+  // 1. Tenta achar registro existente para esse dia/loja
+  let existingId: string | null = null;
+  try {
+    const found = await pb.collection("shop_hours").getFirstListItem(
+      `shop_id="${data.shopId}" && weekday="${data.weekday}"`
+    );
+    existingId = found.id;
+  } catch {
+    // Não achou, tudo bem. Vamos criar.
+  }
+
+  const payload = {
+    shop_id: data.shopId,
+    company_id: data.companyId,
+    weekday: data.weekday,
+    start_time: data.startTime,
+    end_time: data.endTime,
+    is_closed: data.isClosed,
+  };
+
+  if (existingId) {
+    // Atualiza
+    const record = await pb.collection("shop_hours").update(existingId, payload);
+    return asShopHour(record);
+  } else {
+    // Cria
+    const record = await pb.collection("shop_hours").create(payload);
+    return asShopHour(record);
+  }
+}
+
+/**
+ * Utilitário: Cria horários padrão para uma loja nova (Seg-Sex 09-18, Sab 09-14)
+ */
+export async function seedDefaultHours(shopId: string, companyId: string) {
+  const defaults = [
+    { day: "seg", start: "09:00", end: "18:00" },
+    { day: "ter", start: "09:00", end: "18:00" },
+    { day: "qua", start: "09:00", end: "18:00" },
+    { day: "qui", start: "09:00", end: "18:00" },
+    { day: "sex", start: "09:00", end: "18:00" },
+    { day: "sab", start: "09:00", end: "14:00" },
+    { day: "dom", start: "00:00", end: "00:00", closed: true },
+  ];
+
+  for (const item of defaults) {
+    await upsertShopHour({
+      shopId,
+      companyId,
+      weekday: item.day as Weekday,
+      startTime: item.start,
+      endTime: item.end,
+      isClosed: item.closed || false,
+    });
+  }
+}
+--- FIM DO ARQUIVO: src\react-app\lib\api\shop-hours.ts ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\lib\api\staff.ts ---
+Path: src\react-app\lib\api\staff.ts
+------------------------------
+// Caminho: src/react-app/lib/api/staff.ts
+import { pb } from "./pocketbase";
+import type { User } from "@/shared/types";
+
+function asUser(record: any): User {
+  return {
+    id: record.id,
+    email: record.email,
+    name: record.name,
+    role: record.role,
+    phone: record.phone,
+    avatar: record.avatar ? pb.files.getUrl(record, record.avatar) : undefined,
+    company_id: record.company_id,
+    shop_id: record.shop_id,
+    is_professional: record.is_professional,
+    created: record.created,
+    updated: record.updated,
+  };
+}
+
+export async function getProfessionalsByShop(shopId: string): Promise<User[]> {
+  try {
+    // Busca usuários vinculados à loja que sejam profissionais
+    const records = await pb.collection("users").getFullList({
+      filter: `shop_id = "${shopId}" && is_professional = true`,
+      sort: "name",
+    });
+
+    return records.map(asUser);
+  } catch (error) {
+    console.error("Erro ao buscar profissionais:", error);
+    return [];
+  }
+}
+--- FIM DO ARQUIVO: src\react-app\lib\api\staff.ts ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\lib\utils\slots.ts ---
+Path: src\react-app\lib\utils\slots.ts
+------------------------------
+// Caminho: src/react-app/lib/utils/slots.ts
+import type { ShopHour, Appointment, TimeSlot } from "@/shared/types";
+
+// Helper: converte "09:30" para minutos (570)
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+// Helper: converte minutos (570) para "09:30"
+function minutesToTime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+const WEEKDAY_MAP: Record<number, string> = {
+  0: "dom", 1: "seg", 2: "ter", 3: "qua", 4: "qui", 5: "sex", 6: "sab",
+};
+
+/**
+ * GERA OS SLOTS DISPONÍVEIS
+ */
+export function generateSlots(
+  dateStr: string, // YYYY-MM-DD
+  serviceDuration: number,
+  shopHours: ShopHour[],
+  existingAppointments: Appointment[]
+): TimeSlot[] {
+  const dateObj = new Date(dateStr + "T00:00:00");
+  const weekday = WEEKDAY_MAP[dateObj.getDay()];
+
+  // 1. Achar horário da loja para hoje
+  const hours = shopHours.find((h) => h.weekday === weekday);
+
+  // Se loja fechada ou sem horário cadastrado
+  if (!hours || hours.is_closed || !hours.start_time || !hours.end_time) {
+    return [];
+  }
+
+  const startMin = timeToMinutes(hours.start_time);
+  const endMin = timeToMinutes(hours.end_time);
+  const slots: TimeSlot[] = [];
+
+  // 2. Loop para criar slots (ex: 09:00, 09:30, 10:00...)
+  for (let current = startMin; current + serviceDuration <= endMin; current += serviceDuration) {
+    const timeString = minutesToTime(current);
+    const slotStartISO = `${dateStr} ${timeString}:00`;
+    
+    // Calcular fim do slot
+    const slotEndMin = current + serviceDuration;
+    const slotEndTimeString = minutesToTime(slotEndMin);
+    const slotEndISO = `${dateStr} ${slotEndTimeString}:00`;
+
+    // 3. Verificar colisão com agendamentos existentes
+    const isBusy = existingAppointments.some((appt) => {
+      const apptStart = new Date(appt.start_time).getTime(); // Assumindo que vem UTC ou ISO correto
+      // Pequeno ajuste: appointments no PB são salvos como string UTC.
+      // Simplificação para este passo: vamos comparar strings de hora se possível, 
+      // mas o ideal é comparar timestamps completos.
+      
+      const thisSlotStart = new Date(slotStartISO).getTime();
+      const thisSlotEnd = new Date(slotEndISO).getTime();
+
+      // Se o agendamento já existe, ele bloqueia o slot?
+      // Lógica básica de overlap
+      return (apptStart >= thisSlotStart && apptStart < thisSlotEnd);
+    });
+
+    slots.push({
+      time: timeString,
+      startISO: slotStartISO,
+      endISO: slotEndISO,
+      isAvailable: !isBusy,
+    });
+  }
+
+  return slots;
+}
+--- FIM DO ARQUIVO: src\react-app\lib\utils\slots.ts ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\pages\auth\LoginPage.tsx ---
@@ -4324,6 +5117,7 @@ export default function RegisterPage() {
 
     async function load() {
       setLoadingShops(true);
+      // Limpa erro anterior para não confundir o usuário
       setError(null);
 
       try {
@@ -4331,8 +5125,12 @@ export default function RegisterPage() {
         const slug = searchParams.get("slug");
 
         const allShops = await fetchActiveShopsWithCompany();
+        
+        if (cancelled) return;
+
         let preselected = null;
 
+        // Se tiver ID ou Slug na URL, tenta achar a loja específica
         if (shopId) {
           preselected = await getShopById(shopId);
         } else if (slug) {
@@ -4340,26 +5138,32 @@ export default function RegisterPage() {
         }
 
         setShops(allShops);
-        if (cancelled) return;
 
         if (preselected) {
           setSelectedShopId(preselected.id);
         } else if (allShops.length > 0) {
           setSelectedShopId(allShops[0].shop.id);
         }
-      } catch (err) {
-        console.error(err);
-        setError("Não foi possível carregar as unidades disponíveis.");
+      } catch (err: any) {
+        // CORREÇÃO: Ignora erro se for cancelamento automático do PocketBase (status 0)
+        if (err.status !== 0 && !cancelled) {
+          console.error("Erro ao carregar lojas:", err);
+          setError("Não foi possível carregar as unidades disponíveis.");
+        }
       } finally {
         if (!cancelled) setLoadingShops(false);
       }
     }
 
-    load();
+    // Se estiver no modo cliente, carrega as lojas
+    if (mode === "client") {
+        load();
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, [searchParams, mode]); // Adicionado 'mode' para recarregar se trocar de aba
 
   const selectedShop = useMemo(
     () => shops.find((s) => s.shop.id === selectedShopId) ?? null,
@@ -4414,9 +5218,7 @@ export default function RegisterPage() {
         });
 
         const user = await login(email.trim(), password);
-
         await reloadTenants();
-
         navigate("/onboarding", { replace: true });
         return;
       }
@@ -4448,10 +5250,10 @@ export default function RegisterPage() {
         shopId,
       });
 
-      const logged = await login(email.trim(), password);
-
+      await login(email.trim(), password);
       const slug = selectedShop.shop.slug;
       navigate(`/book/${slug}`, { replace: true });
+
     } catch (err: any) {
       console.error(err);
       setError(
@@ -4482,8 +5284,7 @@ export default function RegisterPage() {
         shopId: pendingShopId,
       });
 
-      const logged = await login(email.trim(), password);
-
+      await login(email.trim(), password);
       const slug = selectedShop.shop.slug;
       navigate(`/book/${slug}`, { replace: true });
     } catch (err: any) {
@@ -4662,7 +5463,7 @@ export default function RegisterPage() {
                 {loadingShops ? (
                   <div className="text-xs text-slate-400">Carregando unidades...</div>
                 ) : shops.length === 0 ? (
-                  <div className="text-xs text-slate-400">Nenhuma unidade disponível.</div>
+                  <div className="text-xs text-slate-400">Nenhuma unidade disponível no momento.</div>
                 ) : (
                   <select
                     value={selectedShopId}
@@ -4751,7 +5552,7 @@ export default function RegisterPage() {
 
               <button
                 onClick={confirmLink}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"
+                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"
                 disabled={submitting}
               >
                 Sim, cadastrar também
@@ -4763,8 +5564,166 @@ export default function RegisterPage() {
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\pages\auth\RegisterPage.tsx ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\pages\booking\BookPage.tsx ---
+Path: src\react-app\pages\booking\BookPage.tsx
+------------------------------
+// Caminho: src/react-app/pages/booking/BookPage.tsx
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { getShopBySlug } from "@/react-app/lib/api/register";
+import type { Shop, Service, User } from "@/shared/types";
+
+// Import dos passos (Steps)
+import StepService from "@/react-app/components/booking/StepService";
+import StepProfessional from "@/react-app/components/booking/StepProfessional";
+import StepDateTime from "@/react-app/components/booking/StepDateTime";
+import StepConfirm from "@/react-app/components/booking/StepConfirm";
+
+export default function BookPage() {
+  const { slug } = useParams<{ slug: string }>();
+
+  // Estados Globais do Agendamento
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Estado do Wizard (Passo a Passo)
+  const [step, setStep] = useState(1);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [selectedProfessional, setSelectedProfessional] = useState<User | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<string>("");
+
+  // 1. Carrega a Loja pelo Slug ao abrir a página
+  useEffect(() => {
+    async function load() {
+      if (!slug) return;
+      setLoading(true);
+      try {
+        const data = await getShopBySlug(slug);
+        if (!data) {
+          setError("Unidade não encontrada ou endereço incorreto.");
+        } else {
+          setShop(data);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Erro ao carregar a unidade. Tente novamente.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [slug]);
+
+  // Renderização de Erro/Loading
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+        <div className="animate-pulse">Carregando agendamento...</div>
+      </div>
+    );
+  }
+
+  if (error || !shop) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-900 border border-white/10 rounded-2xl p-6 text-center">
+          <div className="text-red-400 mb-2">● Unidade não localizada</div>
+          <p className="text-slate-300">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Renderização do Wizard
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50 py-6 px-4 md:py-10">
+      <div className="max-w-2xl mx-auto">
+        
+        {/* Cabeçalho da Loja */}
+        <div className="mb-8 text-center space-y-2">
+          {shop.logo && (
+             <img src={shop.logo} alt="Logo" className="w-16 h-16 mx-auto rounded-full object-cover bg-slate-800" />
+          )}
+          <h1 className="text-2xl md:text-3xl font-bold">{shop.name}</h1>
+          <p className="text-slate-400 text-sm">{shop.address || "Endereço não informado"}</p>
+        </div>
+
+        {/* Área do Conteúdo (Passos) */}
+        <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
+          
+          {/* PASSO 1: SERVIÇO */}
+          {step === 1 && (
+            <StepService
+              shop={shop}
+              service={selectedService}
+              onChange={(data) => {
+                if (data.service !== undefined) setSelectedService(data.service);
+              }}
+              onNext={() => setStep(2)}
+            />
+          )}
+
+          {/* PASSO 2: PROFISSIONAL */}
+          {step === 2 && selectedService && (
+            <StepProfessional
+              shop={shop}
+              service={selectedService}
+              professional={selectedProfessional}
+              onChange={(data) => {
+                if (data.professional !== undefined) setSelectedProfessional(data.professional);
+              }}
+              onBack={() => setStep(1)}
+              onNext={() => {
+                setStep(3);
+              }}
+            />
+          )}
+
+          {/* PASSO 3: DATA E HORA */}
+          {step === 3 && selectedService && selectedProfessional && (
+            <StepDateTime
+              shop={shop}
+              service={selectedService}
+              professional={selectedProfessional}
+              onBack={() => setStep(2)}
+              onNext={(date, time) => {
+                setSelectedDate(date);
+                setSelectedTime(time);
+                setStep(4); 
+              }}
+            />
+          )}
+
+          {/* PASSO 4: CONFIRMAÇÃO */}
+          {step === 4 && selectedService && selectedProfessional && selectedDate && selectedTime && (
+            <StepConfirm
+              shop={shop}
+              service={selectedService}
+              // O '!' aqui garante ao TypeScript que não é nulo, pois o IF acima já verificou
+              professional={selectedProfessional}
+              date={selectedDate}
+              time={selectedTime}
+              onBack={() => setStep(3)}
+            />
+          )}
+
+        </div>
+        
+        <div className="mt-8 text-center">
+          <p className="text-[10px] uppercase tracking-widest text-slate-600">
+            Powered by TeaAgendei
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\pages\booking\BookPage.tsx ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\pages\client\ClientPanelPage.tsx ---
@@ -4863,12 +5822,11 @@ export default function DashboardHome() {
 --- INICIO DO ARQUIVO: src\react-app\pages\onboarding\CompanyStep.tsx ---
 Path: src\react-app\pages\onboarding\CompanyStep.tsx
 ------------------------------
-// src/react-app/pages/onboarding/CompanyStep.tsx
+// Caminho: src/react-app/pages/onboarding/CompanyStep.tsx
 import { FormEvent, useState } from "react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { useTenant } from "@/react-app/contexts/TenantContext";
-import { createCompanyForOwner } from "@/react-app/lib/api/onboarding";
-import type { CreateCompanyDTO } from "@/shared/types";
+import { onboardingCreateCompany } from "@/react-app/lib/api/onboarding";
 
 type Props = {
   onDone: () => void;
@@ -4891,29 +5849,50 @@ export default function CompanyStep({ onDone }: Props) {
     );
   }
 
+  // Função utilitária para limpar formatação (deixa só números)
+  const cleanCnpj = (value: string) => value.replace(/\D/g, "");
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!user) {
+      setError("Sessão inválida. Faça login novamente.");
+      return;
+    }
 
     if (!legalName.trim()) {
       setError("Informe o nome da sua empresa.");
       return;
     }
 
-    const payload: CreateCompanyDTO = {
-      legal_name: legalName.trim(),
-      cnpj: cnpj.trim() || undefined,
-    };
+    // Validação de tamanho do CNPJ (se preenchido)
+    const rawCnpj = cleanCnpj(cnpj);
+    if (cnpj && rawCnpj.length !== 14) {
+        setError("O CNPJ deve conter exatamente 14 números.");
+        return;
+    }
 
     setSubmitting(true);
 
     try {
-      await createCompanyForOwner(user.id, payload);
-      await reloadTenants(); // para popular currentCompany
+      await onboardingCreateCompany({
+        owner_id: user.id,
+        legal_name: legalName.trim(),
+        // CORREÇÃO: Envia apenas os números para respeitar o limite de 14 chars do banco
+        cnpj: rawCnpj || undefined, 
+      });
+
+      await reloadTenants();
       onDone();
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Não foi possível criar a empresa.");
+      // Mensagem amigável se for erro de validação
+      if (err.data?.cnpj) {
+         setError("CNPJ inválido ou já cadastrado.");
+      } else {
+         setError(err?.message || "Não foi possível criar a empresa.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -4951,10 +5930,13 @@ export default function CompanyStep({ onDone }: Props) {
           <input
             type="text"
             value={cnpj}
+            // Permite digitar qualquer coisa, mas limpamos no submit
             onChange={(e) => setCnpj(e.target.value)}
             className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/80 focus:border-emerald-400/80"
-            placeholder="00.000.000/0000-00"
+            placeholder="00.000.000/0000-00 (Apenas números se preferir)"
+            maxLength={18} // Limite visual
           />
+          <p className="text-[10px] text-slate-500">Digite apenas números ou use formatação padrão.</p>
         </div>
 
         {error && (
@@ -4974,7 +5956,6 @@ export default function CompanyStep({ onDone }: Props) {
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\pages\onboarding\CompanyStep.tsx ---
 
 
@@ -5382,6 +6363,150 @@ export default function ShopStep({ onDone }: Props) {
 --- FIM DO ARQUIVO: src\react-app\pages\onboarding\ShopStep.tsx ---
 
 
+--- INICIO DO ARQUIVO: src\react-app\pages\owner\SettingsPage.tsx ---
+Path: src\react-app\pages\owner\SettingsPage.tsx
+------------------------------
+// Caminho: src/react-app/pages/owner/SettingsPage.tsx
+import { useEffect, useState } from "react";
+import { useTenant } from "@/react-app/contexts/TenantContext";
+import { getShopHours, upsertShopHour, seedDefaultHours } from "@/react-app/lib/api/shop-hours";
+import type { ShopHour, Weekday } from "@/shared/types";
+
+const WEEKDAYS: { key: Weekday; label: string }[] = [
+  { key: "dom", label: "Domingo" },
+  { key: "seg", label: "Segunda" },
+  { key: "ter", label: "Terça" },
+  { key: "qua", label: "Quarta" },
+  { key: "qui", label: "Quinta" },
+  { key: "sex", label: "Sexta" },
+  { key: "sab", label: "Sábado" },
+];
+
+export default function SettingsPage() {
+  const { currentShop, currentCompany } = useTenant();
+  const [hours, setHours] = useState<ShopHour[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Carrega horários ao abrir
+  useEffect(() => {
+    if (!currentShop) return;
+    loadData();
+  }, [currentShop?.id]);
+
+  async function loadData() {
+    if (!currentShop) return;
+    setLoading(true);
+    const data = await getShopHours(currentShop.id);
+    setHours(data);
+    setLoading(false);
+  }
+
+  // Função para salvar uma linha alterada
+  async function handleSaveRow(day: Weekday, start: string, end: string, closed: boolean) {
+    if (!currentShop || !currentCompany) return;
+    
+    setSaving(true);
+    await upsertShopHour({
+      shopId: currentShop.id,
+      companyId: currentCompany.id,
+      weekday: day,
+      startTime: start,
+      endTime: end,
+      isClosed: closed
+    });
+    // Recarrega para garantir sync
+    await loadData(); 
+    setSaving(false);
+  }
+
+  // Botão de emergência: Criar horários padrão
+  async function handleSeed() {
+    if (!currentShop || !currentCompany) return;
+    if (!confirm("Isso irá redefinir todos os horários para o padrão (Seg-Sex 9h-18h). Continuar?")) return;
+    
+    setSaving(true);
+    await seedDefaultHours(currentShop.id, currentCompany.id);
+    await loadData();
+    setSaving(false);
+  }
+
+  if (!currentShop) return <div className="p-8 text-slate-400">Nenhuma loja selecionada.</div>;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50 p-6 md:p-10">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold mb-2">Configurações da Unidade</h1>
+        <p className="text-slate-400 mb-8">Defina os horários de funcionamento para aparecerem na agenda.</p>
+
+        {loading ? (
+          <div className="animate-pulse text-slate-500">Carregando horários...</div>
+        ) : (
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold">Horários de Funcionamento</h2>
+              {hours.length === 0 && (
+                <button 
+                  onClick={handleSeed}
+                  className="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-lg hover:bg-emerald-500/20"
+                >
+                  Preencher Padrão
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              {WEEKDAYS.map((day) => {
+                const config = hours.find((h) => h.weekday === day.key);
+                const isClosed = config?.is_closed ?? false;
+                const start = config?.start_time || "09:00";
+                const end = config?.end_time || "18:00";
+
+                return (
+                  <div key={day.key} className="flex items-center gap-4 py-2 border-b border-white/5 last:border-0">
+                    <div className="w-24 font-medium text-slate-300">{day.label}</div>
+                    
+                    <div className="flex-1 flex items-center gap-2">
+                      <input 
+                        type="time" 
+                        defaultValue={start}
+                        disabled={isClosed || saving}
+                        onBlur={(e) => handleSaveRow(day.key, e.target.value, end, isClosed)}
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-sm disabled:opacity-50"
+                      />
+                      <span className="text-slate-500">-</span>
+                      <input 
+                        type="time" 
+                        defaultValue={end}
+                        disabled={isClosed || saving}
+                        onBlur={(e) => handleSaveRow(day.key, start, e.target.value, isClosed)}
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-sm disabled:opacity-50"
+                      />
+                    </div>
+
+                    <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                      <input 
+                        type="checkbox"
+                        checked={isClosed}
+                        disabled={saving}
+                        onChange={(e) => handleSaveRow(day.key, start, end, e.target.checked)}
+                        className="rounded border-white/20 bg-black/40 text-red-500 focus:ring-red-500"
+                      />
+                      Fechado
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\pages\owner\SettingsPage.tsx ---
+
+
 --- INICIO DO ARQUIVO: src\react-app\pages\public\LandingPage.tsx ---
 Path: src\react-app\pages\public\LandingPage.tsx
 ------------------------------
@@ -5489,8 +6614,8 @@ export default function LandingPage() {
 --- FIM DO ARQUIVO: src\react-app\pages\public\LandingPage.tsx ---
 
 
---- INICIO DO ARQUIVO: src\react-app\pages\staff\AgendaPage.tsx ---
-Path: src\react-app\pages\staff\AgendaPage.tsx
+--- INICIO DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
+Path: src\react-app\pages\staff\StaffAgendaPage.tsx
 ------------------------------
 // src/react-app/pages/staff/StaffAgendaPage.tsx
 export default function StaffAgendaPage() {
@@ -5511,7 +6636,7 @@ export default function StaffAgendaPage() {
   );
 }
 
---- FIM DO ARQUIVO: src\react-app\pages\staff\AgendaPage.tsx ---
+--- FIM DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\routes\AppRouter.tsx ---
@@ -5529,8 +6654,10 @@ import BookPage from "../pages/booking/BookPage";
 import OnboardingRouter from "../pages/onboarding/OnboardingRouter";
 import DashboardHome from "../pages/dashboard/DashboardHome";
 
-import StaffAgendaPage from "../pages/staff/StaffAgendaPage";
+// Certifique-se de ter renomeado o arquivo para StaffAgendaPage.tsx
+import StaffAgendaPage from "../pages/staff/StaffAgendaPage"; 
 import ClientPanelPage from "../pages/client/ClientPanelPage";
+import SettingsPage from "../pages/owner/SettingsPage";
 
 import ProtectedRoute from "./ProtectedRoute";
 
@@ -5587,12 +6714,20 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         />
+
+        {/* CONFIGURAÇÕES DA LOJA (Corrigido: Removida a duplicata) */}
+        <Route
+          path="/owner/settings"
+          element={
+            <ProtectedRoute allowedRoles={["dono"]}>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
 }
-
-
 --- FIM DO ARQUIVO: src\react-app\routes\AppRouter.tsx ---
 
 

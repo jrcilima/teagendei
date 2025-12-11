@@ -1,13 +1,14 @@
 // Caminho: src/react-app/pages/booking/BookPage.tsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getShopBySlug } from "@/react-app/lib/api/register"; // Usando a função existente
+import { getShopBySlug } from "@/react-app/lib/api/register";
 import type { Shop, Service, User } from "@/shared/types";
 
 // Import dos passos (Steps)
 import StepService from "@/react-app/components/booking/StepService";
-// Certifique-se de ter criado o StepProfessional conforme a instrução anterior
 import StepProfessional from "@/react-app/components/booking/StepProfessional";
+import StepDateTime from "@/react-app/components/booking/StepDateTime";
+import StepConfirm from "@/react-app/components/booking/StepConfirm";
 
 export default function BookPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -21,6 +22,8 @@ export default function BookPage() {
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<User | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<string>("");
 
   // 1. Carrega a Loja pelo Slug ao abrir a página
   useEffect(() => {
@@ -104,9 +107,36 @@ export default function BookPage() {
               }}
               onBack={() => setStep(1)}
               onNext={() => {
-                // Aqui iria para o passo 3 (Data/Hora)
-                alert("Próximo passo: Data e Hora (Em construção)");
+                setStep(3);
               }}
+            />
+          )}
+
+          {/* PASSO 3: DATA E HORA */}
+          {step === 3 && selectedService && selectedProfessional && (
+            <StepDateTime
+              shop={shop}
+              service={selectedService}
+              professional={selectedProfessional}
+              onBack={() => setStep(2)}
+              onNext={(date, time) => {
+                setSelectedDate(date);
+                setSelectedTime(time);
+                setStep(4); 
+              }}
+            />
+          )}
+
+          {/* PASSO 4: CONFIRMAÇÃO */}
+          {step === 4 && selectedService && selectedProfessional && selectedDate && selectedTime && (
+            <StepConfirm
+              shop={shop}
+              service={selectedService}
+              // O '!' aqui garante ao TypeScript que não é nulo, pois o IF acima já verificou
+              professional={selectedProfessional}
+              date={selectedDate}
+              time={selectedTime}
+              onBack={() => setStep(3)}
             />
           )}
 

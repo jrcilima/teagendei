@@ -10,8 +10,10 @@ import BookPage from "../pages/booking/BookPage";
 import OnboardingRouter from "../pages/onboarding/OnboardingRouter";
 import DashboardHome from "../pages/dashboard/DashboardHome";
 
-import StaffAgendaPage from "../pages/staff/StaffAgendaPage";
+// Certifique-se de ter renomeado o arquivo para StaffAgendaPage.tsx
+import StaffAgendaPage from "../pages/staff/StaffAgendaPage"; 
 import ClientPanelPage from "../pages/client/ClientPanelPage";
+import SettingsPage from "../pages/owner/SettingsPage";
 
 import ProtectedRoute from "./ProtectedRoute";
 
@@ -68,8 +70,17 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         />
+
+        {/* CONFIGURAÇÕES DA LOJA (Corrigido: Removida a duplicata) */}
+        <Route
+          path="/owner/settings"
+          element={
+            <ProtectedRoute allowedRoles={["dono"]}>
+              <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
 }
-

@@ -25,11 +25,13 @@ export default function CompanyStep({ onDone }: Props) {
     );
   }
 
+  // Função utilitária para limpar formatação (deixa só números)
+  const cleanCnpj = (value: string) => value.replace(/\D/g, "");
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
 
-    // Trava de segurança para TypeScript
     if (!user) {
       setError("Sessão inválida. Faça login novamente.");
       return;
@@ -40,21 +42,33 @@ export default function CompanyStep({ onDone }: Props) {
       return;
     }
 
+    // Validação de tamanho do CNPJ (se preenchido)
+    const rawCnpj = cleanCnpj(cnpj);
+    if (cnpj && rawCnpj.length !== 14) {
+        setError("O CNPJ deve conter exatamente 14 números.");
+        return;
+    }
+
     setSubmitting(true);
 
     try {
-      // Agora o TypeScript aceita 'cnpj' sendo string ou undefined
       await onboardingCreateCompany({
         owner_id: user.id,
         legal_name: legalName.trim(),
-        cnpj: cnpj.trim() || undefined,
+        // CORREÇÃO: Envia apenas os números para respeitar o limite de 14 chars do banco
+        cnpj: rawCnpj || undefined, 
       });
 
       await reloadTenants();
       onDone();
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Não foi possível criar a empresa.");
+      // Mensagem amigável se for erro de validação
+      if (err.data?.cnpj) {
+         setError("CNPJ inválido ou já cadastrado.");
+      } else {
+         setError(err?.message || "Não foi possível criar a empresa.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -92,10 +106,13 @@ export default function CompanyStep({ onDone }: Props) {
           <input
             type="text"
             value={cnpj}
+            // Permite digitar qualquer coisa, mas limpamos no submit
             onChange={(e) => setCnpj(e.target.value)}
             className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/80 focus:border-emerald-400/80"
-            placeholder="00.000.000/0000-00"
+            placeholder="00.000.000/0000-00 (Apenas números se preferir)"
+            maxLength={18} // Limite visual
           />
+          <p className="text-[10px] text-slate-500">Digite apenas números ou use formatação padrão.</p>
         </div>
 
         {error && (

@@ -56,26 +56,35 @@ function asUser(record: any): User {
 
 /**
  * 1️⃣ Criar empresa
- * CORREÇÃO: cnpj agora é opcional (string | undefined)
+ * CORREÇÃO: Campos de data agora enviam string vazia "" em vez de null
  */
 export async function onboardingCreateCompany(data: {
   legal_name: string;
   cnpj?: string; 
   owner_id: string;
 }): Promise<Company> {
-  const record = await pb.collection("companies").create({
-    legal_name: data.legal_name,
-    cnpj: data.cnpj ?? "", // Envia string vazia se for undefined, o PB aceita
-    owner_id: data.owner_id,
-    plan_status: "trial",
-    trial_expires_at: null,
-    plan: "trial",
-    max_shops: 1,
-    max_professionals: 3,
-    billing_cycle: null, 
-  });
+  try {
+    const record = await pb.collection("companies").create({
+      legal_name: data.legal_name,
+      cnpj: data.cnpj ?? "", // Envia string vazia se for undefined
+      owner_id: data.owner_id,
+      plan_status: "trial",
+      
+      // CORREÇÃO CRÍTICA: PocketBase prefere "" para datas vazias
+      trial_expires_at: "", 
+      billing_cycle: "", 
+      
+      plan: "trial",
+      max_shops: 1,
+      max_professionals: 3,
+    });
 
-  return asCompany(record);
+    return asCompany(record);
+  } catch (err: any) {
+    // Log detalhado para debug do erro 400
+    console.error("Erro detalhado do PocketBase:", err.data);
+    throw err;
+  }
 }
 
 /**
