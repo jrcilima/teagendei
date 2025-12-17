@@ -55,7 +55,6 @@ export async function login(email: string, password: string): Promise<User> {
   const authData = await pb
     .collection("users")
     .authWithPassword(email, password);
-  // authData.record é o model do usuário autenticado
   return authData.record as unknown as User;
 }
 
@@ -72,7 +71,11 @@ export async function refreshAuth(): Promise<void> {
   if (!pb.authStore.isValid) return;
   try {
     await pb.collection("users").authRefresh();
-  } catch (err) {
+  } catch (err: any) {
+    // CORREÇÃO: Ignora cancelamento automático para não deslogar
+    if (err.status === 0 || err.isAbort) {
+      return;
+    }
     console.warn("Falha ao fazer authRefresh, limpando sessão", err);
     pb.authStore.clear();
     try {
@@ -87,14 +90,12 @@ export async function getCurrentUserTyped(): Promise<User | null> {
   const model = pb.authStore.model as AuthModel | null;
   if (!model) return null;
 
-  // pega o user atualizado do PB (opcional, mas deixa o dado fresco)
   try {
     const record = await pb.collection("users").getOne<User>(model.id, {
       requestKey: `current_user_${model.id}`,
     });
     return record;
   } catch {
-    // se der erro, retorna o que estiver no authStore mesmo
     return model as unknown as User;
   }
 }
@@ -107,7 +108,6 @@ export async function getMyCompanies(): Promise<Company[]> {
   const user = pb.authStore.model as AuthModel | null;
   if (!user) return [];
 
-  // Dono: companies onde owner_id == @request.auth.id  (regra também está nas rules)
   const list = await pb.collection("companies").getFullList<Company>({
     filter: `owner_id = "${user.id}"`,
     sort: "created",
@@ -129,11 +129,8 @@ export async function getShopsByCompany(companyId: string): Promise<Shop[]> {
 
 export function normalizeError(err: any): string {
   if (!err) return "Erro desconhecido";
-
   if (typeof err === "string") return err;
-
   if (err?.message) return err.message;
-
   try {
     return JSON.stringify(err);
   } catch {

@@ -56,7 +56,6 @@ function asUser(record: any): User {
 
 /**
  * 1️⃣ Criar empresa
- * CORREÇÃO: Campos de data agora enviam string vazia "" em vez de null
  */
 export async function onboardingCreateCompany(data: {
   legal_name: string;
@@ -66,22 +65,23 @@ export async function onboardingCreateCompany(data: {
   try {
     const record = await pb.collection("companies").create({
       legal_name: data.legal_name,
-      cnpj: data.cnpj ?? "", // Envia string vazia se for undefined
+      cnpj: data.cnpj ?? "",
       owner_id: data.owner_id,
       plan_status: "trial",
-      
-      // CORREÇÃO CRÍTICA: PocketBase prefere "" para datas vazias
       trial_expires_at: "", 
       billing_cycle: "", 
-      
       plan: "trial",
       max_shops: 1,
       max_professionals: 3,
     });
 
+    // Vincula o usuário à empresa criada
+    await pb.collection("users").update(data.owner_id, {
+      company_id: record.id
+    });
+
     return asCompany(record);
   } catch (err: any) {
-    // Log detalhado para debug do erro 400
     console.error("Erro detalhado do PocketBase:", err.data);
     throw err;
   }
@@ -89,9 +89,11 @@ export async function onboardingCreateCompany(data: {
 
 /**
  * 2️⃣ Criar unidade (shop)
+ * CORREÇÃO: Agora vincula o usuário à loja criada (shop_id)
  */
 export async function onboardingCreateShop(data: {
   company_id: string;
+  owner_id: string;
   name: string;
   slug: string;
   phone?: string;
@@ -100,6 +102,7 @@ export async function onboardingCreateShop(data: {
 }): Promise<Shop> {
   const record = await pb.collection("shops").create({
     company_id: data.company_id,
+    owner_id: data.owner_id,
     name: data.name,
     slug: data.slug,
     phone: data.phone ?? "",
@@ -108,10 +111,15 @@ export async function onboardingCreateShop(data: {
     is_active: true,
   });
 
+  // VINCULA O DONO À LOJA
+  await pb.collection("users").update(data.owner_id, {
+    shop_id: record.id
+  });
+
   return asShop(record);
 }
 
-// Wrapper para criar Shop já com owner_id
+// Wrapper para criar Shop já com owner_id (usado no onboarding)
 export async function createInitialShop(
   companyId: string, 
   ownerId: string, 
@@ -123,6 +131,12 @@ export async function createInitialShop(
     owner_id: ownerId,
     is_active: true
   });
+
+  // VINCULA O DONO À LOJA TAMBÉM AQUI
+  await pb.collection("users").update(ownerId, {
+    shop_id: record.id
+  });
+
   return asShop(record);
 }
 

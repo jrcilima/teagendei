@@ -1,4 +1,4 @@
-// src/react-app/pages/auth/RegisterPage.tsx
+// Caminho: src/react-app/pages/auth/RegisterPage.tsx
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -55,7 +55,6 @@ export default function RegisterPage() {
 
     async function load() {
       setLoadingShops(true);
-      // Limpa erro anterior para não confundir o usuário
       setError(null);
 
       try {
@@ -68,7 +67,6 @@ export default function RegisterPage() {
 
         let preselected = null;
 
-        // Se tiver ID ou Slug na URL, tenta achar a loja específica
         if (shopId) {
           preselected = await getShopById(shopId);
         } else if (slug) {
@@ -83,7 +81,6 @@ export default function RegisterPage() {
           setSelectedShopId(allShops[0].shop.id);
         }
       } catch (err: any) {
-        // CORREÇÃO: Ignora erro se for cancelamento automático do PocketBase (status 0)
         if (err.status !== 0 && !cancelled) {
           console.error("Erro ao carregar lojas:", err);
           setError("Não foi possível carregar as unidades disponíveis.");
@@ -93,7 +90,6 @@ export default function RegisterPage() {
       }
     }
 
-    // Se estiver no modo cliente, carrega as lojas
     if (mode === "client") {
         load();
     }
@@ -101,7 +97,7 @@ export default function RegisterPage() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams, mode]); // Adicionado 'mode' para recarregar se trocar de aba
+  }, [searchParams, mode]);
 
   const selectedShop = useMemo(
     () => shops.find((s) => s.shop.id === selectedShopId) ?? null,
@@ -141,10 +137,9 @@ export default function RegisterPage() {
       if (extra) return setError(extra);
     }
 
-    // LIMPA MODAL
     setShowModal(false);
-
     setSubmitting(true);
+
     try {
       if (mode === "owner") {
         /* ------------------- DONO ------------------- */
@@ -155,7 +150,7 @@ export default function RegisterPage() {
           phone: phone.trim() || undefined,
         });
 
-        const user = await login(email.trim(), password);
+        await login(email.trim(), password);
         await reloadTenants();
         navigate("/onboarding", { replace: true });
         return;
@@ -167,18 +162,15 @@ export default function RegisterPage() {
       const companyId = selectedShop.shop.company_id;
       const shopId = selectedShop.shop.id;
 
-      // Checa se existe o user
       const existingUser = await findUserByEmail(email.trim());
 
       if (existingUser) {
-        // User existe → perguntar se quer vincular
         setPendingCompanyId(companyId);
         setPendingShopId(shopId);
         setShowModal(true);
         return;
       }
 
-      // Criar novo user e vínculo
       await registerClient({
         name: name.trim(),
         email: email.trim(),
@@ -194,11 +186,22 @@ export default function RegisterPage() {
 
     } catch (err: any) {
       console.error(err);
+
+      // CORREÇÃO: Ignorar erro de cancelamento automático (status 0)
+      if (err.status === 0 || err.isAbort) {
+        // Se cancelou, assumimos que o registro/login funcionou e redirecionamos manualmente
+        if (mode === "owner") {
+          navigate("/onboarding", { replace: true });
+        } else if (selectedShop) {
+          navigate(`/book/${selectedShop.shop.slug}`, { replace: true });
+        }
+        return;
+      }
+
       setError(
         err?.message ??
         "Não foi possível concluir o cadastro. Tente novamente em instantes."
       );
-    } finally {
       setSubmitting(false);
     }
   }
@@ -212,7 +215,6 @@ export default function RegisterPage() {
     try {
       setSubmitting(true);
 
-      // Só chamar registerClient — ele adiciona vínculo
       await registerClient({
         name: name.trim(),
         email: email.trim(),
@@ -227,13 +229,21 @@ export default function RegisterPage() {
       navigate(`/book/${slug}`, { replace: true });
     } catch (err: any) {
       console.error(err);
+      
+      // Correção também no modal
+      if (err.status === 0 || err.isAbort) {
+        const slug = selectedShop.shop.slug;
+        navigate(`/book/${slug}`, { replace: true });
+        return;
+      }
+
       setError(
         err?.message ??
         "Não foi possível concluir o cadastro. Tente novamente."
       );
-    } finally {
       setSubmitting(false);
-      setShowModal(false);
+    } finally {
+      if (!submitting) setShowModal(false); // Só fecha se não foi navegação
     }
   }
 
@@ -289,13 +299,6 @@ export default function RegisterPage() {
                 <span className="text-[11px] text-slate-400">Cadastro de acesso</span>
                 <span className="text-sm font-medium text-slate-50">TeaAgendei</span>
               </div>
-            </div>
-            <div className="text-right text-[11px] text-slate-300">
-              <div className="flex items-center justify-end gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>Ambiente seguro</span>
-              </div>
-              <span>Dados criptografados</span>
             </div>
           </div>
 
@@ -416,19 +419,6 @@ export default function RegisterPage() {
                     ))}
                   </select>
                 )}
-
-                {selectedShop && (
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Você será vinculado à unidade{" "}
-                    <span className="font-medium text-slate-200">
-                      {selectedShop.shop.name}
-                    </span>{" "}
-                    da empresa{" "}
-                    <span className="font-medium text-slate-200">
-                      {selectedShop.company?.legal_name}
-                    </span>.
-                  </p>
-                )}
               </div>
             )}
 
@@ -470,15 +460,12 @@ export default function RegisterPage() {
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
           <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-xl text-center space-y-4">
-
             <h2 className="text-xl font-semibold text-white">
               Você já possui cadastro em outra empresa
             </h2>
-
             <p className="text-slate-300 text-sm">
               Deseja também se cadastrar nesta unidade?
             </p>
-
             <div className="flex items-center justify-center gap-4 mt-4">
               <button
                 onClick={cancelLink}
@@ -487,7 +474,6 @@ export default function RegisterPage() {
               >
                 Cancelar
               </button>
-
               <button
                 onClick={confirmLink}
                 className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"

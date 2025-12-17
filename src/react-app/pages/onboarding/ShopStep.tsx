@@ -17,11 +17,13 @@ export default function ShopStep({ onDone }: Props) {
   const [slug, setSlug] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [segmentId, setSegmentId] = useState<string>("");
+
+  // Removido segmentId temporariamente para evitar erro 400 (precisa ser um ID válido)
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Gera slug automaticamente
   useEffect(() => {
     if (!slug && name) {
       const base = name
@@ -34,6 +36,7 @@ export default function ShopStep({ onDone }: Props) {
     }
   }, [name]);
 
+  // Proteção visual (Early return)
   if (!user || !currentCompany) {
     return (
       <div className="text-slate-200">
@@ -45,6 +48,14 @@ export default function ShopStep({ onDone }: Props) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // --- CORREÇÃO DO ERRO DE TYPESCRIPT AQUI ---
+    // O TypeScript precisa garantir novamente que user e currentCompany não são nulos
+    // dentro desta função específica.
+    if (!user || !currentCompany) {
+      setError("Erro de sessão. Recarregue a página.");
+      return;
+    }
 
     if (!name.trim()) {
       setError("Informe o nome da unidade.");
@@ -62,7 +73,7 @@ export default function ShopStep({ onDone }: Props) {
       owner_id: user.id,
       phone: phone.trim() || undefined,
       address: address.trim() || undefined,
-      segment_id: segmentId || undefined,
+      segment_id: undefined,
     };
 
     setSubmitting(true);
@@ -73,15 +84,41 @@ export default function ShopStep({ onDone }: Props) {
         slug: payload.slug,
         phone: payload.phone,
         address: payload.address,
-        segment_id: payload.segment_id,
       });
 
-      await reloadTenants(); // para popular currentShop
+      // Aguarda o reload
+      await reloadTenants();
+
+      // Chama o onDone que agora (no Router) faz o navigate
       onDone();
     } catch (err: any) {
-      console.error(err);
-      setError(err?.message || "Não foi possível criar a unidade.");
-    } finally {
+      console.error("Erro ao criar Shop:", err);
+
+      // Tratamento para cancelamento automático
+      if (err.status === 0 || err.isAbort) {
+        // Se cancelou, provavelmente funcionou o request mas o navegador abortou
+        // Vamos forçar a ida para o próximo passo
+        onDone();
+        return;
+      }
+
+      // Tratamento detalhado do erro 400
+      let msg = "Não foi possível criar a unidade.";
+
+      if (err.data) {
+        const keys = Object.keys(err.data);
+        if (keys.length > 0) {
+          const field = keys[0];
+          const errorMsg = err.data[field]?.message;
+          msg = `Erro no campo '${field}': ${errorMsg}`;
+        }
+      }
+
+      if (err.data?.slug) {
+        msg = "Este link (slug) já está em uso. Escolha outro.";
+      }
+
+      setError(msg);
       setSubmitting(false);
     }
   }
@@ -115,18 +152,20 @@ export default function ShopStep({ onDone }: Props) {
           <label className="block text-xs font-medium text-slate-200">
             Slug (endereço público)
           </label>
-          <input
-            type="text"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/80 focus:border-emerald-400/80"
-            placeholder="ex.: barbearia-central-centro"
-          />
-          <p className="text-[11px] text-slate-500">
-            Esse slug será usado na página de agendamento:{" "}
-            <span className="font-mono text-emerald-300">
-              /book/{slug || "sua-unidade"}
-            </span>
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-black/40 border border-white/10 focus-within:ring-2 focus-within:ring-emerald-400/80">
+            <span className="text-slate-500 text-sm">/book/</span>
+            <input
+              type="text"
+              value={slug}
+              onChange={(e) =>
+                setSlug(e.target.value.toLowerCase().replace(/\s/g, "-"))
+              }
+              className="flex-1 bg-transparent text-sm text-emerald-400 font-medium placeholder-slate-600 focus:outline-none"
+              placeholder="sua-unidade"
+            />
+          </div>
+          <p className="text-[10px] text-slate-500">
+            Link único para seus clientes agendarem.
           </p>
         </div>
 
@@ -153,21 +192,6 @@ export default function ShopStep({ onDone }: Props) {
             onChange={(e) => setAddress(e.target.value)}
             className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/80 focus:border-emerald-400/80"
             placeholder="Rua, número, bairro, cidade"
-          />
-        </div>
-
-        {/* segment_id fica simples aqui (input texto / select manual).
-           Depois podemos substituir por dropdown de segments do PB. */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-slate-200">
-            Segmento (opcional, id)
-          </label>
-          <input
-            type="text"
-            value={segmentId}
-            onChange={(e) => setSegmentId(e.target.value)}
-            className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/80 focus:border-emerald-400/80"
-            placeholder="ID do segmento (se houver)"
           />
         </div>
 

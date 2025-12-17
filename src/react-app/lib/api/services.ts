@@ -1,40 +1,42 @@
-// Caminho: src/react-app/lib/api/services.ts
-import {pb} from "./pocketbase"; // ← somente o pb, sem normalizeError
-import type { Service } from "@/shared/types";
+import { pb } from "./pocketbase";
+import type { Service, Category } from "@/shared/types";
 
-/**
- * Lista serviços ATIVOS de uma loja, ordenados por nome.
- */
-export async function getServicesByShop(
-  shopId: string
-): Promise<Service[]> {
-  try {
-    const services = await pb.collection("services").getFullList<Service>({
-      filter: `shop_id = "${shopId}" && is_active = true`,
-      sort: "name",
-    });
+// --- SERVIÇOS ---
 
-    return services;
-  } catch (error) {
-    console.error("Erro ao carregar serviços:", error);
-    throw error; // ← retorna erro bruto
-  }
+export async function getServicesByShop(shopId: string): Promise<Service[]> {
+  return await pb.collection("services").getFullList<Service>({
+    filter: `shop_id = "${shopId}" && is_active = true`,
+    sort: "name",
+    expand: "category_id"
+  });
 }
 
-/**
- * Busca um serviço pelo ID.
- */
-export async function getServiceById(
-  serviceId: string
-): Promise<Service | null> {
-  try {
-    const record = await pb.collection("services").getOne<Service>(serviceId);
-    return record ?? null;
-  } catch (error: any) {
-    if (error?.status === 404) {
-      return null;
-    }
-    console.error("Erro ao buscar serviço:", error);
-    throw error;
-  }
+export async function createService(data: Partial<Service>): Promise<Service> {
+  const record = await pb.collection("services").create(data);
+  return record as unknown as Service;
+}
+
+export async function deleteService(id: string): Promise<boolean> {
+  return await pb.collection("services").update(id, { is_active: false });
+}
+
+// --- CATEGORIAS (Adicionando aqui para facilitar importação) ---
+
+export async function getCategoriesByShop(shopId: string): Promise<Category[]> {
+  return await pb.collection("categories").getFullList<Category>({
+    filter: `shop_id = "${shopId}"`,
+    sort: "name",
+  });
+}
+
+export async function createCategory(shopId: string, name: string): Promise<Category> {
+  const record = await pb.collection("categories").create({
+    shop_id: shopId,
+    name: name
+  });
+  return record as unknown as Category;
+}
+
+export async function deleteCategory(id: string): Promise<boolean> {
+  return await pb.collection("categories").delete(id);
 }

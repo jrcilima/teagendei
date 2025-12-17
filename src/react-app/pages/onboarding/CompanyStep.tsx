@@ -20,12 +20,12 @@ export default function CompanyStep({ onDone }: Props) {
   if (!user) {
     return (
       <div className="text-slate-200">
-        Você precisa estar autenticado para continuar o onboarding.
+        Você precisa estar autenticado para continuar.
       </div>
     );
   }
 
-  // Função utilitária para limpar formatação (deixa só números)
+  // Remove formatação para enviar limpo
   const cleanCnpj = (value: string) => value.replace(/\D/g, "");
 
   async function handleSubmit(e: FormEvent) {
@@ -42,7 +42,6 @@ export default function CompanyStep({ onDone }: Props) {
       return;
     }
 
-    // Validação de tamanho do CNPJ (se preenchido)
     const rawCnpj = cleanCnpj(cnpj);
     if (cnpj && rawCnpj.length !== 14) {
         setError("O CNPJ deve conter exatamente 14 números.");
@@ -55,22 +54,31 @@ export default function CompanyStep({ onDone }: Props) {
       await onboardingCreateCompany({
         owner_id: user.id,
         legal_name: legalName.trim(),
-        // CORREÇÃO: Envia apenas os números para respeitar o limite de 14 chars do banco
         cnpj: rawCnpj || undefined, 
       });
 
+      // Tenta recarregar. Se a navegação for mais rápida e cancelar isso,
+      // o erro será capturado abaixo.
       await reloadTenants();
+      
       onDone();
     } catch (err: any) {
       console.error(err);
-      // Mensagem amigável se for erro de validação
+      
+      // CORREÇÃO: Ignora erro de cancelamento (status 0 ou isAbort)
+      // Isso acontece porque navegamos para a próxima página antes do reload terminar
+      if (err.status === 0 || err.isAbort) {
+        onDone(); // Segue o fluxo, pois o registro foi criado
+        return;
+      }
+
       if (err.data?.cnpj) {
          setError("CNPJ inválido ou já cadastrado.");
       } else {
          setError(err?.message || "Não foi possível criar a empresa.");
+         // Só destrava o botão se for um erro real que impeça o avanço
+         setSubmitting(false); 
       }
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -106,11 +114,10 @@ export default function CompanyStep({ onDone }: Props) {
           <input
             type="text"
             value={cnpj}
-            // Permite digitar qualquer coisa, mas limpamos no submit
             onChange={(e) => setCnpj(e.target.value)}
             className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/80 focus:border-emerald-400/80"
             placeholder="00.000.000/0000-00 (Apenas números se preferir)"
-            maxLength={18} // Limite visual
+            maxLength={18}
           />
           <p className="text-[10px] text-slate-500">Digite apenas números ou use formatação padrão.</p>
         </div>
