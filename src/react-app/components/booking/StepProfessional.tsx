@@ -1,160 +1,120 @@
-// Caminho: src/react-app/components/booking/StepProfessional.tsx
 import { useEffect, useState } from "react";
-import type { User, Shop, Service } from "@/shared/types";
-import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
+import { User } from "@/shared/types";
+import { getProfessionalsByShop } from "../../lib/api/staff";
 
-type StepProfessionalProps = {
-  shop: Shop;
-  service: Service;
-  professional: User | null;
-  onChange: (data: Partial<{ professional: User | null }>) => void;
+interface StepProfessionalProps {
+  shopId: string;
+  serviceName: string;
+  onSelect: (professional: User | null) => void;
   onBack: () => void;
-  onNext: () => void;
-};
+}
 
-export default function StepProfessional({
-  shop,
-  service,
-  professional,
-  onChange,
-  onBack,
-  onNext,
+export default function StepProfessional({ 
+  shopId, 
+  serviceName, 
+  onSelect, 
+  onBack 
 }: StepProfessionalProps) {
+  
   const [professionals, setProfessionals] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
+    let isMounted = true;
 
     async function load() {
       setLoading(true);
-      const list = await getProfessionalsByShop(shop.id);
-      if (!cancelled) {
-        setProfessionals(list);
-        setLoading(false);
+      try {
+        const data = await getProfessionalsByShop(shopId);
+        if (isMounted) {
+          setProfessionals(data);
+        }
+      } catch (error: any) {
+        // CORREÇÃO: Ignora erro de auto-cancelamento
+        if (error.status === 0 || error.isAbort) return;
+        
+        console.error("Erro ao carregar profissionais", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [shop.id]);
 
-  const handleSelect = (user: User) => {
-    onChange({ professional: user });
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [shopId]);
 
   if (loading) {
-    return (
-      <div className="py-10 text-sm text-slate-300 animate-pulse">
-        Buscando profissionais disponíveis...
-      </div>
-    );
-  }
-
-  if (professionals.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="py-6 px-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">
-          Nenhum profissional disponível para atendimento nesta unidade no momento.
-        </div>
-        <button
-          onClick={onBack}
-          className="text-sm text-slate-400 hover:text-white transition"
-        >
-          ← Voltar e escolher outro serviço
-        </button>
-      </div>
-    );
+    return <div className="text-center p-8 text-slate-500">Carregando profissionais...</div>;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
       <div>
-        <button
-          onClick={onBack}
-          className="text-xs text-slate-400 hover:text-white mb-2 transition flex items-center gap-1"
-        >
+        <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2">
           ← Voltar
         </button>
-        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">
-          Passo 2 • Profissional
-        </p>
-        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">
-          Com quem você quer realizar este serviço?
-        </h2>
-        <p className="text-sm text-slate-300 mt-1">
-          Serviço selecionado:{" "}
-          <span className="font-medium text-emerald-300">{service.name}</span>
+        <h2 className="text-xl font-bold text-white">Escolha o Profissional</h2>
+        <p className="text-sm text-slate-400">
+          Para realizar: <span className="text-emerald-400 font-medium">{serviceName}</span>
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {professionals.map((p) => {
-          const isSelected = professional?.id === p.id;
+      <div className="grid gap-3">
+        {/* OPÇÃO: QUALQUER PROFISSIONAL */}
+        <button
+          onClick={() => onSelect(null)}
+          className="flex items-center gap-4 p-4 rounded-xl bg-slate-800 border border-white/5 hover:border-emerald-500/50 hover:bg-slate-800/80 transition group text-left"
+        >
+          <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 text-xl group-hover:scale-110 transition">
+            🎲
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-200 group-hover:text-emerald-400 transition">
+              Qualquer profissional
+            </h3>
+            <p className="text-xs text-slate-500">Horários mais flexíveis</p>
+          </div>
+        </button>
+
+        {/* LISTA DE PROFISSIONAIS */}
+        {professionals.map((prof) => {
+          const displayName = prof.name || "Profissional";
+          const displayLetter = displayName.charAt(0).toUpperCase();
 
           return (
             <button
-              key={p.id}
-              type="button"
-              onClick={() => handleSelect(p)}
-              className={[
-                "relative w-full text-left rounded-2xl border px-4 py-4 transition group",
-                "bg-slate-950/60 hover:bg-slate-900/80",
-                "border-white/10 hover:border-emerald-400/50",
-                isSelected
-                  ? "ring-2 ring-emerald-400/80 border-emerald-400/80 bg-emerald-950/20"
-                  : "",
-              ].join(" ")}
+              key={prof.id}
+              onClick={() => onSelect(prof)}
+              className="flex items-center gap-4 p-4 rounded-xl bg-slate-900 border border-white/5 hover:border-emerald-500/50 hover:bg-slate-800 transition group text-left"
             >
-              <div className="flex items-center gap-4">
-                <div
-                  className={`h-12 w-12 rounded-full flex items-center justify-center text-lg font-bold shadow-inner ${
-                    isSelected
-                      ? "bg-emerald-500 text-slate-950"
-                      : "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-200"
-                  }`}
-                >
-                  {p.avatar ? (
-                    <img
-                      src={p.avatar}
-                      alt={p.name}
-                      className="h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    (p.name?.[0] || p.email[0] || "?").toUpperCase()
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-sm font-semibold truncate ${
-                      isSelected ? "text-white" : "text-slate-200"
-                    }`}
-                  >
-                    {p.name || "Profissional sem nome"}
-                  </p>
-                  <p className="text-xs text-slate-500 truncate">
-                    {p.role === "dono" ? "Sócio / Profissional" : "Staff"}
-                  </p>
-                </div>
+              <div className="h-12 w-12 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-emerald-500/50 transition">
+                {prof.avatar ? (
+                  <img src={prof.avatar} alt={displayName} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold text-slate-500 group-hover:text-white">
+                    {displayLetter}
+                  </span>
+                )}
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-200 group-hover:text-emerald-400 transition">
+                  {displayName}
+                </h3>
+                <p className="text-xs text-slate-500">Especialista</p>
               </div>
             </button>
           );
         })}
-      </div>
 
-      <div className="flex items-center justify-end pt-4 border-t border-white/5">
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!professional}
-          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
-        >
-          Ver horários disponíveis
-          <span>⟶</span>
-        </button>
+        {professionals.length === 0 && (
+          <p className="text-center text-slate-500 text-sm py-4">
+            Nenhum profissional específico encontrado. Tente a opção acima.
+          </p>
+        )}
       </div>
     </div>
   );

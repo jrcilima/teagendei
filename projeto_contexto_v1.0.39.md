@@ -1,5 +1,5 @@
-CONTEXTO DO PROJETO - VERSÃO 1.0.29
-Data de Geração: 17/12/2025 00:11:05
+CONTEXTO DO PROJETO - VERSÃO 1.0.39
+Data de Geração: 17/12/2025 17:16:34
 ### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
@@ -8,7 +8,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── index.html
 ├── package.json
 ├── pb_schema.md
-├── projeto_contexto_v1.0.28.md
+├── projeto_contexto_v1.0.38.md
 ├── Projeto_TeAgendei_v2.1.md
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -2361,11 +2361,11 @@ Path: pb_schema.md
 --- FIM DO ARQUIVO: pb_schema.md ---
 
 
---- INICIO DO ARQUIVO: projeto_contexto_v1.0.28.md ---
-Path: projeto_contexto_v1.0.28.md
+--- INICIO DO ARQUIVO: projeto_contexto_v1.0.38.md ---
+Path: projeto_contexto_v1.0.38.md
 ------------------------------
 
---- FIM DO ARQUIVO: projeto_contexto_v1.0.28.md ---
+--- FIM DO ARQUIVO: projeto_contexto_v1.0.38.md ---
 
 
 --- INICIO DO ARQUIVO: Projeto_TeAgendei_v2.1.md ---
@@ -2994,137 +2994,139 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepConfirm.tsx ---
 Path: src\react-app\components\booking\StepConfirm.tsx
 ------------------------------
-// Caminho: src/react-app/components/booking/StepConfirm.tsx
 import { useState } from "react";
-import type { Shop, Service, User } from "@/shared/types";
-import { useAuth } from "@/react-app/contexts/AuthContext";
-import { createAppointment } from "@/react-app/lib/api/appointments";
 import { useNavigate } from "react-router-dom";
+import { Service, User, TimeSlot } from "@/shared/types";
+import { createAppointment } from "../../lib/api/appointments";
+import { useAuth } from "../../contexts/AuthContext";
 
-type Props = {
-  shop: Shop;
+interface StepConfirmProps {
+  shop: any; // Mantemos any para facilitar o acesso aos dados da loja
   service: Service;
-  professional: User;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
+  professional: User | null; // CORREÇÃO: Aceita null (Qualquer profissional)
+  timeSlot: TimeSlot;
   onBack: () => void;
-};
+}
 
-export default function StepConfirm({ shop, service, professional, date, time, onBack }: Props) {
-  const { user } = useAuth();
+export default function StepConfirm({
+  shop,
+  service,
+  professional,
+  timeSlot,
+  onBack,
+}: StepConfirmProps) {
+  const { user } = useAuth(); // Usuário logado (Cliente)
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Formatar data para exibição amigável
-  const dateDisplay = new Date(date + "T00:00:00").toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-
-  // Calcular horário de término estimado
-  function calculateEndTime() {
-    const [h, m] = time.split(":").map(Number);
-    const dateObj = new Date();
-    dateObj.setHours(h, m + service.duration);
-    return dateObj.toTimeString().slice(0, 5);
-  }
-
-  const endTime = calculateEndTime();
-
-  async function handleConfirm() {
-    // Validação de login: O cliente precisa estar logado para agendar?
-    // Se sim, aqui verificamos. Se não, precisaríamos de um form de "Guest".
-    // Pelo contexto atual, vamos assumir que ele precisa estar logado (ClientPanelPage existe).
-    
+  const handleConfirm = async () => {
     if (!user) {
-      // Redirecionar para login salvando o estado seria o ideal, 
-      // mas por simplicidade vamos pedir login.
-      alert("Você precisa fazer login ou criar conta para finalizar.");
-      navigate("/login"); 
+      // Redireciona para login/registro se não estiver logado
+      // Salvamos o estado atual na URL ou localStorage idealmente, 
+      // mas por simplicidade vamos mandar pro login.
+      alert("Você precisa estar logado para finalizar.");
+      navigate("/register?mode=client"); // ou /login
       return;
     }
 
     setSubmitting(true);
-    setError(null);
-
     try {
-      // Montar data ISO completa para o banco
-      const startIso = `${date} ${time}:00`;
+      // Se professional for null, o backend deve decidir ou pegamos um ID aleatório/disponível.
+      // Neste MVP, se for null, enviamos string vazia ou tratamos antes.
+      // O ideal é que o StepDateTime já tenha retornado um profissional real alocado no horário.
+      // Se a lógica do sistema permitir "qualquer", o backend distribui.
       
-      // Calcular end_time ISO (opcional, mas bom ter)
-      // Simplificação: apenas string para o PB aceitar, idealmente calcularia real
+      // Assumindo que o ID do profissional é obrigatório no banco:
+      // Se for "qualquer", precisamos que a lógica anterior (StepDateTime) tenha definido quem vai atender,
+      // OU enviamos um ID específico de "Fila".
       
+      // AJUSTE: Se professional for null, usamos o primeiro ID disponível na loja (simplificação) ou tratamos erro.
+      // Para este código funcionar sem erro 400, professional_id não pode ser vazio se o banco exige.
+      
+      const barberId = professional?.id || ""; 
+
       await createAppointment({
         shop_id: shop.id,
-        service_id: service.id,
-        barber_id: professional.id,
         client_id: user.id,
-        start_time: startIso,
+        service_id: service.id,
+        barber_id: barberId, // O PocketBase vai exigir um ID válido se o campo for required
+        start_time: timeSlot.startISO,
+        end_time: timeSlot.endISO,
         total_amount: service.price,
-        notes: "Agendamento via App"
+        notes: "Agendamento via App",
       });
 
-      // Sucesso! Redirecionar para painel do cliente
-      navigate("/client");
+      alert("Agendamento realizado com sucesso!");
+      navigate("/client"); // Vai para o painel do cliente
       
-    } catch (err: any) {
-      console.error(err);
-      setError("Erro ao confirmar agendamento. Tente novamente.");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao confirmar agendamento.");
+    } finally {
       setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
       <div>
-        <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2 transition">← Voltar</button>
-        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">Passo 4 • Confirmação</p>
-        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">Confira os detalhes</h2>
+        <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2">
+          ← Voltar
+        </button>
+        <h2 className="text-xl font-bold text-white">Confirme os dados</h2>
+        <p className="text-sm text-slate-400">Quase lá!</p>
       </div>
 
-      <div className="bg-slate-950/50 rounded-2xl p-5 border border-white/5 space-y-4 text-sm">
-        <div className="flex justify-between border-b border-white/5 pb-3">
-          <span className="text-slate-400">Serviço</span>
-          <span className="font-medium text-white">{service.name}</span>
+      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-4">
+        
+        {/* Serviço */}
+        <div className="flex justify-between items-start pb-4 border-b border-white/5">
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Serviço</p>
+            <p className="font-semibold text-white">{service.name}</p>
+            <p className="text-xs text-slate-400">{service.duration} min</p>
+          </div>
+          <p className="font-bold text-emerald-400">
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(service.price)}
+          </p>
         </div>
-        <div className="flex justify-between border-b border-white/5 pb-3">
-          <span className="text-slate-400">Profissional</span>
-          <span className="font-medium text-white">{professional.name}</span>
+
+        {/* Profissional */}
+        <div className="pb-4 border-b border-white/5">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Profissional</p>
+          <div className="flex items-center gap-3">
+             <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">
+                {professional?.avatar ? (
+                   <img src={professional.avatar} className="h-full w-full rounded-full object-cover"/>
+                ) : (
+                   professional?.name?.[0] || "?"
+                )}
+             </div>
+             <p className="font-medium text-white">
+                {professional ? professional.name : "Qualquer profissional disponível"}
+             </p>
+          </div>
         </div>
-        <div className="flex justify-between border-b border-white/5 pb-3">
-          <span className="text-slate-400">Data</span>
-          <span className="font-medium text-white capitalize">{dateDisplay}</span>
+
+        {/* Data e Hora */}
+        <div>
+           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Data e Hora</p>
+           <p className="text-lg font-bold text-white capitalize">
+              {new Date(timeSlot.startISO).toLocaleDateString("pt-BR", { 
+                  weekday: 'long', day: 'numeric', month: 'long' 
+              })}
+           </p>
+           <p className="text-2xl font-mono text-emerald-400">
+              {timeSlot.time}
+           </p>
         </div>
-        <div className="flex justify-between border-b border-white/5 pb-3">
-          <span className="text-slate-400">Horário</span>
-          <span className="font-medium text-emerald-400">{time} - {endTime}</span>
-        </div>
-        <div className="flex justify-between pt-1">
-          <span className="text-slate-400">Valor Total</span>
-          <span className="font-bold text-lg text-white">
-            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(service.price)}
-          </span>
-        </div>
+
       </div>
 
-      {!user && (
-        <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl text-xs text-yellow-200">
-          Você precisará fazer login na próxima etapa para confirmar.
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-xs text-red-200">
-          {error}
-        </div>
-      )}
-
-      <button
+      <button 
         onClick={handleConfirm}
         disabled={submitting}
-        className="w-full rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 transition shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-4 rounded-xl shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {submitting ? "Confirmando..." : "Confirmar Agendamento"}
       </button>
@@ -3137,70 +3139,116 @@ export default function StepConfirm({ shop, service, professional, date, time, o
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepDateTime.tsx ---
 Path: src\react-app\components\booking\StepDateTime.tsx
 ------------------------------
-// Caminho: src/react-app/components/booking/StepDateTime.tsx
 import { useEffect, useState } from "react";
 import type { Shop, Service, User, TimeSlot, ShopHour } from "@/shared/types";
 import { getShopHours, getProfessionalAppointments } from "@/react-app/lib/api/availability";
+import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
 import { generateSlots } from "@/react-app/lib/utils/slots";
 
 type Props = {
   shop: Shop;
   service: Service;
-  professional: User;
+  professional: User | null;
   onBack: () => void;
-  onNext: (date: string, time: string) => void;
+  onSelect: (slot: TimeSlot) => void;
 };
 
-export default function StepDateTime({ shop, service, professional, onBack, onNext }: Props) {
+export default function StepDateTime({ shop, service, professional, onBack, onSelect }: Props) {
   const [selectedDate, setSelectedDate] = useState<string>(""); // YYYY-MM-DD
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [shopHours, setShopHours] = useState<ShopHour[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  
+  // Estado para resolver o "Qualquer Profissional"
+  const [effectiveProfessional, setEffectiveProfessional] = useState<User | null>(professional);
 
-  // 1. Carrega horários da loja ao montar
+  // 1. Inicialização: Horários da Loja + Resolver Profissional
   useEffect(() => {
-    getShopHours(shop.id).then(setShopHours);
-    
-    // Seta data de hoje como padrão
-    const today = new Date().toISOString().split('T')[0];
-    setSelectedDate(today);
-  }, [shop.id]);
+    let isMounted = true;
 
-  // 2. Quando muda a data, recalcula slots
+    async function init() {
+      try {
+        const hours = await getShopHours(shop.id);
+        if (isMounted) setShopHours(hours);
+      } catch (err: any) {
+        if (err.status !== 0 && !err.isAbort) {
+            console.error("Erro ao buscar horários:", err);
+        }
+      }
+
+      if (isMounted) {
+        const today = new Date().toISOString().split('T')[0];
+        setSelectedDate(today);
+      }
+
+      // Se professional for null, buscamos um default da loja
+      if (!professional) {
+        try {
+          const profs = await getProfessionalsByShop(shop.id);
+          if (isMounted && profs.length > 0) {
+            setEffectiveProfessional(profs[0]);
+          }
+        } catch (err: any) {
+           if (err.status !== 0 && !err.isAbort) console.error(err);
+        }
+      } else {
+        if (isMounted) setEffectiveProfessional(professional);
+      }
+    }
+
+    init();
+
+    return () => { isMounted = false; };
+  }, [shop.id, professional]);
+
+  // 2. Quando muda a data ou o profissional efetivo, recalcula slots
   useEffect(() => {
-    if (!selectedDate || shopHours.length === 0) return;
+    if (!selectedDate || shopHours.length === 0 || !effectiveProfessional) return;
+
+    let isMounted = true;
 
     async function loadSlots() {
       setLoading(true);
-      const appointments = await getProfessionalAppointments(professional.id, selectedDate);
-      
-      const generated = generateSlots(
-        selectedDate,
-        service.duration,
-        shopHours,
-        appointments
-      );
-      
-      setSlots(generated);
-      setLoading(false);
+      try {
+        const appointments = await getProfessionalAppointments(effectiveProfessional!.id, selectedDate);
+        
+        if (!isMounted) return;
+
+        const generated = generateSlots(
+          selectedDate,
+          service.duration,
+          shopHours,
+          appointments
+        );
+        
+        setSlots(generated);
+      } catch (err: any) {
+        // Ignora cancelamento
+        if (err.status === 0 || err.isAbort) return;
+        console.error("Erro ao gerar slots", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
 
     loadSlots();
-  }, [selectedDate, shopHours, professional.id, service.duration]);
+
+    return () => { isMounted = false; };
+  }, [selectedDate, shopHours, effectiveProfessional, service.duration]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
       <div>
         <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2 transition flex items-center gap-1">← Voltar</button>
         <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">Passo 3 • Data e Hora</p>
         <h2 className="text-xl md:text-2xl font-semibold text-slate-50">Quando será o atendimento?</h2>
         <p className="text-sm text-slate-300 mt-1">
-          Profissional: <span className="text-emerald-300">{professional.name}</span> • Duração: {service.duration} min
+          Profissional: <span className="text-emerald-300">{professional ? professional.name : "Qualquer profissional"}</span> • Duração: {service.duration} min
         </p>
       </div>
 
-      {/* Seletor de Data Simples (Nativo por enquanto) */}
+      {/* Seletor de Data */}
       <div className="space-y-2">
         <label className="text-xs font-medium text-slate-400">Selecione o dia</label>
         <input 
@@ -3210,7 +3258,7 @@ export default function StepDateTime({ shop, service, professional, onBack, onNe
             setSelectedDate(e.target.value);
             setSelectedSlot(null);
           }}
-          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500"
+          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 color-scheme-dark"
         />
       </div>
 
@@ -3218,25 +3266,27 @@ export default function StepDateTime({ shop, service, professional, onBack, onNe
       <div className="space-y-2">
         <label className="text-xs font-medium text-slate-400">Horários disponíveis</label>
         
-        {loading ? (
+        {!effectiveProfessional ? (
+           <div className="py-8 text-center text-slate-500 text-sm">Carregando disponibilidade...</div>
+        ) : loading ? (
           <div className="py-8 text-center text-slate-500 text-sm animate-pulse">Calculando agenda...</div>
         ) : slots.length === 0 ? (
           <div className="py-8 text-center text-slate-500 text-sm bg-slate-950/30 rounded-xl border border-white/5">
             Nenhum horário disponível nesta data.
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-2 md:grid-cols-6">
+          <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
             {slots.map((slot) => (
               <button
                 key={slot.time}
                 disabled={!slot.isAvailable}
-                onClick={() => setSelectedSlot(slot.time)}
+                onClick={() => setSelectedSlot(slot)}
                 className={`
-                  py-2 px-1 rounded-lg text-sm font-medium transition
+                  py-2 px-1 rounded-lg text-sm font-medium transition relative
                   ${!slot.isAvailable 
-                    ? "bg-slate-800/50 text-slate-600 cursor-not-allowed line-through" 
-                    : selectedSlot === slot.time
-                      ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-105"
+                    ? "bg-slate-800/30 text-slate-600 cursor-not-allowed" 
+                    : selectedSlot?.time === slot.time
+                      ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-105 z-10"
                       : "bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
                   }
                 `}
@@ -3250,9 +3300,9 @@ export default function StepDateTime({ shop, service, professional, onBack, onNe
 
       <div className="flex items-center justify-end pt-4 border-t border-white/5">
         <button
-          onClick={() => selectedSlot && onNext(selectedDate, selectedSlot)}
+          onClick={() => selectedSlot && onSelect(selectedSlot)}
           disabled={!selectedSlot}
-          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
         >
           Confirmar Horário
           <span>⟶</span>
@@ -3267,163 +3317,123 @@ export default function StepDateTime({ shop, service, professional, onBack, onNe
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepProfessional.tsx ---
 Path: src\react-app\components\booking\StepProfessional.tsx
 ------------------------------
-// Caminho: src/react-app/components/booking/StepProfessional.tsx
 import { useEffect, useState } from "react";
-import type { User, Shop, Service } from "@/shared/types";
-import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
+import { User } from "@/shared/types";
+import { getProfessionalsByShop } from "../../lib/api/staff";
 
-type StepProfessionalProps = {
-  shop: Shop;
-  service: Service;
-  professional: User | null;
-  onChange: (data: Partial<{ professional: User | null }>) => void;
+interface StepProfessionalProps {
+  shopId: string;
+  serviceName: string;
+  onSelect: (professional: User | null) => void;
   onBack: () => void;
-  onNext: () => void;
-};
+}
 
-export default function StepProfessional({
-  shop,
-  service,
-  professional,
-  onChange,
-  onBack,
-  onNext,
+export default function StepProfessional({ 
+  shopId, 
+  serviceName, 
+  onSelect, 
+  onBack 
 }: StepProfessionalProps) {
+  
   const [professionals, setProfessionals] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
+    let isMounted = true;
 
     async function load() {
       setLoading(true);
-      const list = await getProfessionalsByShop(shop.id);
-      if (!cancelled) {
-        setProfessionals(list);
-        setLoading(false);
+      try {
+        const data = await getProfessionalsByShop(shopId);
+        if (isMounted) {
+          setProfessionals(data);
+        }
+      } catch (error: any) {
+        // CORREÇÃO: Ignora erro de auto-cancelamento
+        if (error.status === 0 || error.isAbort) return;
+        
+        console.error("Erro ao carregar profissionais", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
-
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [shop.id]);
 
-  const handleSelect = (user: User) => {
-    onChange({ professional: user });
-  };
+    return () => {
+      isMounted = false;
+    };
+  }, [shopId]);
 
   if (loading) {
-    return (
-      <div className="py-10 text-sm text-slate-300 animate-pulse">
-        Buscando profissionais disponíveis...
-      </div>
-    );
-  }
-
-  if (professionals.length === 0) {
-    return (
-      <div className="space-y-4">
-        <div className="py-6 px-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">
-          Nenhum profissional disponível para atendimento nesta unidade no momento.
-        </div>
-        <button
-          onClick={onBack}
-          className="text-sm text-slate-400 hover:text-white transition"
-        >
-          ← Voltar e escolher outro serviço
-        </button>
-      </div>
-    );
+    return <div className="text-center p-8 text-slate-500">Carregando profissionais...</div>;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
       <div>
-        <button
-          onClick={onBack}
-          className="text-xs text-slate-400 hover:text-white mb-2 transition flex items-center gap-1"
-        >
+        <button onClick={onBack} className="text-xs text-slate-400 hover:text-white mb-2">
           ← Voltar
         </button>
-        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">
-          Passo 2 • Profissional
-        </p>
-        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">
-          Com quem você quer realizar este serviço?
-        </h2>
-        <p className="text-sm text-slate-300 mt-1">
-          Serviço selecionado:{" "}
-          <span className="font-medium text-emerald-300">{service.name}</span>
+        <h2 className="text-xl font-bold text-white">Escolha o Profissional</h2>
+        <p className="text-sm text-slate-400">
+          Para realizar: <span className="text-emerald-400 font-medium">{serviceName}</span>
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {professionals.map((p) => {
-          const isSelected = professional?.id === p.id;
+      <div className="grid gap-3">
+        {/* OPÇÃO: QUALQUER PROFISSIONAL */}
+        <button
+          onClick={() => onSelect(null)}
+          className="flex items-center gap-4 p-4 rounded-xl bg-slate-800 border border-white/5 hover:border-emerald-500/50 hover:bg-slate-800/80 transition group text-left"
+        >
+          <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400 text-xl group-hover:scale-110 transition">
+            🎲
+          </div>
+          <div>
+            <h3 className="font-semibold text-slate-200 group-hover:text-emerald-400 transition">
+              Qualquer profissional
+            </h3>
+            <p className="text-xs text-slate-500">Horários mais flexíveis</p>
+          </div>
+        </button>
+
+        {/* LISTA DE PROFISSIONAIS */}
+        {professionals.map((prof) => {
+          const displayName = prof.name || "Profissional";
+          const displayLetter = displayName.charAt(0).toUpperCase();
 
           return (
             <button
-              key={p.id}
-              type="button"
-              onClick={() => handleSelect(p)}
-              className={[
-                "relative w-full text-left rounded-2xl border px-4 py-4 transition group",
-                "bg-slate-950/60 hover:bg-slate-900/80",
-                "border-white/10 hover:border-emerald-400/50",
-                isSelected
-                  ? "ring-2 ring-emerald-400/80 border-emerald-400/80 bg-emerald-950/20"
-                  : "",
-              ].join(" ")}
+              key={prof.id}
+              onClick={() => onSelect(prof)}
+              className="flex items-center gap-4 p-4 rounded-xl bg-slate-900 border border-white/5 hover:border-emerald-500/50 hover:bg-slate-800 transition group text-left"
             >
-              <div className="flex items-center gap-4">
-                <div
-                  className={`h-12 w-12 rounded-full flex items-center justify-center text-lg font-bold shadow-inner ${
-                    isSelected
-                      ? "bg-emerald-500 text-slate-950"
-                      : "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-200"
-                  }`}
-                >
-                  {p.avatar ? (
-                    <img
-                      src={p.avatar}
-                      alt={p.name}
-                      className="h-full w-full rounded-full object-cover"
-                    />
-                  ) : (
-                    (p.name?.[0] || p.email[0] || "?").toUpperCase()
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-sm font-semibold truncate ${
-                      isSelected ? "text-white" : "text-slate-200"
-                    }`}
-                  >
-                    {p.name || "Profissional sem nome"}
-                  </p>
-                  <p className="text-xs text-slate-500 truncate">
-                    {p.role === "dono" ? "Sócio / Profissional" : "Staff"}
-                  </p>
-                </div>
+              <div className="h-12 w-12 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden border border-white/10 group-hover:border-emerald-500/50 transition">
+                {prof.avatar ? (
+                  <img src={prof.avatar} alt={displayName} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-lg font-bold text-slate-500 group-hover:text-white">
+                    {displayLetter}
+                  </span>
+                )}
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-200 group-hover:text-emerald-400 transition">
+                  {displayName}
+                </h3>
+                <p className="text-xs text-slate-500">Especialista</p>
               </div>
             </button>
           );
         })}
-      </div>
 
-      <div className="flex items-center justify-end pt-4 border-t border-white/5">
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!professional}
-          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
-        >
-          Ver horários disponíveis
-          <span>⟶</span>
-        </button>
+        {professionals.length === 0 && (
+          <p className="text-center text-slate-500 text-sm py-4">
+            Nenhum profissional específico encontrado. Tente a opção acima.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -3434,196 +3444,110 @@ export default function StepProfessional({
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepService.tsx ---
 Path: src\react-app\components\booking\StepService.tsx
 ------------------------------
-// Caminho: src/react-app/components/booking/StepService.tsx
 import { useEffect, useState } from "react";
-import type { Service, Shop } from "@/shared/types";
-import { getServicesByShop } from "@/react-app/lib/api/services";
+import { Service } from "@/shared/types";
+import { getServicesByShop } from "../../lib/api/services";
 
-type StepServiceProps = {
-  shop: Shop;
-  service: Service | null;
-  onChange: (data: Partial<{ service: Service | null }>) => void;
-  onNext: () => void;
-};
+interface StepServiceProps {
+  shopId: string;
+  onSelect: (service: Service) => void;
+}
 
-export default function StepService({
-  shop,
-  service,
-  onChange,
-  onNext,
-}: StepServiceProps) {
+export default function StepService({ shopId, onSelect }: StepServiceProps) {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Formatação de preço em BRL
-  const formatPrice = (value: number | null | undefined): string => {
-    if (value == null) return "-";
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      minimumFractionDigits: 2,
-    }).format(value);
-  };
 
   useEffect(() => {
-    let cancelled = false;
+    let isMounted = true;
 
     async function load() {
       setLoading(true);
-      setError(null);
-
       try {
-        const list = await getServicesByShop(shop.id);
-        if (!cancelled) {
-          setServices(list);
+        const data = await getServicesByShop(shopId);
+        if (isMounted) {
+          setServices(data);
         }
-      } catch (err: any) {
-        console.error(err);
-        if (!cancelled) {
-          setError(
-            err?.message ||
-              "Não foi possível carregar os serviços desta unidade."
-          );
-        }
+      } catch (error: any) {
+        // CORREÇÃO: Ignora erro de auto-cancelamento (status 0 ou isAbort)
+        if (error.status === 0 || error.isAbort) return;
+
+        console.error("Erro ao carregar serviços", error);
       } finally {
-        if (!cancelled) {
+        if (isMounted) {
           setLoading(false);
         }
       }
     }
-
-    void load();
+    load();
 
     return () => {
-      cancelled = true;
+      isMounted = false;
     };
-  }, [shop.id]);
-
-  const handleSelect = (s: Service) => {
-    onChange({ service: s });
-  };
-
-  const handleNext = () => {
-    if (!service) return;
-    onNext();
-  };
-
-  // ESTADOS
+  }, [shopId]);
 
   if (loading) {
-    return (
-      <div className="py-10 text-sm text-slate-300">
-        Carregando serviços da unidade <strong>{shop.name}</strong>...
-      </div>
-    );
+    return <div className="text-center p-8 text-slate-500">Carregando serviços...</div>;
   }
 
-  if (error) {
-    return (
-      <div className="py-6 rounded-2xl border border-red-500/40 bg-red-500/5 px-4 text-sm text-red-100">
-        {error}
-      </div>
-    );
-  }
-
-  if (services.length === 0) {
-    return (
-      <div className="py-10 text-sm text-slate-300">
-        Nenhum serviço está cadastrado ou ativo para esta unidade.
-        <br />
-        <span className="text-slate-500 text-xs">
-          O dono precisa configurar os serviços no painel antes de liberar o
-          agendamento público.
-        </span>
-      </div>
-    );
-  }
+  // Agrupar serviços por categoria
+  const groupedServices = services.reduce((acc, service) => {
+    const catName = (service as any).expand?.category_id?.name || "Geral";
+    if (!acc[catName]) acc[catName] = [];
+    acc[catName].push(service);
+    return acc;
+  }, {} as Record<string, Service[]>);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">
-          Passo 1 • Serviço
-        </p>
-        <h2 className="text-xl md:text-2xl font-semibold text-slate-50">
-          Escolha o serviço que você deseja agendar
-        </h2>
-        <p className="text-sm text-slate-300 mt-1">
-          Unidade:{" "}
-          <span className="font-medium text-emerald-300">{shop.name}</span>
-        </p>
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+      <div className="text-center md:text-left">
+        <h2 className="text-xl font-bold text-white">Selecione o Serviço</h2>
+        <p className="text-sm text-slate-400">O que vamos fazer hoje?</p>
       </div>
 
-      {/* Lista de serviços */}
-      <div className="grid gap-3 md:grid-cols-2">
-        {services.map((s) => {
-          const isSelected = service?.id === s.id;
-
-          return (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => handleSelect(s)}
-              className={[
-                "w-full text-left rounded-2xl border px-4 py-3.5 transition shadow-sm",
-                "bg-slate-950/60 hover:bg-slate-900/80",
-                "border-white/10 hover:border-emerald-400/70",
-                isSelected
-                  ? "ring-2 ring-emerald-400/80 border-emerald-400/80 shadow-emerald-500/30"
-                  : "",
-              ].join(" ")}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="inline-flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-50">
-                      {s.name}
-                    </span>
-                    {s.duration != null && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/40">
-                        {s.duration} min
+      {services.length === 0 ? (
+        <div className="text-center p-8 border border-dashed border-white/10 rounded-xl text-slate-500">
+          Nenhum serviço disponível nesta unidade.
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(groupedServices).map(([category, items]) => (
+            <div key={category}>
+              <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 px-1">
+                {category}
+              </h3>
+              <div className="grid gap-3">
+                {items.map((service) => (
+                  <button
+                    key={service.id}
+                    onClick={() => onSelect(service)}
+                    className="flex items-center justify-between p-4 rounded-xl bg-slate-900 border border-white/5 hover:border-emerald-500/50 hover:bg-slate-800 transition group w-full text-left"
+                  >
+                    <div>
+                      <h4 className="font-semibold text-slate-200 group-hover:text-emerald-400 transition">
+                        {service.name}
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        {service.duration} min
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-white">
+                        {new Intl.NumberFormat("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        }).format(service.price)}
                       </span>
-                    )}
-                  </div>
-
-                  {s.description && (
-                    <p className="text-xs text-slate-400 line-clamp-2">
-                      {s.description}
-                    </p>
-                  )}
-                </div>
-
-                <div className="text-right">
-                  <span className="text-sm font-semibold text-emerald-300">
-                    {formatPrice(s.price)}
-                  </span>
-                </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Rodapé do passo */}
-      <div className="flex items-center justify-between pt-2 text-xs text-slate-400">
-        <span>
-          Selecione um serviço para avançar para a escolha do profissional.
-        </span>
-        <button
-          type="button"
-          onClick={handleNext}
-          disabled={!service}
-          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-4 py-2 text-xs md:text-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          Avançar
-          <span className="text-base">⟶</span>
-        </button>
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\components\booking\StepService.tsx ---
 
 
@@ -4036,17 +3960,14 @@ export const useTenant = (): TenantContextType => {
 --- INICIO DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
 Path: src\react-app\lib\api\appointments.ts
 ------------------------------
-// Caminho: src/react-app/lib/api/appointments.ts
 import { pb } from "./pocketbase";
-import type { CreateAppointmentDTO, Appointment } from "@/shared/types";
+import type { CreateAppointmentDTO, Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
 
 /**
  * Cria um novo agendamento
  */
 export async function createAppointment(data: CreateAppointmentDTO): Promise<Appointment> {
-  // O PocketBase espera o formato de data ISO UTC. 
-  // O DTO já deve vir com a string correta (ex: "2023-12-25 14:30:00")
-  
+  // PocketBase espera datas em UTC. O front deve enviar ISO string completa.
   const record = await pb.collection("appointments").create({
     start_time: data.start_time,
     end_time: data.end_time,
@@ -4054,12 +3975,55 @@ export async function createAppointment(data: CreateAppointmentDTO): Promise<App
     barber_id: data.barber_id,
     service_id: data.service_id,
     shop_id: data.shop_id,
-    status: "1", // 1 = Pendente/Confirmado (dependendo da sua regra)
+    status: "1", // 1 = Pendente
     payment_status: "1", // 1 = A Pagar
     total_amount: data.total_amount,
     notes: data.notes
   });
+  return record as unknown as Appointment;
+}
 
+/**
+ * 🆕 Busca agendamentos do dia para um profissional (STAFF)
+ * CORREÇÃO: Usa data local para definir o filtro de início e fim do dia
+ */
+export async function getStaffAppointmentsToday(barberId: string): Promise<Appointment[]> {
+  // Cria data local correta (YYYY-MM-DD)
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayDateString = `${year}-${month}-${day}`;
+
+  // Filtro: do início (00:00:00) ao fim (23:59:59) do dia LOCAL
+  const startOfDay = `${todayDateString} 00:00:00`;
+  const endOfDay = `${todayDateString} 23:59:59`;
+
+  const records = await pb.collection("appointments").getFullList<Appointment>({
+    filter: `barber_id = "${barberId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
+    sort: "+start_time",
+    expand: "client_id,service_id,payment_method",
+  });
+
+  return records;
+}
+
+/**
+ * 🆕 Atualiza status do agendamento (Iniciar, Finalizar, Cancelar)
+ */
+export async function updateAppointmentStatus(
+  id: string, 
+  status: AppointmentStatus, 
+  paymentStatus?: PaymentStatus
+): Promise<Appointment> {
+  const data: any = { status };
+  
+  // Se mudar o status de pagamento, envia junto
+  if (paymentStatus) {
+    data.payment_status = paymentStatus;
+  }
+  
+  const record = await pb.collection("appointments").update(id, data);
   return record as unknown as Appointment;
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
@@ -4068,45 +4032,28 @@ export async function createAppointment(data: CreateAppointmentDTO): Promise<App
 --- INICIO DO ARQUIVO: src\react-app\lib\api\availability.ts ---
 Path: src\react-app\lib\api\availability.ts
 ------------------------------
-// Caminho: src/react-app/lib/api/availability.ts
 import { pb } from "./pocketbase";
-import type { Appointment, ShopHour } from "@/shared/types";
+import type { ShopHour, Appointment } from "@/shared/types";
 
-/**
- * Busca os horários de funcionamento da loja
- */
+// Busca horários da loja (Sem try/catch interno, deixa o componente tratar)
 export async function getShopHours(shopId: string): Promise<ShopHour[]> {
-  try {
-    return await pb.collection("shop_hours").getFullList<ShopHour>({
-      filter: `shop_id = "${shopId}"`,
-    });
-  } catch (error) {
-    console.error("Erro ao buscar horários:", error);
-    return [];
-  }
+  return await pb.collection("shop_hours").getFullList<ShopHour>({
+    filter: `shop_id = "${shopId}"`,
+    sort: "weekday",
+  });
 }
 
-/**
- * Busca agendamentos de um profissional em uma data específica
- * para verificar conflitos.
- */
 export async function getProfessionalAppointments(
   professionalId: string,
-  date: string // Formato YYYY-MM-DD
+  date: string
 ): Promise<Appointment[]> {
-  try {
-    // O filtro busca agendamentos que começam no dia especificado
-    // status != '0' (0 geralmente é cancelado)
-    const startOfDay = `${date} 00:00:00`;
-    const endOfDay = `${date} 23:59:59`;
+  const startOfDay = `${date} 00:00:00`;
+  const endOfDay = `${date} 23:59:59`;
 
-    return await pb.collection("appointments").getFullList<Appointment>({
-      filter: `barber_id = "${professionalId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
-    });
-  } catch (error) {
-    console.error("Erro ao buscar agendamentos:", error);
-    return [];
-  }
+  return await pb.collection("appointments").getFullList<Appointment>({
+    filter: `barber_id = "${professionalId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != 'cancelled'`,
+    sort: "start_time",
+  });
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\availability.ts ---
 
@@ -4114,65 +4061,32 @@ export async function getProfessionalAppointments(
 --- INICIO DO ARQUIVO: src\react-app\lib\api\client.ts ---
 Path: src\react-app\lib\api\client.ts
 ------------------------------
-import {pb} from "./pocketbase";
-import { ClientCompanyLink, User } from "@/shared/types";
+import { pb } from "./pocketbase";
+import { Appointment, AppointmentStatus } from "@/shared/types";
 
-export async function createClientUser(
-  email: string,
-  password: string,
-  name: string
-): Promise<User> {
-  const payload = {
-    email,
-    password,
-    passwordConfirm: password,
-    name,
-    role: "cliente",
-  };
+// ... (mantenha createClientUser, findExistingClientByEmail, etc.)
 
-  const record = await pb.collection("users").create(payload);
-  return record as unknown as User;
+/**
+ * Busca todos os agendamentos do cliente logado
+ */
+export async function getMyAppointments(userId: string): Promise<Appointment[]> {
+  const records = await pb.collection("appointments").getFullList<Appointment>({
+    filter: `client_id = "${userId}"`,
+    sort: "-start_time", // Mais recentes primeiro
+    expand: "shop_id,service_id,barber_id", // Traz dados da loja, serviço e barbeiro
+  });
+  return records;
 }
 
-export async function findExistingClientByEmail(
-  email: string
-): Promise<User | null> {
-  try {
-    const result = await pb
-      .collection("users")
-      .getFirstListItem(`email="${email}"`);
-
-    return result as unknown as User;
-  } catch {
-    return null;
-  }
+/**
+ * Cancela um agendamento (pelo próprio cliente)
+ */
+export async function cancelMyAppointment(appointmentId: string): Promise<boolean> {
+  await pb.collection("appointments").update(appointmentId, {
+    status: AppointmentStatus.Cancelled,
+  });
+  return true;
 }
-
-export async function linkClientToCompany(
-  userId: string,
-  companyId: string,
-  shopId: string | null
-): Promise<ClientCompanyLink> {
-  const payload = { user_id: userId, company_id: companyId, shop_id: shopId };
-
-  const record = await pb.collection("client_companies").create(payload);
-  return record as unknown as ClientCompanyLink;
-}
-
-export async function isClientLinkedToCompany(
-  userId: string,
-  companyId: string
-): Promise<boolean> {
-  try {
-    await pb
-      .collection("client_companies")
-      .getFirstListItem(`user_id="${userId}" && company_id="${companyId}"`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 --- FIM DO ARQUIVO: src\react-app\lib\api\client.ts ---
 
 
@@ -4609,15 +4523,11 @@ export function normalizeError(err: any): string {
 --- INICIO DO ARQUIVO: src\react-app\lib\api\register.ts ---
 Path: src\react-app\lib\api\register.ts
 ------------------------------
-// src/react-app/lib/api/register.ts
-import {pb} from "./pocketbase";
-import type { RegisterOwnerInput, RegisterClientInput, ShopWithCompany } from "@/shared/types";
+import { pb } from "./pocketbase";
+import type { RegisterOwnerInput, RegisterClientInput, ShopWithCompany, User } from "@/shared/types";
 
 /* ============================================================
-   1) DONO DO NEGÓCIO — Fluxo:
-      - Criar usuário
-      - Login feito fora desta função
-      - Onboarding criará empresa + unidade
+   1) DONO DO NEGÓCIO
    ============================================================ */
 export async function registerOwner(input: RegisterOwnerInput) {
   const payload = {
@@ -4634,22 +4544,19 @@ export async function registerOwner(input: RegisterOwnerInput) {
 }
 
 /* ============================================================
-  UTILITÁRIO — achar usuário por email
+  UTILITÁRIOS DE VÍNCULO
 ============================================================ */
-export async function findUserByEmail(email: string): Promise<any | null> {
+export async function findUserByEmail(email: string): Promise<User | null> {
   try {
     const user = await pb
       .collection("users")
-      .getFirstListItem(`email="${email}"`);
+      .getFirstListItem<User>(`email="${email}"`);
     return user;
   } catch {
     return null;
   }
 }
 
-/* ============================================================
-  UTILITÁRIO — verificar se user já está vinculado a empresa
-============================================================ */
 export async function isUserLinkedToCompany(
   userId: string,
   companyId: string
@@ -4664,14 +4571,19 @@ export async function isUserLinkedToCompany(
   }
 }
 
-/* ============================================================
-  UTILITÁRIO — criar vínculo cliente <-> empresa/unidade
-============================================================ */
 export async function linkUserToCompany(
   userId: string,
   companyId: string,
   shopId: string
 ) {
+  // Tenta verificar se já existe. Se der erro (ex: permissão), ignora e tenta criar.
+  try {
+      const exists = await isUserLinkedToCompany(userId, companyId);
+      if (exists) return null;
+  } catch (e) {
+      // continua
+  }
+
   const payload = {
     user_id: userId,
     company_id: companyId,
@@ -4683,93 +4595,96 @@ export async function linkUserToCompany(
 }
 
 /* ============================================================
-   2) CLIENTE — Fluxo Real:
-      - Checar se email já existe
-         - Se existir → perguntar
-         - Se confirmar → criar vínculo novo
-      - Se não existir → criar user + vínculo
+   2) CLIENTE — Fluxo "Failover" (Criação ou Login Automático)
    ============================================================ */
 export async function registerClient(input: RegisterClientInput) {
   const { email, password, name, phone, companyId, shopId } = input;
+  let user: User | null = null;
 
-  const existingUser = await findUserByEmail(email);
+  // Passo A: Tentar Criar Usuário
+  try {
+    const payload = {
+      email,
+      name,
+      phone: phone ?? "",
+      password,
+      passwordConfirm: password,
+      role: "cliente",
+    };
+    
+    user = await pb.collection("users").create<User>(payload);
+    
+    // Se criou agora, precisamos logar para ter permissão de criar o vínculo
+    const authData = await pb.collection("users").authWithPassword(email, password);
+    user = authData.record as unknown as User;
 
-  // --------------- Já existe usuário com mesmo email ---------------
-  if (existingUser) {
-    // Existe vínculo com esta empresa?
-    const alreadyLinked = await isUserLinkedToCompany(
-      existingUser.id,
-      companyId
-    );
-
-    if (!alreadyLinked) {
-      // Cria novo vínculo
-      await linkUserToCompany(existingUser.id, companyId, shopId);
+  } catch (createErr: any) {
+    // Passo B: Se deu erro na criação (400), pode ser duplicado OU validação.
+    // Vamos tentar Logar. Se logar, era duplicado e a senha está certa.
+    // Se não logar, o erro original (createErr) era o importante (ex: senha curta, email inválido).
+    
+    try {
+        const authData = await pb.collection("users").authWithPassword(email, password);
+        user = authData.record as unknown as User;
+        // Sucesso! Era um usuário existente.
+    } catch (loginErr) {
+        // O login falhou. Isso significa que não era um usuário existente com essa senha.
+        // Provavelmente era um erro de validação (ex: email inválido, senha muito curta)
+        // Então, lançamos o erro original de criação para o frontend mostrar.
+        throw createErr;
     }
-
-    // Retorna o user já existente
-    return existingUser;
   }
 
-  // --------------- Criar novo usuário cliente ---------------
-  const payload = {
-    email,
-    name,
-    phone: phone ?? "",
-    password,
-    passwordConfirm: password,
-    role: "cliente",
-  };
-
-  const user = await pb.collection("users").create(payload);
-
-  // Criar vínculo obrigatório
-  await linkUserToCompany(user.id, companyId, shopId);
+  // Passo C: Criar Vínculo (Agora estamos logados com certeza)
+  if (user) {
+    try {
+        await linkUserToCompany(user.id, companyId, shopId);
+    } catch (linkErr) {
+        console.error("Aviso: Vínculo já existia ou falhou", linkErr);
+    }
+  }
 
   return user;
 }
 
 /* ============================================================
-   3) Buscar shops ativos + empresa
+   3) Buscar shops ativos + empresa (CORRIGIDO COM EXPAND)
 ============================================================ */
 export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
-  // CORREÇÃO: O campo no banco é 'is_active', não 'status'
+  // CORREÇÃO: Usamos 'expand' para trazer os dados da empresa na mesma requisição.
+  // Isso evita o erro de permissão ao tentar buscar a empresa separadamente.
   const shops = await pb.collection("shops").getFullList({
     filter: `is_active = true`, 
     sort: "name",
+    expand: "company_id"
   });
 
-  const result: ShopWithCompany[] = [];
-
-  for (const shop of shops) {
-    try {
-        const company = await pb.collection("companies").getOne(shop.company_id);
-        result.push({ shop, company });
-    } catch (err) {
-        console.warn(`Empresa não encontrada para a loja ${shop.id}`, err);
-        // Opcional: Adicionar mesmo sem empresa ou ignorar
-        result.push({ shop, company: { legal_name: "Empresa não identificada" } });
-    }
-  }
+  const result: ShopWithCompany[] = shops.map((shop) => {
+      // O PocketBase retorna o objeto expandido dentro da propriedade 'expand'
+      // O nome da propriedade dentro de expand é o nome do campo de relação (company_id)
+      const company = shop.expand?.company_id;
+      
+      return {
+          shop,
+          company: company || { legal_name: "Empresa", id: shop.company_id } // Fallback visual
+      };
+  });
 
   return result;
 }
 
 /* ============================================================
-   4) Buscar unidade por ID
+   4) Utilitários de busca
 ============================================================ */
 export async function getShopById(id: string) {
-  return await pb.collection("shops").getOne(id);
+  return await pb.collection("shops").getOne(id, { expand: 'company_id' });
 }
 
-/* ============================================================
-   5) Buscar unidade por slug
-============================================================ */
 export async function getShopBySlug(slug: string) {
   const list = await pb.collection("shops").getFullList({
     filter: `slug="${slug}"`,
+    expand: 'company_id'
   });
-
   return list.length > 0 ? list[0] : null;
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\register.ts ---
@@ -4934,18 +4849,31 @@ Path: src\react-app\lib\api\shops.ts
 import { pb } from "./pocketbase";
 import type { Shop, PaymentMethod, Segment } from "@/shared/types";
 
-// Buscar segmentos disponíveis (Barbearia, Salão, etc)
+// Buscar segmentos disponíveis
 export async function getSegments(): Promise<Segment[]> {
   return await pb.collection("segments").getFullList({ sort: "name" });
 }
 
-// Buscar métodos de pagamento globais ou da loja
-export async function getPaymentMethods(): Promise<PaymentMethod[]> {
-  // Aqui buscamos todos os métodos possíveis cadastrados no sistema para o usuário selecionar
+// Buscar métodos de pagamento (Filtrados pela empresa do usuário ou globais se houver)
+export async function getPaymentMethods(companyId?: string): Promise<PaymentMethod[]> {
+  // Busca métodos que pertencem à empresa OU são genéricos (sem company_id, se houver)
+  // No nosso schema atual, todos têm company_id, então filtramos por ele.
+  if (!companyId) return [];
+  
   return await pb.collection("payment_methods").getFullList({ 
-    filter: "is_active = true",
+    filter: `company_id = "${companyId}" && is_active = true`,
     sort: "name" 
   });
+}
+
+// 🆕 Criar novo método de pagamento
+export async function createPaymentMethod(companyId: string, name: string): Promise<PaymentMethod> {
+  const record = await pb.collection("payment_methods").create({
+    name,
+    company_id: companyId,
+    is_active: true
+  });
+  return record as unknown as PaymentMethod;
 }
 
 // Atualizar dados da loja
@@ -5309,8 +5237,6 @@ export default LoginPage;
 --- INICIO DO ARQUIVO: src\react-app\pages\auth\RegisterPage.tsx ---
 Path: src\react-app\pages\auth\RegisterPage.tsx
 ------------------------------
-// Caminho: src/react-app/pages/auth/RegisterPage.tsx
-
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -5322,7 +5248,6 @@ import {
   getShopBySlug,
   registerClient,
   registerOwner,
-  findUserByEmail,
 } from "../../lib/api/register";
 
 import type { ShopWithCompany } from "@/shared/types";
@@ -5339,7 +5264,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
-  // CLIENTE
+  // CLIENTE - Lista de Lojas (com dados da empresa)
   const [shops, setShops] = useState<ShopWithCompany[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string>("");
   const [loadingShops, setLoadingShops] = useState(false);
@@ -5347,11 +5272,6 @@ export default function RegisterPage() {
   // Estados gerais
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // Modal — confirmar vínculo extra
-  const [showModal, setShowModal] = useState(false);
-  const [pendingCompanyId, setPendingCompanyId] = useState<string>("");
-  const [pendingShopId, setPendingShopId] = useState<string>("");
 
   const { login } = useAuth();
   const { reloadTenants } = useTenant();
@@ -5369,8 +5289,8 @@ export default function RegisterPage() {
       setError(null);
 
       try {
-        const shopId = searchParams.get("shopId");
-        const slug = searchParams.get("slug");
+        const shopIdParam = searchParams.get("shopId");
+        const slugParam = searchParams.get("slug");
 
         const allShops = await fetchActiveShopsWithCompany();
         
@@ -5378,10 +5298,10 @@ export default function RegisterPage() {
 
         let preselected = null;
 
-        if (shopId) {
-          preselected = await getShopById(shopId);
-        } else if (slug) {
-          preselected = await getShopBySlug(slug);
+        if (shopIdParam) {
+          preselected = await getShopById(shopIdParam);
+        } else if (slugParam) {
+          preselected = await getShopBySlug(slugParam);
         }
 
         setShops(allShops);
@@ -5389,6 +5309,7 @@ export default function RegisterPage() {
         if (preselected) {
           setSelectedShopId(preselected.id);
         } else if (allShops.length > 0) {
+          // Seleciona o primeiro por padrão
           setSelectedShopId(allShops[0].shop.id);
         }
       } catch (err: any) {
@@ -5410,26 +5331,27 @@ export default function RegisterPage() {
     };
   }, [searchParams, mode]);
 
-  const selectedShop = useMemo(
+  // Helper para pegar o objeto da loja selecionada
+  const selectedShopData = useMemo(
     () => shops.find((s) => s.shop.id === selectedShopId) ?? null,
     [shops, selectedShopId]
   );
 
   /* ============================================================
-      Validações
+      Validações Frontend
   ============================================================ */
   function validateCommon(): string | null {
     if (!name.trim()) return "Informe o nome.";
     if (!email.trim()) return "Informe o e-mail.";
     if (!password) return "Informe a senha.";
-    if (password.length < 6) return "A senha deve ter pelo menos 6 caracteres.";
+    if (password.length < 8) return "A senha deve ter pelo menos 8 caracteres.";
     if (password !== passwordConfirm) return "As senhas não conferem.";
     return null;
   }
 
   function validateClient(): string | null {
     if (!selectedShopId) return "Selecione uma unidade para se vincular.";
-    if (!selectedShop) return "Unidade selecionada inválida.";
+    if (!selectedShopData) return "Unidade selecionada inválida.";
     return null;
   }
 
@@ -5440,6 +5362,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
+    // 1. Validação básica
     const baseError = validateCommon();
     if (baseError) return setError(baseError);
 
@@ -5448,12 +5371,11 @@ export default function RegisterPage() {
       if (extra) return setError(extra);
     }
 
-    setShowModal(false);
     setSubmitting(true);
 
     try {
+      /* ------------------- CASO: DONO ------------------- */
       if (mode === "owner") {
-        /* ------------------- DONO ------------------- */
         await registerOwner({
           name: name.trim(),
           email: email.trim(),
@@ -5461,105 +5383,63 @@ export default function RegisterPage() {
           phone: phone.trim() || undefined,
         });
 
+        // Login automático e redirecionamento
         await login(email.trim(), password);
         await reloadTenants();
         navigate("/onboarding", { replace: true });
         return;
       }
 
-      /* ------------------- CLIENTE ------------------- */
-      if (!selectedShop) throw new Error("Dados de unidade inválidos.");
+      /* ------------------- CASO: CLIENTE ------------------- */
+      if (!selectedShopData) throw new Error("Dados de unidade inválidos.");
 
-      const companyId = selectedShop.shop.company_id;
-      const shopId = selectedShop.shop.id;
+      const { shop, company } = selectedShopData;
 
-      const existingUser = await findUserByEmail(email.trim());
-
-      if (existingUser) {
-        setPendingCompanyId(companyId);
-        setPendingShopId(shopId);
-        setShowModal(true);
-        return;
-      }
-
+      // Chama API unificada que cria OU vincula se já existir (e senha bater)
       await registerClient({
         name: name.trim(),
         email: email.trim(),
         password,
         phone: phone.trim() || undefined,
-        companyId,
-        shopId,
+        companyId: shop.company_id, // ou company.id
+        shopId: shop.id,
       });
 
+      // Login automático
       await login(email.trim(), password);
-      const slug = selectedShop.shop.slug;
-      navigate(`/book/${slug}`, { replace: true });
-
-    } catch (err: any) {
-      console.error(err);
-
-      // CORREÇÃO: Ignorar erro de cancelamento automático (status 0)
-      if (err.status === 0 || err.isAbort) {
-        // Se cancelou, assumimos que o registro/login funcionou e redirecionamos manualmente
-        if (mode === "owner") {
-          navigate("/onboarding", { replace: true });
-        } else if (selectedShop) {
-          navigate(`/book/${selectedShop.shop.slug}`, { replace: true });
-        }
-        return;
-      }
-
-      setError(
-        err?.message ??
-        "Não foi possível concluir o cadastro. Tente novamente em instantes."
-      );
-      setSubmitting(false);
-    }
-  }
-
-  /* ============================================================
-      Confirma cadastro adicional (modal)
-  ============================================================ */
-  async function confirmLink() {
-    if (!selectedShop) return;
-
-    try {
-      setSubmitting(true);
-
-      await registerClient({
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        phone: phone.trim() || undefined,
-        companyId: pendingCompanyId,
-        shopId: pendingShopId,
-      });
-
-      await login(email.trim(), password);
-      const slug = selectedShop.shop.slug;
-      navigate(`/book/${slug}`, { replace: true });
-    } catch (err: any) {
-      console.error(err);
       
-      // Correção também no modal
-      if (err.status === 0 || err.isAbort) {
-        const slug = selectedShop.shop.slug;
-        navigate(`/book/${slug}`, { replace: true });
-        return;
+      // Redireciona para a página de agendamento da loja
+      navigate(`/book/${shop.slug}`, { replace: true });
+
+    } catch (err: any) {
+      console.error("Erro no registro:", err);
+
+      let errorMsg = "Não foi possível concluir o cadastro.";
+
+      // Tratamento de erros do PocketBase
+      if (err.data && typeof err.data === 'object') {
+        const fieldKeys = Object.keys(err.data);
+        if (fieldKeys.length > 0) {
+          const field = fieldKeys[0];
+          const msg = err.data[field]?.message;
+          if (msg) errorMsg = `${field}: ${msg}`; // ex: "password: Must be at least 8 characters"
+        }
+      } 
+      // Tratamento para nosso erro customizado de senha errada no login automático
+      else if (err.message && err.message.includes("senha informada está incorreta")) {
+         errorMsg = err.message;
+      }
+      else if (err.message) {
+         // Erros genéricos
+         errorMsg = err.message;
       }
 
-      setError(
-        err?.message ??
-        "Não foi possível concluir o cadastro. Tente novamente."
-      );
-      setSubmitting(false);
-    } finally {
-      if (!submitting) setShowModal(false); // Só fecha se não foi navegação
-    }
-  }
+      // Ignora erro se for abortamento de request
+      if (err.status === 0 || err.isAbort) return;
 
-  function cancelLink() {
-    setShowModal(false);
+      setError(errorMsg);
+      setSubmitting(false);
+    }
   }
 
   /* ============================================================
@@ -5568,7 +5448,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4 py-10 relative">
 
-      {/* fundo */}
+      {/* Fundo decorativo */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-24 -top-24 w-80 h-80 bg-emerald-500/25 blur-3xl rounded-full" />
         <div className="absolute -right-24 bottom-[-40px] w-96 h-96 bg-sky-500/25 blur-3xl rounded-full" />
@@ -5576,10 +5456,10 @@ export default function RegisterPage() {
 
       <div className="w-full max-w-4xl mx-auto grid md:grid-cols-[1.2fr,1fr] gap-8 items-center">
 
-        {/* Lado esquerdo */}
+        {/* Lado esquerdo: Texto Marketing */}
         <div className="space-y-4">
           <p className="text-xs tracking-[0.18em] uppercase text-emerald-300/80">
-            TeaAgendei • Plataforma SaaS de agendamento
+            TeaAgendei • Plataforma SaaS
           </p>
           <h1 className="text-3xl md:text-4xl font-semibold leading-tight">
             Crie seu acesso e
@@ -5587,20 +5467,20 @@ export default function RegisterPage() {
           </h1>
 
           <p className="text-sm md:text-base text-slate-300 max-w-lg">
-            Donos gerenciam unidades, equipe e faturamento. Clientes agendam em poucos cliques na unidade preferida.
+            Donos gerenciam unidades e equipe. Clientes agendam em poucos cliques.
           </p>
 
           <ul className="mt-4 space-y-2 text-sm text-slate-300">
-            <li>• 15 dias grátis para testar.</li>
-            <li>• Clientes sempre vinculados à unidade onde se cadastrarem.</li>
+            <li>• Simples e Rápido.</li>
+            <li>• Histórico de agendamentos.</li>
             <li>• Agenda inteligente e antifuro.</li>
           </ul>
         </div>
 
-        {/* Card de formulário */}
+        {/* Lado direito: Formulário */}
         <div className="rounded-3xl border border-white/10 bg-slate-900/80 backdrop-blur-2xl shadow-2xl p-6 md:p-7 space-y-6">
 
-          {/* header mini brand */}
+          {/* Header do Card */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="h-9 w-9 rounded-2xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-lg">
@@ -5613,12 +5493,12 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Toggle dono/cliente */}
-          <div className="inline-flex rounded-2xl bg-slate-950/60 border border-white/10 p-1 text-xs">
+          {/* Toggle Dono vs Cliente */}
+          <div className="inline-flex rounded-2xl bg-slate-950/60 border border-white/10 p-1 text-xs w-full">
             <button
               type="button"
               onClick={() => setMode("owner")}
-              className={`px-4 py-1.5 rounded-xl transition ${
+              className={`flex-1 px-4 py-2 rounded-xl transition text-center ${
                 mode === "owner"
                   ? "bg-emerald-500 text-slate-950 font-semibold shadow-sm shadow-emerald-500/40"
                   : "text-slate-300 hover:bg-slate-800/60"
@@ -5629,7 +5509,7 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => setMode("client")}
-              className={`px-4 py-1.5 rounded-xl transition ${
+              className={`flex-1 px-4 py-2 rounded-xl transition text-center ${
                 mode === "client"
                   ? "bg-sky-500 text-slate-950 font-semibold shadow-sm shadow-sky-500/40"
                   : "text-slate-300 hover:bg-slate-800/60"
@@ -5642,7 +5522,7 @@ export default function RegisterPage() {
           {/* Formulário */}
           <form className="space-y-4" onSubmit={handleSubmit}>
 
-            {/* Campos comuns */}
+            {/* Nome */}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-200">Nome completo</label>
               <input
@@ -5655,6 +5535,7 @@ export default function RegisterPage() {
               />
             </div>
 
+            {/* Email */}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-200">E-mail</label>
               <input
@@ -5667,6 +5548,7 @@ export default function RegisterPage() {
               />
             </div>
 
+            {/* Telefone */}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-200">WhatsApp (opcional)</label>
               <input
@@ -5689,33 +5571,33 @@ export default function RegisterPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500
                   focus:outline-none focus:ring-2 focus:ring-emerald-400/80"
-                  placeholder="••••••••"
+                  placeholder="Min. 8 carac."
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-200">Confirmar senha</label>
+                <label className="block text-xs font-medium text-slate-200">Confirmar</label>
                 <input
                   type="password"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
                   className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500
                   focus:outline-none focus:ring-2 focus:ring-emerald-400/80"
-                  placeholder="••••••••"
+                  placeholder="Repita a senha"
                 />
               </div>
             </div>
 
-            {/* CLIENTE — Seleção de Unidade */}
+            {/* CLIENTE: Seleção de Unidade */}
             {mode === "client" && (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 pt-2 border-t border-white/5">
                 <label className="block text-xs font-medium text-slate-200">
                   Selecione a unidade onde você será atendido
                 </label>
 
                 {loadingShops ? (
-                  <div className="text-xs text-slate-400">Carregando unidades...</div>
+                  <div className="text-xs text-slate-400 py-2">Carregando unidades...</div>
                 ) : shops.length === 0 ? (
-                  <div className="text-xs text-slate-400">Nenhuma unidade disponível no momento.</div>
+                  <div className="text-xs text-slate-400 py-2">Nenhuma unidade disponível no momento.</div>
                 ) : (
                   <select
                     value={selectedShopId}
@@ -5725,7 +5607,7 @@ export default function RegisterPage() {
                   >
                     {shops.map(({ shop, company }) => (
                       <option key={shop.id} value={shop.id}>
-                        {company?.legal_name ?? "Empresa"} • {shop.name}
+                        {company?.legal_name || company?.fantasy_name || "Empresa"} • {shop.name}
                       </option>
                     ))}
                   </select>
@@ -5733,19 +5615,19 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* ERRO */}
+            {/* Mensagem de Erro */}
             {error && (
-              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs text-red-100 break-words">
                 {error}
               </div>
             )}
 
-            {/* BOTÃO SUBMIT */}
+            {/* Botão Submit */}
             <button
               type="submit"
               disabled={submitting || (mode === "client" && loadingShops)}
               className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm py-2.5 transition
-              shadow-lg shadow-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              shadow-lg shadow-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {submitting
                 ? "Criando acesso..."
@@ -5754,48 +5636,16 @@ export default function RegisterPage() {
                 : "Criar acesso de cliente"}
             </button>
 
-            {/* Link para login */}
+            {/* Link para Login */}
             <p className="text-[11px] text-center text-slate-400">
               Já tem acesso?{" "}
-              <a href="/login" className="text-emerald-300 hover:text-emerald-200">
+              <a href="/login" className="text-emerald-300 hover:text-emerald-200 transition">
                 Entrar no TeaAgendei
               </a>
             </p>
           </form>
         </div>
       </div>
-
-      {/* ============================================================
-          MODAL — Confirmar vínculo adicional
-      ============================================================ */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-xl text-center space-y-4">
-            <h2 className="text-xl font-semibold text-white">
-              Você já possui cadastro em outra empresa
-            </h2>
-            <p className="text-slate-300 text-sm">
-              Deseja também se cadastrar nesta unidade?
-            </p>
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <button
-                onClick={cancelLink}
-                className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
-                disabled={submitting}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmLink}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"
-                disabled={submitting}
-              >
-                Sim, cadastrar também
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -5805,156 +5655,166 @@ export default function RegisterPage() {
 --- INICIO DO ARQUIVO: src\react-app\pages\booking\BookPage.tsx ---
 Path: src\react-app\pages\booking\BookPage.tsx
 ------------------------------
-// Caminho: src/react-app/pages/booking/BookPage.tsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getShopBySlug } from "@/react-app/lib/api/register";
-import type { Shop, Service, User } from "@/shared/types";
-
-// Import dos passos (Steps)
-import StepService from "@/react-app/components/booking/StepService";
-import StepProfessional from "@/react-app/components/booking/StepProfessional";
-import StepDateTime from "@/react-app/components/booking/StepDateTime";
-import StepConfirm from "@/react-app/components/booking/StepConfirm";
+import { getShopBySlug } from "../../lib/api/register"; 
+import StepService from "../../components/booking/StepService";
+import StepProfessional from "../../components/booking/StepProfessional";
+import StepDateTime from "../../components/booking/StepDateTime";
+import StepConfirm from "../../components/booking/StepConfirm";
+import { Service, User, TimeSlot } from "@/shared/types";
 
 export default function BookPage() {
-  const { slug } = useParams<{ slug: string }>();
-
-  // Estados Globais do Agendamento
-  const [shop, setShop] = useState<Shop | null>(null);
+  const { slug } = useParams();
+  
+  // Dados da Loja
+  const [shop, setShop] = useState<any>(null); // any para aceitar o expand sem erros
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estado do Wizard (Passo a Passo)
+  // Estado do Wizard
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<User | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedTime, setSelectedTime] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<TimeSlot | null>(null);
 
-  // 1. Carrega a Loja pelo Slug ao abrir a página
+  // Carrega dados da loja pelo Slug
   useEffect(() => {
+    let isMounted = true;
+
     async function load() {
       if (!slug) return;
       setLoading(true);
+      setError(null);
+
       try {
         const data = await getShopBySlug(slug);
+        
+        if (!isMounted) return;
+
         if (!data) {
-          setError("Unidade não encontrada ou endereço incorreto.");
+          setError("Unidade não encontrada ou link inválido.");
         } else {
           setShop(data);
         }
-      } catch (err) {
-        console.error(err);
-        setError("Erro ao carregar a unidade. Tente novamente.");
+      } catch (err: any) {
+        if (!isMounted) return;
+
+        // Ignora erro de auto-cancelamento
+        if (err.status === 0 || err.isAbort) return;
+
+        console.error("Erro ao carregar loja:", err);
+        setError("Não foi possível carregar os dados da unidade.");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
+
     load();
+
+    return () => {
+      isMounted = false;
+    };
   }, [slug]);
 
-  // Renderização de Erro/Loading
+  // --- NAVEGAÇÃO DO WIZARD ---
+
+  const handleServiceSelect = (service: Service) => {
+    setSelectedService(service);
+    setStep(2);
+  };
+
+  const handleProfessionalSelect = (prof: User | null) => {
+    setSelectedProfessional(prof);
+    setStep(3);
+  };
+
+  const handleTimeSelect = (slot: TimeSlot) => {
+    setSelectedTime(slot);
+    setStep(4);
+  };
+
+  const handleBack = () => {
+    if (step > 1) setStep(step - 1);
+  };
+
+  // --- RENDER ---
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        <div className="animate-pulse">Carregando agendamento...</div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
       </div>
     );
   }
 
   if (error || !shop) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-slate-900 border border-white/10 rounded-2xl p-6 text-center">
-          <div className="text-red-400 mb-2">● Unidade não localizada</div>
-          <p className="text-slate-300">{error}</p>
-        </div>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 p-4">
+        <div className="text-4xl mb-4">😕</div>
+        <p>{error || "Loja não encontrada."}</p>
+        <a href="/login" className="mt-4 text-emerald-400 hover:underline">Voltar ao início</a>
       </div>
     );
   }
 
-  // Renderização do Wizard
+  // Nome da empresa vindo do expand ou fallback
+  const companyName = shop.expand?.company_id?.fantasy_name || shop.expand?.company_id?.legal_name || "Empresa";
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 py-6 px-4 md:py-10">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
+      
+      {/* Header Simples */}
+      <header className="h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-8 bg-slate-900/50 backdrop-blur-md sticky top-0 z-10">
+        <div>
+          <h1 className="text-sm font-bold text-white">{shop.name}</h1>
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider">{companyName}</p>
+        </div>
+        <div className="text-xs text-slate-500">
+          Passo {step} de 4
+        </div>
+      </header>
+
+      {/* Conteúdo do Passo */}
+      <main className="flex-1 w-full max-w-lg mx-auto p-4 md:py-8">
         
-        {/* Cabeçalho da Loja */}
-        <div className="mb-8 text-center space-y-2">
-          {shop.logo && (
-             <img src={shop.logo} alt="Logo" className="w-16 h-16 mx-auto rounded-full object-cover bg-slate-800" />
-          )}
-          <h1 className="text-2xl md:text-3xl font-bold">{shop.name}</h1>
-          <p className="text-slate-400 text-sm">{shop.address || "Endereço não informado"}</p>
-        </div>
+        {step === 1 && (
+          <StepService 
+            shopId={shop.id} 
+            onSelect={handleServiceSelect} 
+          />
+        )}
 
-        {/* Área do Conteúdo (Passos) */}
-        <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
-          
-          {/* PASSO 1: SERVIÇO */}
-          {step === 1 && (
-            <StepService
-              shop={shop}
-              service={selectedService}
-              onChange={(data) => {
-                if (data.service !== undefined) setSelectedService(data.service);
-              }}
-              onNext={() => setStep(2)}
-            />
-          )}
+        {step === 2 && selectedService && (
+          <StepProfessional 
+            shopId={shop.id}
+            serviceName={selectedService.name} 
+            onSelect={handleProfessionalSelect}
+            onBack={handleBack}
+          />
+        )}
 
-          {/* PASSO 2: PROFISSIONAL */}
-          {step === 2 && selectedService && (
-            <StepProfessional
-              shop={shop}
-              service={selectedService}
-              professional={selectedProfessional}
-              onChange={(data) => {
-                if (data.professional !== undefined) setSelectedProfessional(data.professional);
-              }}
-              onBack={() => setStep(1)}
-              onNext={() => {
-                setStep(3);
-              }}
-            />
-          )}
+        {step === 3 && selectedService && (
+          <StepDateTime 
+            shop={shop}                         // CORREÇÃO: Passa objeto shop
+            service={selectedService}           // CORREÇÃO: Passa objeto service
+            professional={selectedProfessional} // CORREÇÃO: Passa objeto user | null
+            onSelect={handleTimeSelect}
+            onBack={handleBack}
+          />
+        )}
 
-          {/* PASSO 3: DATA E HORA */}
-          {step === 3 && selectedService && selectedProfessional && (
-            <StepDateTime
-              shop={shop}
-              service={selectedService}
-              professional={selectedProfessional}
-              onBack={() => setStep(2)}
-              onNext={(date, time) => {
-                setSelectedDate(date);
-                setSelectedTime(time);
-                setStep(4); 
-              }}
-            />
-          )}
+        {step === 4 && selectedService && selectedTime && (
+          <StepConfirm 
+            shop={shop}
+            service={selectedService}
+            professional={selectedProfessional}
+            timeSlot={selectedTime}
+            onBack={handleBack}
+          />
+        )}
 
-          {/* PASSO 4: CONFIRMAÇÃO */}
-          {step === 4 && selectedService && selectedProfessional && selectedDate && selectedTime && (
-            <StepConfirm
-              shop={shop}
-              service={selectedService}
-              // O '!' aqui garante ao TypeScript que não é nulo, pois o IF acima já verificou
-              professional={selectedProfessional}
-              date={selectedDate}
-              time={selectedTime}
-              onBack={() => setStep(3)}
-            />
-          )}
-
-        </div>
-        
-        <div className="mt-8 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-slate-600">
-            Powered by TeaAgendei
-          </p>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -5964,20 +5824,159 @@ export default function BookPage() {
 --- INICIO DO ARQUIVO: src\react-app\pages\client\ClientPanelPage.tsx ---
 Path: src\react-app\pages\client\ClientPanelPage.tsx
 ------------------------------
-// src/react-app/pages/client/ClientPanelPage.tsx
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { getMyAppointments, cancelMyAppointment } from "@/react-app/lib/api/client";
+import { Appointment, AppointmentStatus } from "@/shared/types";
+
+// Helpers visuais
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case AppointmentStatus.Pending: return { text: "Pendente", color: "bg-yellow-500/20 text-yellow-400" };
+    case AppointmentStatus.Confirmed: return { text: "Confirmado", color: "bg-sky-500/20 text-sky-400" };
+    case AppointmentStatus.InProgress: return { text: "Em Andamento", color: "bg-purple-500/20 text-purple-400" };
+    case AppointmentStatus.Completed: return { text: "Concluído", color: "bg-emerald-500/20 text-emerald-400" };
+    case AppointmentStatus.Cancelled: return { text: "Cancelado", color: "bg-red-500/20 text-red-400" };
+    default: return { text: "Outro", color: "bg-slate-700 text-slate-300" };
+  }
+};
+
+const formatDate = (iso: string) => {
+  return new Date(iso).toLocaleDateString("pt-BR", { 
+    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" 
+  });
+};
+
 export default function ClientPanelPage() {
+  const { user } = useAuth();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, [user?.id]);
+
+  async function loadData() {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const data = await getMyAppointments(user.id);
+      setAppointments(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCancel(id: string) {
+    if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return;
+    try {
+      await cancelMyAppointment(id);
+      loadData(); // Recarrega a lista
+    } catch (error) {
+      alert("Erro ao cancelar.");
+    }
+  }
+
+  // Separar futuros e passados
+  const now = new Date();
+  const upcoming = appointments.filter(a => new Date(a.start_time) >= now && a.status !== AppointmentStatus.Cancelled);
+  const history = appointments.filter(a => new Date(a.start_time) < now || a.status === AppointmentStatus.Cancelled);
+
+  if (loading) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Carregando...</div>;
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-xl w-full space-y-3">
-        <h1 className="text-2xl font-semibold">Meus agendamentos</h1>
-        <p className="text-sm text-slate-300">
-          Aqui o cliente verá seus próximos horários, histórico e poderá
-          remarcar/cancelar.
-        </p>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
-          Ainda é um placeholder. Mais à frente vamos integrar com a coleção de
-          agendamentos do PocketBase.
+    <div className="min-h-screen bg-slate-950 text-slate-50 p-6">
+      <div className="max-w-3xl mx-auto space-y-8">
+        
+        {/* Cabeçalho */}
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Meus Agendamentos</h1>
+            <p className="text-sm text-slate-400">Gerencie seus horários marcados.</p>
+          </div>
+          {/* Opcional: Link para voltar a agendar se tiver slug salvo, senão home */}
+          <Link to="/" className="text-xs bg-emerald-500/10 text-emerald-400 px-4 py-2 rounded-xl hover:bg-emerald-500/20 transition">
+            Novo Agendamento
+          </Link>
         </div>
+
+        {/* PRÓXIMOS */}
+        <section>
+          <h2 className="text-lg font-semibold text-white mb-4 border-l-4 border-emerald-500 pl-3">Próximos</h2>
+          {upcoming.length === 0 ? (
+            <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-8 text-center text-slate-500 text-sm">
+              Você não tem agendamentos futuros.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {upcoming.map((appt: any) => {
+                const shopName = appt.expand?.shop_id?.name || "Loja";
+                const serviceName = appt.expand?.service_id?.name || "Serviço";
+                const barberName = appt.expand?.barber_id?.name || "Profissional";
+                const { text, color } = getStatusLabel(appt.status);
+
+                return (
+                  <div key={appt.id} className="bg-slate-900 border border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row justify-between gap-4 transition hover:border-emerald-500/30">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${color}`}>
+                          {text}
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          {formatDate(appt.start_time)}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-semibold text-white">{serviceName}</h3>
+                      <p className="text-sm text-slate-400">{shopName} • com {barberName}</p>
+                    </div>
+
+                    <div className="flex items-center">
+                      {(appt.status === AppointmentStatus.Pending || appt.status === AppointmentStatus.Confirmed) && (
+                        <button 
+                          onClick={() => handleCancel(appt.id)}
+                          className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-4 py-2 rounded-xl hover:bg-red-500/10 transition w-full sm:w-auto"
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* HISTÓRICO */}
+        <section>
+          <h2 className="text-lg font-semibold text-white mb-4 border-l-4 border-slate-600 pl-3">Histórico</h2>
+          <div className="space-y-3 opacity-75">
+            {history.map((appt: any) => {
+               const shopName = appt.expand?.shop_id?.name;
+               const serviceName = appt.expand?.service_id?.name;
+               const { text, color } = getStatusLabel(appt.status);
+
+               return (
+                 <div key={appt.id} className="bg-slate-900/30 border border-white/5 rounded-xl p-4 flex justify-between items-center">
+                    <div>
+                       <p className="text-sm font-medium text-slate-300">{serviceName}</p>
+                       <p className="text-xs text-slate-500">{shopName} • {formatDate(appt.start_time)}</p>
+                    </div>
+                    <span className={`text-[10px] px-2 py-1 rounded ${color}`}>{text}</span>
+                 </div>
+               );
+            })}
+            {history.length === 0 && (
+                <p className="text-xs text-slate-600">Nenhum histórico disponível.</p>
+            )}
+          </div>
+        </section>
+
       </div>
     </div>
   );
@@ -6947,26 +6946,16 @@ Path: src\react-app\pages\owner\SettingsPage.tsx
 ------------------------------
 import { useEffect, useState } from "react";
 import { useTenant } from "@/react-app/contexts/TenantContext";
-import {
-  getShopHours,
-  upsertShopHour,
-  seedDefaultHours,
-} from "@/react-app/lib/api/shop-hours";
-import {
-  getSegments,
-  getPaymentMethods,
-  updateShop,
-} from "@/react-app/lib/api/shops";
+import { getShopHours, upsertShopHour, seedDefaultHours } from "@/react-app/lib/api/shop-hours";
+import { getSegments, getPaymentMethods, updateShop, createPaymentMethod } from "@/react-app/lib/api/shops";
 import { pb } from "@/react-app/lib/api/pocketbase";
 import type { ShopHour, Weekday, Segment, PaymentMethod } from "@/shared/types";
+import Modal from "@/react-app/components/common/Modal";
 
 const WEEKDAYS: { key: Weekday; label: string }[] = [
-  { key: "dom", label: "Domingo" },
-  { key: "seg", label: "Segunda" },
-  { key: "ter", label: "Terça" },
-  { key: "qua", label: "Quarta" },
-  { key: "qui", label: "Quinta" },
-  { key: "sex", label: "Sexta" },
+  { key: "dom", label: "Domingo" }, { key: "seg", label: "Segunda" },
+  { key: "ter", label: "Terça" }, { key: "qua", label: "Quarta" },
+  { key: "qui", label: "Quinta" }, { key: "sex", label: "Sexta" },
   { key: "sab", label: "Sábado" },
 ];
 
@@ -6981,20 +6970,18 @@ export default function SettingsPage() {
   // --- DADOS CARREGADOS ---
   const [hours, setHours] = useState<ShopHour[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
-  const [allPaymentMethods, setAllPaymentMethods] = useState<PaymentMethod[]>(
-    []
-  );
-
+  const [allPaymentMethods, setAllPaymentMethods] = useState<PaymentMethod[]>([]);
+  
   // --- FORMULÁRIO DADOS DA LOJA ---
   const [shopName, setShopName] = useState("");
-  const [shopSlug, setShopSlug] = useState(""); // Novo
-  const [shopDescription, setShopDescription] = useState(""); // Novo
+  const [shopSlug, setShopSlug] = useState(""); 
+  const [shopDescription, setShopDescription] = useState(""); 
   const [shopPhone, setShopPhone] = useState("");
   const [shopAddress, setShopAddress] = useState("");
   const [selectedSegment, setSelectedSegment] = useState("");
-  const [minAdvance, setMinAdvance] = useState(""); // Novo (minutos)
-  const [maxAdvance, setMaxAdvance] = useState(""); // Novo (dias ou minutos, vamos usar dias no UI e converter)
-
+  const [minAdvance, setMinAdvance] = useState(""); 
+  const [maxAdvance, setMaxAdvance] = useState(""); 
+  
   // Logo
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -7003,33 +6990,31 @@ export default function SettingsPage() {
   const [pixKey, setPixKey] = useState("");
   const [pixKeyType, setPixKeyType] = useState("cpf");
   const [selectedPayments, setSelectedPayments] = useState<string[]>([]);
+  
+  // Modal Novo Pagamento
+  const [isPayModalOpen, setPayModalOpen] = useState(false);
+  const [newPayName, setNewPayName] = useState("");
 
   useEffect(() => {
     if (currentShop) {
       loadData();
-      // Preencher formulários
+      
+      // Preenche estados do form
       setShopName(currentShop.name);
       setShopSlug(currentShop.slug);
       setShopDescription(currentShop.description || "");
       setShopPhone(currentShop.phone || "");
       setShopAddress(currentShop.address || "");
       setSelectedSegment(currentShop.segment_id || "");
-
-      // Regras de tempo (Banco guarda minutos/dias conforme sua lógica, vamos assumir minutos brutos)
-      // min_advance_time (minutos)
+      
       setMinAdvance(currentShop.min_advance_time?.toString() || "30");
-      // max_advance_time (dias convertidos em minutos ou dias direto? Vamos usar dias no front)
-      // Se no banco for dias, ok. Se for minutos, converta. Pelo schema é Number genérico.
-      // Vamos assumir que max_advance_time está em DIAS para facilitar.
       setMaxAdvance(currentShop.max_advance_time?.toString() || "30");
 
       setPixKey(currentShop.pix_key || "");
       setPixKeyType(currentShop.pix_key_type || "cpf");
       setSelectedPayments(currentShop.accepted_payment_methods || []);
 
-      // Logo Preview
       if (currentShop.logo) {
-        // Gera URL da imagem no PocketBase
         const url = pb.files.getUrl(currentShop, currentShop.logo);
         setLogoPreview(url);
       } else {
@@ -7039,13 +7024,13 @@ export default function SettingsPage() {
   }, [currentShop?.id]);
 
   async function loadData() {
-    if (!currentShop) return;
+    if (!currentShop || !currentCompany) return;
     setLoading(true);
     try {
       const [h, s, p] = await Promise.all([
         getShopHours(currentShop.id),
         getSegments(),
-        getPaymentMethods(),
+        getPaymentMethods(currentCompany.id)
       ]);
       setHours(h);
       setSegments(s);
@@ -7057,15 +7042,12 @@ export default function SettingsPage() {
     }
   }
 
-  // --- HANDLERS DE SALVAMENTO ---
+  // --- HANDLERS ---
 
   async function handleSaveDetails() {
     if (!currentShop) return;
     setSaving(true);
     try {
-      // Prepara payload
-      // Nota: PocketBase aceita File direto no payload se usarmos FormData,
-      // ou objeto simples se o SDK tratar (o JS SDK trata).
       const payload: any = {
         name: shopName,
         slug: shopSlug,
@@ -7073,11 +7055,10 @@ export default function SettingsPage() {
         phone: shopPhone,
         address: shopAddress,
         segment_id: selectedSegment,
-        min_advance_time: Number(minAdvance), // Minutos
-        max_advance_time: Number(maxAdvance), // Dias
+        min_advance_time: Number(minAdvance),
+        max_advance_time: Number(maxAdvance),
       };
 
-      // Se tiver nova logo, anexa
       if (logoFile) {
         payload.logo = logoFile;
       }
@@ -7100,7 +7081,7 @@ export default function SettingsPage() {
       const updated = await updateShop(currentShop.id, {
         pix_key: pixKey,
         pix_key_type: pixKeyType as any,
-        accepted_payment_methods: selectedPayments,
+        accepted_payment_methods: selectedPayments
       });
       setCurrentShop(updated);
       alert("Configurações financeiras salvas!");
@@ -7111,12 +7092,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSaveHour(
-    day: Weekday,
-    start: string,
-    end: string,
-    closed: boolean
-  ) {
+  async function handleSaveHour(day: Weekday, start: string, end: string, closed: boolean) {
     if (!currentShop || !currentCompany) return;
     setSaving(true);
     await upsertShopHour({
@@ -7125,7 +7101,7 @@ export default function SettingsPage() {
       weekday: day,
       startTime: start,
       endTime: end,
-      isClosed: closed,
+      isClosed: closed
     });
     const newHours = await getShopHours(currentShop.id);
     setHours(newHours);
@@ -7141,7 +7117,19 @@ export default function SettingsPage() {
     setSaving(false);
   }
 
-  // Preview de imagem local antes de subir
+  async function handleCreatePayment() {
+    if (!currentCompany || !newPayName.trim()) return;
+    try {
+        const created = await createPaymentMethod(currentCompany.id, newPayName.trim());
+        setAllPaymentMethods([...allPaymentMethods, created]);
+        setSelectedPayments([...selectedPayments, created.id]);
+        setNewPayName("");
+        setPayModalOpen(false);
+    } catch (err) {
+        alert("Erro ao criar método de pagamento.");
+    }
+  }
+
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -7150,10 +7138,9 @@ export default function SettingsPage() {
     }
   };
 
-  // Toggle checkbox de pagamento
   const togglePayment = (id: string) => {
-    setSelectedPayments((prev) =>
-      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    setSelectedPayments(prev => 
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
   };
 
@@ -7163,111 +7150,53 @@ export default function SettingsPage() {
     <div className="space-y-6 pb-20">
       <h1 className="text-2xl font-bold text-white">Configurações</h1>
 
-      {/* TABS */}
       <div className="flex gap-4 border-b border-white/10 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab("hours")}
-          className={`pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-            activeTab === "hours"
-              ? "border-emerald-500 text-emerald-400"
-              : "border-transparent text-slate-400"
-          }`}
-        >
+        <button onClick={() => setActiveTab("hours")} className={`pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === "hours" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400"}`}>
           Horários
         </button>
-        <button
-          onClick={() => setActiveTab("details")}
-          className={`pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-            activeTab === "details"
-              ? "border-emerald-500 text-emerald-400"
-              : "border-transparent text-slate-400"
-          }`}
-        >
+        <button onClick={() => setActiveTab("details")} className={`pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === "details" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400"}`}>
           Dados da Loja
         </button>
-        <button
-          onClick={() => setActiveTab("finance")}
-          className={`pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
-            activeTab === "finance"
-              ? "border-emerald-500 text-emerald-400"
-              : "border-transparent text-slate-400"
-          }`}
-        >
+        <button onClick={() => setActiveTab("finance")} className={`pb-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === "finance" ? "border-emerald-500 text-emerald-400" : "border-transparent text-slate-400"}`}>
           Financeiro & Pix
         </button>
       </div>
 
-      {loading ? (
-        <div className="text-slate-500 animate-pulse">Carregando dados...</div>
-      ) : (
+      {loading ? <div className="text-slate-500 animate-pulse">Carregando dados...</div> : (
         <div className="bg-slate-900 border border-white/10 rounded-2xl p-6">
+          
           {/* ================= ABA HORÁRIOS ================= */}
           {activeTab === "hours" && (
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Horários de Funcionamento
-                </h3>
+                <h3 className="text-lg font-semibold text-white">Horários de Funcionamento</h3>
                 {hours.length === 0 && (
-                  <button
-                    onClick={handleSeedHours}
-                    className="text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded hover:bg-emerald-500/20"
-                  >
-                    Preencher Padrão
-                  </button>
+                   <button onClick={handleSeedHours} className="text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded hover:bg-emerald-500/20">Preencher Padrão</button>
                 )}
               </div>
               {WEEKDAYS.map((day) => {
-                const config = hours.find((h) => h.weekday === day.key);
+                const config = hours.find(h => h.weekday === day.key);
                 const isClosed = config?.is_closed ?? false;
                 const start = config?.start_time || "09:00";
                 const end = config?.end_time || "18:00";
                 return (
-                  <div
-                    key={day.key}
-                    className="flex flex-wrap sm:flex-nowrap items-center gap-4 py-3 border-b border-white/5 last:border-0"
-                  >
-                    <div className="w-24 text-slate-300 font-medium capitalize">
-                      {day.label}
-                    </div>
-
+                  <div key={day.key} className="flex flex-wrap sm:flex-nowrap items-center gap-4 py-3 border-b border-white/5 last:border-0">
+                    <div className="w-24 text-slate-300 font-medium capitalize">{day.label}</div>
+                    
                     <div className="flex items-center gap-2">
-                      <input
-                        type="time"
-                        disabled={isClosed || saving}
-                        value={start}
-                        onChange={(e) =>
-                          handleSaveHour(day.key, e.target.value, end, isClosed)
-                        }
-                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-sm text-white disabled:opacity-30 focus:border-emerald-500 outline-none"
-                      />
+                      <input type="time" disabled={isClosed || saving} value={start} 
+                        onChange={e => handleSaveHour(day.key, e.target.value, end, isClosed)}
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-sm text-white disabled:opacity-30 focus:border-emerald-500 outline-none" />
                       <span className="text-slate-500">-</span>
-                      <input
-                        type="time"
-                        disabled={isClosed || saving}
-                        value={end}
-                        onChange={(e) =>
-                          handleSaveHour(
-                            day.key,
-                            start,
-                            e.target.value,
-                            isClosed
-                          )
-                        }
-                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-sm text-white disabled:opacity-30 focus:border-emerald-500 outline-none"
-                      />
+                      <input type="time" disabled={isClosed || saving} value={end}
+                        onChange={e => handleSaveHour(day.key, start, e.target.value, isClosed)}
+                        className="bg-black/30 border border-white/10 rounded px-2 py-1 text-sm text-white disabled:opacity-30 focus:border-emerald-500 outline-none" />
                     </div>
 
                     <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer ml-auto hover:text-white">
-                      <input
-                        type="checkbox"
-                        checked={isClosed}
-                        disabled={saving}
-                        onChange={(e) =>
-                          handleSaveHour(day.key, start, end, e.target.checked)
-                        }
-                        className="rounded bg-black/40 border-white/20 text-red-500 focus:ring-red-500"
-                      />
+                      <input type="checkbox" checked={isClosed} disabled={saving}
+                        onChange={e => handleSaveHour(day.key, start, end, e.target.checked)}
+                        className="rounded bg-black/40 border-white/20 text-red-500 focus:ring-red-500" />
                       Fechado
                     </label>
                   </div>
@@ -7279,183 +7208,94 @@ export default function SettingsPage() {
           {/* ================= ABA DADOS DA LOJA ================= */}
           {activeTab === "details" && (
             <div className="space-y-8 max-w-2xl">
-              {/* Seção 1: Identidade */}
               <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">
-                  Identidade
-                </h3>
-
-                {/* Upload de Logo */}
+                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Identidade</h3>
+                
                 <div className="flex items-center gap-6">
                   <div className="h-20 w-20 rounded-full bg-slate-800 border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden shrink-0">
                     {logoPreview ? (
-                      <img
-                        src={logoPreview}
-                        alt="Logo Preview"
-                        className="h-full w-full object-cover"
-                      />
+                      <img src={logoPreview} alt="Logo Preview" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="text-xs text-slate-500 text-center">
-                        Sem
-                        <br />
-                        Logo
-                      </span>
+                      <span className="text-xs text-slate-500 text-center">Sem<br/>Logo</span>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1">
-                      Logotipo da Unidade
-                    </label>
-                    <input
-                      type="file"
+                    <label className="block text-sm font-medium text-white mb-1">Logotipo da Unidade</label>
+                    <input 
+                      type="file" 
                       accept="image/*"
                       onChange={handleLogoChange}
                       className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20"
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Recomendado: 200x200px (JPG, PNG)
-                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Nome da Unidade
-                    </label>
-                    <input
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                      value={shopName}
-                      onChange={(e) => setShopName(e.target.value)}
-                    />
+                    <label className="block text-xs text-slate-400 mb-1">Nome da Unidade</label>
+                    <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                      value={shopName} onChange={e => setShopName(e.target.value)} />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Link Personalizado (Slug)
-                    </label>
+                    <label className="block text-xs text-slate-400 mb-1">Link Personalizado (Slug)</label>
                     <div className="flex items-center">
-                      <span className="bg-slate-800 border border-white/10 border-r-0 rounded-l-lg p-2.5 text-slate-500 text-xs">
-                        /book/
-                      </span>
-                      <input
-                        className="w-full bg-black/30 border border-white/10 rounded-r-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                        value={shopSlug}
-                        onChange={(e) =>
-                          setShopSlug(
-                            e.target.value.toLowerCase().replace(/\s+/g, "-")
-                          )
-                        }
-                      />
+                      <span className="bg-slate-800 border border-white/10 border-r-0 rounded-l-lg p-2.5 text-slate-500 text-xs">/book/</span>
+                      <input className="w-full bg-black/30 border border-white/10 rounded-r-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                        value={shopSlug} onChange={e => setShopSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))} />
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Descrição
-                  </label>
-                  <textarea
-                    className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                    rows={3}
-                    placeholder="Conte um pouco sobre sua unidade..."
-                    value={shopDescription}
-                    onChange={(e) => setShopDescription(e.target.value)}
-                  />
+                  <label className="block text-xs text-slate-400 mb-1">Descrição</label>
+                  <textarea className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none" rows={3}
+                    value={shopDescription} onChange={e => setShopDescription(e.target.value)} />
                 </div>
 
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">
-                    Segmento
-                  </label>
-                  <select
-                    className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-slate-300 focus:border-emerald-500 outline-none"
-                    value={selectedSegment}
-                    onChange={(e) => setSelectedSegment(e.target.value)}
-                  >
-                    <option value="">Selecione...</option>
-                    {segments.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
+                   <label className="block text-xs text-slate-400 mb-1">Segmento</label>
+                   <select className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-slate-300 focus:border-emerald-500 outline-none"
+                      value={selectedSegment} onChange={e => setSelectedSegment(e.target.value)}>
+                      <option value="">Selecione...</option>
+                      {segments.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                   </select>
                 </div>
               </div>
 
-              {/* Seção 2: Contato e Endereço */}
               <div className="space-y-4 border-t border-white/5 pt-4">
-                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">
-                  Localização
-                </h3>
+                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Localização</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Telefone / WhatsApp
-                    </label>
-                    <input
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                      value={shopPhone}
-                      onChange={(e) => setShopPhone(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Endereço
-                    </label>
-                    <input
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                      value={shopAddress}
-                      onChange={(e) => setShopAddress(e.target.value)}
-                    />
-                  </div>
+                   <div>
+                    <label className="block text-xs text-slate-400 mb-1">Telefone / WhatsApp</label>
+                    <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                      value={shopPhone} onChange={e => setShopPhone(e.target.value)} />
+                   </div>
+                   <div>
+                    <label className="block text-xs text-slate-400 mb-1">Endereço</label>
+                    <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                      value={shopAddress} onChange={e => setShopAddress(e.target.value)} />
+                   </div>
                 </div>
               </div>
 
-              {/* Seção 3: Regras de Agendamento */}
               <div className="space-y-4 border-t border-white/5 pt-4">
-                <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">
-                  Regras de Agenda
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Antecedência Mínima (minutos)
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                      placeholder="Ex: 30 (não agendar em cima da hora)"
-                      value={minAdvance}
-                      onChange={(e) => setMinAdvance(e.target.value)}
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Tempo mínimo antes do horário para permitir agendamento.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Agenda Aberta (dias)
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                      placeholder="Ex: 30 (abrir agenda para 1 mês)"
-                      value={maxAdvance}
-                      onChange={(e) => setMaxAdvance(e.target.value)}
-                    />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Quantos dias à frente o cliente pode ver.
-                    </p>
-                  </div>
-                </div>
+                 <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wider">Regras de Agenda</h3>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                       <label className="block text-xs text-slate-400 mb-1">Antecedência Mínima (minutos)</label>
+                       <input type="number" className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                         value={minAdvance} onChange={e => setMinAdvance(e.target.value)} />
+                    </div>
+                    <div>
+                       <label className="block text-xs text-slate-400 mb-1">Agenda Aberta (dias)</label>
+                       <input type="number" className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                         value={maxAdvance} onChange={e => setMaxAdvance(e.target.value)} />
+                    </div>
+                 </div>
               </div>
 
               <div className="pt-4">
-                <button
-                  onClick={handleSaveDetails}
-                  disabled={saving}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-3 rounded-xl transition shadow-lg shadow-emerald-500/20"
-                >
+                <button onClick={handleSaveDetails} disabled={saving} className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-3 rounded-xl transition shadow-lg shadow-emerald-500/20">
                   {saving ? "Salvando..." : "Salvar Alterações"}
                 </button>
               </div>
@@ -7466,96 +7306,84 @@ export default function SettingsPage() {
           {activeTab === "finance" && (
             <div className="space-y-6 max-w-lg">
               <div>
-                <h3 className="text-sm font-semibold text-slate-200 mb-3">
-                  Configuração Pix
-                </h3>
+                <h3 className="text-sm font-semibold text-slate-200 mb-3">Configuração Pix</h3>
                 <div className="grid grid-cols-3 gap-4 mb-2">
-                  <div className="col-span-1">
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Tipo de Chave
-                    </label>
-                    <select
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-slate-300 focus:border-emerald-500 outline-none"
-                      value={pixKeyType}
-                      onChange={(e) => setPixKeyType(e.target.value)}
-                    >
-                      <option value="cpf">CPF</option>
-                      <option value="cnpj">CNPJ</option>
-                      <option value="email">E-mail</option>
-                      <option value="telefone">Telefone</option>
-                      <option value="aleatoria">Aleatória</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-slate-400 mb-1">
-                      Chave Pix
-                    </label>
-                    <input
-                      className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
-                      value={pixKey}
-                      onChange={(e) => setPixKey(e.target.value)}
-                      placeholder="Sua chave aqui"
-                    />
-                  </div>
+                   <div className="col-span-1">
+                      <label className="block text-xs text-slate-400 mb-1">Tipo de Chave</label>
+                      <select className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-slate-300 focus:border-emerald-500 outline-none"
+                        value={pixKeyType} onChange={e => setPixKeyType(e.target.value)}>
+                        <option value="cpf">CPF</option>
+                        <option value="cnpj">CNPJ</option>
+                        <option value="email">E-mail</option>
+                        <option value="telefone">Telefone</option>
+                        <option value="aleatoria">Aleatória</option>
+                      </select>
+                   </div>
+                   <div className="col-span-2">
+                      <label className="block text-xs text-slate-400 mb-1">Chave Pix</label>
+                      <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2.5 text-white focus:border-emerald-500 outline-none"
+                        value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="Sua chave aqui" />
+                   </div>
                 </div>
               </div>
 
               <div>
-                <h3 className="text-sm font-semibold text-slate-200 mb-3">
-                  Métodos de Pagamento Aceitos
-                </h3>
-                {allPaymentMethods.length === 0 && (
-                  <p className="text-xs text-slate-500">
-                    Nenhum método cadastrado no sistema.
-                  </p>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {allPaymentMethods.map((pm) => (
-                    <label
-                      key={pm.id}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${
-                        selectedPayments.includes(pm.id)
-                          ? "bg-emerald-500/10 border-emerald-500/50"
-                          : "bg-black/20 border-white/5 hover:bg-white/5"
-                      }`}
+                <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-slate-200">Métodos de Pagamento Aceitos</h3>
+                    <button 
+                        onClick={() => setPayModalOpen(true)}
+                        className="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded hover:bg-emerald-500/20"
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedPayments.includes(pm.id)}
-                        onChange={() => togglePayment(pm.id)}
-                        className="rounded bg-black/40 border-white/20 text-emerald-500 focus:ring-emerald-500"
-                      />
-                      <span
-                        className={
-                          selectedPayments.includes(pm.id)
-                            ? "text-emerald-400"
-                            : "text-slate-400"
-                        }
-                      >
-                        {pm.name}
-                      </span>
-                    </label>
-                  ))}
+                        + Novo Método
+                    </button>
                 </div>
+                
+                {allPaymentMethods.length === 0 ? (
+                    <p className="text-xs text-slate-500 p-4 border border-dashed border-white/10 rounded-xl text-center">
+                        Nenhum método cadastrado no sistema. <br/>
+                        Clique em <strong>+ Novo Método</strong> para começar.
+                    </p>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {allPaymentMethods.map(pm => (
+                        <label key={pm.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${selectedPayments.includes(pm.id) ? "bg-emerald-500/10 border-emerald-500/50" : "bg-black/20 border-white/5 hover:bg-white/5"}`}>
+                            <input type="checkbox" checked={selectedPayments.includes(pm.id)} onChange={() => togglePayment(pm.id)}
+                            className="rounded bg-black/40 border-white/20 text-emerald-500 focus:ring-emerald-500" />
+                            <span className={selectedPayments.includes(pm.id) ? "text-emerald-400" : "text-slate-400"}>{pm.name}</span>
+                        </label>
+                    ))}
+                    </div>
+                )}
               </div>
 
               <div className="pt-4">
-                <button
-                  onClick={handleSaveFinance}
-                  disabled={saving}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-3 rounded-xl transition shadow-lg shadow-emerald-500/20"
-                >
+                <button onClick={handleSaveFinance} disabled={saving} className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-8 py-3 rounded-xl transition shadow-lg shadow-emerald-500/20">
                   {saving ? "Salvando..." : "Salvar Configurações"}
                 </button>
               </div>
             </div>
           )}
+
         </div>
       )}
+
+      {/* MODAL CRIAR MÉTODO */}
+      <Modal isOpen={isPayModalOpen} onClose={() => setPayModalOpen(false)} title="Novo Método de Pagamento">
+         <div className="space-y-4">
+            <div>
+               <label className="block text-xs text-slate-400 mb-1">Nome do Método</label>
+               <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white"
+                  placeholder="Ex: Dinheiro, Cartão de Crédito, Fiado..."
+                  value={newPayName} onChange={e => setNewPayName(e.target.value)} />
+            </div>
+            <button onClick={handleCreatePayment} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-2 rounded-lg mt-2">
+                Criar e Selecionar
+            </button>
+         </div>
+      </Modal>
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\pages\owner\SettingsPage.tsx ---
 
 
@@ -7885,25 +7713,234 @@ export default function LandingPage() {
 --- INICIO DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
 Path: src\react-app\pages\staff\StaffAgendaPage.tsx
 ------------------------------
-// src/react-app/pages/staff/StaffAgendaPage.tsx
+import { useEffect, useState } from "react";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { getStaffAppointmentsToday, updateAppointmentStatus } from "@/react-app/lib/api/appointments";
+import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
+
+// Helper: Formata hora (14:30)
+const formatTime = (isoString: string) => {
+  if (!isoString) return "--:--";
+  const date = new Date(isoString);
+  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+};
+
+// Helper: Formata dinheiro (R$ 50,00)
+const formatMoney = (val: number) => 
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
 export default function StaffAgendaPage() {
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-xl w-full space-y-3">
-        <h1 className="text-2xl font-semibold">Agenda do Profissional</h1>
-        <p className="text-sm text-slate-300">
-          Aqui o staff verá seus horários do dia, clientes e status dos
-          atendimentos.
-        </p>
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
-          Componente placeholder. Vamos ligar com o PocketBase (appointments) na
-          fase da agenda real.
-        </div>
+  const { user } = useAuth();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Carrega ao montar ou mudar usuário
+  useEffect(() => {
+    loadAgenda();
+    
+    // Auto-refresh a cada 60 segundos para pegar novos agendamentos
+    const interval = setInterval(loadAgenda, 60000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
+  async function loadAgenda() {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const data = await getStaffAppointmentsToday(user.id);
+      setAppointments(data);
+    } catch (err) {
+      console.error("Erro ao carregar agenda", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Lógica de atualização de status
+  async function handleStatusChange(id: string, newStatus: AppointmentStatus, payStatus?: PaymentStatus) {
+    // 1. Atualização Otimista (Muda na tela antes de ir pro servidor para parecer instantâneo)
+    setAppointments(prev => prev.map(appt => 
+      appt.id === id ? { ...appt, status: newStatus, payment_status: payStatus || appt.payment_status } : appt
+    ));
+
+    try {
+      // 2. Envia pro servidor
+      await updateAppointmentStatus(id, newStatus, payStatus);
+    } catch (err) {
+      console.error("Erro ao atualizar status", err);
+      alert("Erro ao atualizar o agendamento. Recarregando...");
+      loadAgenda(); // Reverte se der erro
+    }
+  }
+
+  // --- RENDER ---
+
+  if (loading && appointments.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-500 space-y-4">
+        <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
+        <p>Sincronizando agenda...</p>
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto pb-20">
+      
+      {/* Cabeçalho da Agenda */}
+      <div className="flex items-center justify-between bg-slate-900/50 p-4 rounded-2xl border border-white/5 backdrop-blur-sm sticky top-0 z-10">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-white">Minha Agenda</h1>
+          <p className="text-slate-400 text-xs md:text-sm capitalize">
+            {new Date().toLocaleDateString("pt-BR", { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+        </div>
+        <button 
+          onClick={loadAgenda} 
+          className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 text-slate-300 transition border border-white/5 shadow-lg"
+          title="Atualizar agora"
+        >
+          🔄
+        </button>
+      </div>
+
+      {/* Lista Vazia */}
+      {appointments.length === 0 ? (
+        <div className="text-center py-20 px-6 bg-slate-900/30 rounded-3xl border border-white/5 border-dashed">
+          <div className="text-5xl mb-4 grayscale opacity-50">☕</div>
+          <h3 className="text-lg font-medium text-white">Agenda livre hoje</h3>
+          <p className="text-slate-400 text-sm mt-2 max-w-xs mx-auto">
+            Nenhum agendamento encontrado para hoje até o momento. Aproveite para descansar ou organizar o espaço.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {appointments.map((appt: any) => {
+            // Extração segura dos dados expandidos
+            const clientName = appt.expand?.client_id?.name || "Cliente (Sem nome)";
+            const serviceName = appt.expand?.service_id?.name || "Serviço";
+            const status = appt.status as AppointmentStatus;
+            
+            // Estilos dinâmicos baseados no status
+            let statusColor = "border-slate-600";
+            let bgColor = "bg-slate-900";
+            let opacity = "opacity-100";
+            
+            if (status === AppointmentStatus.Confirmed || status === AppointmentStatus.Pending) { // Confirmado (2) ou Pendente (1)
+               statusColor = "border-sky-500";
+            } else if (status === AppointmentStatus.InProgress) { // Em andamento (3)
+               statusColor = "border-amber-500";
+               bgColor = "bg-slate-800 ring-1 ring-amber-500/30";
+            } else if (status === AppointmentStatus.Completed) { // Concluído (4)
+               statusColor = "border-emerald-500";
+               opacity = "opacity-60 hover:opacity-100 transition-opacity";
+            }
+
+            return (
+              <div key={appt.id} className={`relative flex flex-col md:flex-row gap-4 p-5 rounded-2xl border-l-4 shadow-lg ${statusColor} ${bgColor} ${opacity} border-y border-r border-white/5`}>
+                
+                {/* Coluna 1: Horário e Status Visual */}
+                <div className="flex md:flex-col items-center md:items-start justify-between min-w-[80px] gap-2">
+                  <span className="text-2xl font-bold font-mono text-white tracking-tight">
+                    {formatTime(appt.start_time)}
+                  </span>
+                  
+                  {status === AppointmentStatus.InProgress && (
+                    <span className="text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 px-2 py-1 rounded-full animate-pulse border border-amber-500/30">
+                      Andamento
+                    </span>
+                  )}
+                  {status === AppointmentStatus.Completed && (
+                    <span className="text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full border border-emerald-500/30">
+                      Concluído
+                    </span>
+                  )}
+                  {(status === AppointmentStatus.Confirmed || status === AppointmentStatus.Pending) && (
+                    <span className="text-[10px] font-bold uppercase bg-sky-500/20 text-sky-300 px-2 py-1 rounded-full border border-sky-500/30">
+                      Agendado
+                    </span>
+                  )}
+                </div>
+
+                {/* Coluna 2: Detalhes do Cliente/Serviço */}
+                <div className="flex-1 border-t md:border-t-0 md:border-l border-white/10 pt-3 md:pt-0 md:pl-4">
+                  <h3 className="text-lg font-semibold text-slate-100">{clientName}</h3>
+                  <div className="flex items-center gap-2 text-sm text-slate-400 mt-1">
+                    <span className="text-emerald-400 font-medium">{serviceName}</span>
+                    {appt.notes && (
+                        <span className="bg-slate-800 px-2 py-0.5 rounded text-xs text-slate-300 truncate max-w-[200px]">
+                            Nota: {appt.notes}
+                        </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Coluna 3: Ações e Pagamento */}
+                <div className="flex flex-row md:flex-col justify-between items-center md:items-end gap-4 border-t md:border-t-0 border-white/10 pt-3 md:pt-0">
+                  <div className="text-left md:text-right">
+                    <p className="text-lg font-bold text-white">
+                      {formatMoney(appt.total_amount || 0)}
+                    </p>
+                    <p className={`text-xs font-medium ${appt.payment_status === PaymentStatus.PAGO ? "text-emerald-400" : "text-amber-400"}`}>
+                      {appt.payment_status === PaymentStatus.PAGO ? "Pago ✅" : "Pendente ⏳"}
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {/* Botões para Agendado */}
+                    {(status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed) && (
+                      <>
+                        <button 
+                          onClick={() => {
+                              if(confirm("Cancelar este agendamento?")) 
+                                handleStatusChange(appt.id, AppointmentStatus.Cancelled)
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-red-900/30 text-slate-400 hover:text-red-400 text-xs font-medium transition"
+                        >
+                          Cancelar
+                        </button>
+                        <button 
+                          onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
+                          className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-lg shadow-sky-500/20 transition transform active:scale-95"
+                        >
+                          Iniciar Atendimento
+                        </button>
+                      </>
+                    )}
+
+                    {/* Botões para Em Andamento */}
+                    {status === AppointmentStatus.InProgress && (
+                      <button 
+                        onClick={() => handleStatusChange(appt.id, AppointmentStatus.Completed, PaymentStatus.PAGO)}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/20 transition transform active:scale-95 flex items-center gap-2"
+                      >
+                        <span>Finalizar & Receber</span>
+                      </button>
+                    )}
+
+                    {/* Botões para Concluído */}
+                    {status === AppointmentStatus.Completed && (
+                       <button 
+                          onClick={() => {
+                              if(confirm("Reabrir este atendimento?"))
+                                handleStatusChange(appt.id, AppointmentStatus.Confirmed, PaymentStatus.A_PAGAR)
+                          }}
+                          className="text-xs text-slate-600 hover:text-slate-400 underline"
+                        >
+                          Reabrir
+                        </button>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
 
 

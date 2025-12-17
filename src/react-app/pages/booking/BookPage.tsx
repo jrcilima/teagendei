@@ -1,153 +1,163 @@
-// Caminho: src/react-app/pages/booking/BookPage.tsx
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getShopBySlug } from "@/react-app/lib/api/register";
-import type { Shop, Service, User } from "@/shared/types";
-
-// Import dos passos (Steps)
-import StepService from "@/react-app/components/booking/StepService";
-import StepProfessional from "@/react-app/components/booking/StepProfessional";
-import StepDateTime from "@/react-app/components/booking/StepDateTime";
-import StepConfirm from "@/react-app/components/booking/StepConfirm";
+import { getShopBySlug } from "../../lib/api/register"; 
+import StepService from "../../components/booking/StepService";
+import StepProfessional from "../../components/booking/StepProfessional";
+import StepDateTime from "../../components/booking/StepDateTime";
+import StepConfirm from "../../components/booking/StepConfirm";
+import { Service, User, TimeSlot } from "@/shared/types";
 
 export default function BookPage() {
-  const { slug } = useParams<{ slug: string }>();
-
-  // Estados Globais do Agendamento
-  const [shop, setShop] = useState<Shop | null>(null);
+  const { slug } = useParams();
+  
+  // Dados da Loja
+  const [shop, setShop] = useState<any>(null); // any para aceitar o expand sem erros
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estado do Wizard (Passo a Passo)
+  // Estado do Wizard
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<User | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-  const [selectedTime, setSelectedTime] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<TimeSlot | null>(null);
 
-  // 1. Carrega a Loja pelo Slug ao abrir a página
+  // Carrega dados da loja pelo Slug
   useEffect(() => {
+    let isMounted = true;
+
     async function load() {
       if (!slug) return;
       setLoading(true);
+      setError(null);
+
       try {
         const data = await getShopBySlug(slug);
+        
+        if (!isMounted) return;
+
         if (!data) {
-          setError("Unidade não encontrada ou endereço incorreto.");
+          setError("Unidade não encontrada ou link inválido.");
         } else {
           setShop(data);
         }
-      } catch (err) {
-        console.error(err);
-        setError("Erro ao carregar a unidade. Tente novamente.");
+      } catch (err: any) {
+        if (!isMounted) return;
+
+        // Ignora erro de auto-cancelamento
+        if (err.status === 0 || err.isAbort) return;
+
+        console.error("Erro ao carregar loja:", err);
+        setError("Não foi possível carregar os dados da unidade.");
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
+
     load();
+
+    return () => {
+      isMounted = false;
+    };
   }, [slug]);
 
-  // Renderização de Erro/Loading
+  // --- NAVEGAÇÃO DO WIZARD ---
+
+  const handleServiceSelect = (service: Service) => {
+    setSelectedService(service);
+    setStep(2);
+  };
+
+  const handleProfessionalSelect = (prof: User | null) => {
+    setSelectedProfessional(prof);
+    setStep(3);
+  };
+
+  const handleTimeSelect = (slot: TimeSlot) => {
+    setSelectedTime(slot);
+    setStep(4);
+  };
+
+  const handleBack = () => {
+    if (step > 1) setStep(step - 1);
+  };
+
+  // --- RENDER ---
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
-        <div className="animate-pulse">Carregando agendamento...</div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
       </div>
     );
   }
 
   if (error || !shop) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-slate-900 border border-white/10 rounded-2xl p-6 text-center">
-          <div className="text-red-400 mb-2">● Unidade não localizada</div>
-          <p className="text-slate-300">{error}</p>
-        </div>
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-400 p-4">
+        <div className="text-4xl mb-4">😕</div>
+        <p>{error || "Loja não encontrada."}</p>
+        <a href="/login" className="mt-4 text-emerald-400 hover:underline">Voltar ao início</a>
       </div>
     );
   }
 
-  // Renderização do Wizard
+  // Nome da empresa vindo do expand ou fallback
+  const companyName = shop.expand?.company_id?.fantasy_name || shop.expand?.company_id?.legal_name || "Empresa";
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 py-6 px-4 md:py-10">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col">
+      
+      {/* Header Simples */}
+      <header className="h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-8 bg-slate-900/50 backdrop-blur-md sticky top-0 z-10">
+        <div>
+          <h1 className="text-sm font-bold text-white">{shop.name}</h1>
+          <p className="text-[10px] text-slate-400 uppercase tracking-wider">{companyName}</p>
+        </div>
+        <div className="text-xs text-slate-500">
+          Passo {step} de 4
+        </div>
+      </header>
+
+      {/* Conteúdo do Passo */}
+      <main className="flex-1 w-full max-w-lg mx-auto p-4 md:py-8">
         
-        {/* Cabeçalho da Loja */}
-        <div className="mb-8 text-center space-y-2">
-          {shop.logo && (
-             <img src={shop.logo} alt="Logo" className="w-16 h-16 mx-auto rounded-full object-cover bg-slate-800" />
-          )}
-          <h1 className="text-2xl md:text-3xl font-bold">{shop.name}</h1>
-          <p className="text-slate-400 text-sm">{shop.address || "Endereço não informado"}</p>
-        </div>
+        {step === 1 && (
+          <StepService 
+            shopId={shop.id} 
+            onSelect={handleServiceSelect} 
+          />
+        )}
 
-        {/* Área do Conteúdo (Passos) */}
-        <div className="bg-slate-900/50 border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
-          
-          {/* PASSO 1: SERVIÇO */}
-          {step === 1 && (
-            <StepService
-              shop={shop}
-              service={selectedService}
-              onChange={(data) => {
-                if (data.service !== undefined) setSelectedService(data.service);
-              }}
-              onNext={() => setStep(2)}
-            />
-          )}
+        {step === 2 && selectedService && (
+          <StepProfessional 
+            shopId={shop.id}
+            serviceName={selectedService.name} 
+            onSelect={handleProfessionalSelect}
+            onBack={handleBack}
+          />
+        )}
 
-          {/* PASSO 2: PROFISSIONAL */}
-          {step === 2 && selectedService && (
-            <StepProfessional
-              shop={shop}
-              service={selectedService}
-              professional={selectedProfessional}
-              onChange={(data) => {
-                if (data.professional !== undefined) setSelectedProfessional(data.professional);
-              }}
-              onBack={() => setStep(1)}
-              onNext={() => {
-                setStep(3);
-              }}
-            />
-          )}
+        {step === 3 && selectedService && (
+          <StepDateTime 
+            shop={shop}                         // CORREÇÃO: Passa objeto shop
+            service={selectedService}           // CORREÇÃO: Passa objeto service
+            professional={selectedProfessional} // CORREÇÃO: Passa objeto user | null
+            onSelect={handleTimeSelect}
+            onBack={handleBack}
+          />
+        )}
 
-          {/* PASSO 3: DATA E HORA */}
-          {step === 3 && selectedService && selectedProfessional && (
-            <StepDateTime
-              shop={shop}
-              service={selectedService}
-              professional={selectedProfessional}
-              onBack={() => setStep(2)}
-              onNext={(date, time) => {
-                setSelectedDate(date);
-                setSelectedTime(time);
-                setStep(4); 
-              }}
-            />
-          )}
+        {step === 4 && selectedService && selectedTime && (
+          <StepConfirm 
+            shop={shop}
+            service={selectedService}
+            professional={selectedProfessional}
+            timeSlot={selectedTime}
+            onBack={handleBack}
+          />
+        )}
 
-          {/* PASSO 4: CONFIRMAÇÃO */}
-          {step === 4 && selectedService && selectedProfessional && selectedDate && selectedTime && (
-            <StepConfirm
-              shop={shop}
-              service={selectedService}
-              // O '!' aqui garante ao TypeScript que não é nulo, pois o IF acima já verificou
-              professional={selectedProfessional}
-              date={selectedDate}
-              time={selectedTime}
-              onBack={() => setStep(3)}
-            />
-          )}
-
-        </div>
-        
-        <div className="mt-8 text-center">
-          <p className="text-[10px] uppercase tracking-widest text-slate-600">
-            Powered by TeaAgendei
-          </p>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,5 +1,3 @@
-// Caminho: src/react-app/pages/auth/RegisterPage.tsx
-
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
@@ -11,7 +9,6 @@ import {
   getShopBySlug,
   registerClient,
   registerOwner,
-  findUserByEmail,
 } from "../../lib/api/register";
 
 import type { ShopWithCompany } from "@/shared/types";
@@ -28,7 +25,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
 
-  // CLIENTE
+  // CLIENTE - Lista de Lojas (com dados da empresa)
   const [shops, setShops] = useState<ShopWithCompany[]>([]);
   const [selectedShopId, setSelectedShopId] = useState<string>("");
   const [loadingShops, setLoadingShops] = useState(false);
@@ -36,11 +33,6 @@ export default function RegisterPage() {
   // Estados gerais
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  // Modal — confirmar vínculo extra
-  const [showModal, setShowModal] = useState(false);
-  const [pendingCompanyId, setPendingCompanyId] = useState<string>("");
-  const [pendingShopId, setPendingShopId] = useState<string>("");
 
   const { login } = useAuth();
   const { reloadTenants } = useTenant();
@@ -58,8 +50,8 @@ export default function RegisterPage() {
       setError(null);
 
       try {
-        const shopId = searchParams.get("shopId");
-        const slug = searchParams.get("slug");
+        const shopIdParam = searchParams.get("shopId");
+        const slugParam = searchParams.get("slug");
 
         const allShops = await fetchActiveShopsWithCompany();
         
@@ -67,10 +59,10 @@ export default function RegisterPage() {
 
         let preselected = null;
 
-        if (shopId) {
-          preselected = await getShopById(shopId);
-        } else if (slug) {
-          preselected = await getShopBySlug(slug);
+        if (shopIdParam) {
+          preselected = await getShopById(shopIdParam);
+        } else if (slugParam) {
+          preselected = await getShopBySlug(slugParam);
         }
 
         setShops(allShops);
@@ -78,6 +70,7 @@ export default function RegisterPage() {
         if (preselected) {
           setSelectedShopId(preselected.id);
         } else if (allShops.length > 0) {
+          // Seleciona o primeiro por padrão
           setSelectedShopId(allShops[0].shop.id);
         }
       } catch (err: any) {
@@ -99,26 +92,27 @@ export default function RegisterPage() {
     };
   }, [searchParams, mode]);
 
-  const selectedShop = useMemo(
+  // Helper para pegar o objeto da loja selecionada
+  const selectedShopData = useMemo(
     () => shops.find((s) => s.shop.id === selectedShopId) ?? null,
     [shops, selectedShopId]
   );
 
   /* ============================================================
-      Validações
+      Validações Frontend
   ============================================================ */
   function validateCommon(): string | null {
     if (!name.trim()) return "Informe o nome.";
     if (!email.trim()) return "Informe o e-mail.";
     if (!password) return "Informe a senha.";
-    if (password.length < 6) return "A senha deve ter pelo menos 6 caracteres.";
+    if (password.length < 8) return "A senha deve ter pelo menos 8 caracteres.";
     if (password !== passwordConfirm) return "As senhas não conferem.";
     return null;
   }
 
   function validateClient(): string | null {
     if (!selectedShopId) return "Selecione uma unidade para se vincular.";
-    if (!selectedShop) return "Unidade selecionada inválida.";
+    if (!selectedShopData) return "Unidade selecionada inválida.";
     return null;
   }
 
@@ -129,6 +123,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
+    // 1. Validação básica
     const baseError = validateCommon();
     if (baseError) return setError(baseError);
 
@@ -137,12 +132,11 @@ export default function RegisterPage() {
       if (extra) return setError(extra);
     }
 
-    setShowModal(false);
     setSubmitting(true);
 
     try {
+      /* ------------------- CASO: DONO ------------------- */
       if (mode === "owner") {
-        /* ------------------- DONO ------------------- */
         await registerOwner({
           name: name.trim(),
           email: email.trim(),
@@ -150,105 +144,63 @@ export default function RegisterPage() {
           phone: phone.trim() || undefined,
         });
 
+        // Login automático e redirecionamento
         await login(email.trim(), password);
         await reloadTenants();
         navigate("/onboarding", { replace: true });
         return;
       }
 
-      /* ------------------- CLIENTE ------------------- */
-      if (!selectedShop) throw new Error("Dados de unidade inválidos.");
+      /* ------------------- CASO: CLIENTE ------------------- */
+      if (!selectedShopData) throw new Error("Dados de unidade inválidos.");
 
-      const companyId = selectedShop.shop.company_id;
-      const shopId = selectedShop.shop.id;
+      const { shop, company } = selectedShopData;
 
-      const existingUser = await findUserByEmail(email.trim());
-
-      if (existingUser) {
-        setPendingCompanyId(companyId);
-        setPendingShopId(shopId);
-        setShowModal(true);
-        return;
-      }
-
+      // Chama API unificada que cria OU vincula se já existir (e senha bater)
       await registerClient({
         name: name.trim(),
         email: email.trim(),
         password,
         phone: phone.trim() || undefined,
-        companyId,
-        shopId,
+        companyId: shop.company_id, // ou company.id
+        shopId: shop.id,
       });
 
+      // Login automático
       await login(email.trim(), password);
-      const slug = selectedShop.shop.slug;
-      navigate(`/book/${slug}`, { replace: true });
-
-    } catch (err: any) {
-      console.error(err);
-
-      // CORREÇÃO: Ignorar erro de cancelamento automático (status 0)
-      if (err.status === 0 || err.isAbort) {
-        // Se cancelou, assumimos que o registro/login funcionou e redirecionamos manualmente
-        if (mode === "owner") {
-          navigate("/onboarding", { replace: true });
-        } else if (selectedShop) {
-          navigate(`/book/${selectedShop.shop.slug}`, { replace: true });
-        }
-        return;
-      }
-
-      setError(
-        err?.message ??
-        "Não foi possível concluir o cadastro. Tente novamente em instantes."
-      );
-      setSubmitting(false);
-    }
-  }
-
-  /* ============================================================
-      Confirma cadastro adicional (modal)
-  ============================================================ */
-  async function confirmLink() {
-    if (!selectedShop) return;
-
-    try {
-      setSubmitting(true);
-
-      await registerClient({
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        phone: phone.trim() || undefined,
-        companyId: pendingCompanyId,
-        shopId: pendingShopId,
-      });
-
-      await login(email.trim(), password);
-      const slug = selectedShop.shop.slug;
-      navigate(`/book/${slug}`, { replace: true });
-    } catch (err: any) {
-      console.error(err);
       
-      // Correção também no modal
-      if (err.status === 0 || err.isAbort) {
-        const slug = selectedShop.shop.slug;
-        navigate(`/book/${slug}`, { replace: true });
-        return;
+      // Redireciona para a página de agendamento da loja
+      navigate(`/book/${shop.slug}`, { replace: true });
+
+    } catch (err: any) {
+      console.error("Erro no registro:", err);
+
+      let errorMsg = "Não foi possível concluir o cadastro.";
+
+      // Tratamento de erros do PocketBase
+      if (err.data && typeof err.data === 'object') {
+        const fieldKeys = Object.keys(err.data);
+        if (fieldKeys.length > 0) {
+          const field = fieldKeys[0];
+          const msg = err.data[field]?.message;
+          if (msg) errorMsg = `${field}: ${msg}`; // ex: "password: Must be at least 8 characters"
+        }
+      } 
+      // Tratamento para nosso erro customizado de senha errada no login automático
+      else if (err.message && err.message.includes("senha informada está incorreta")) {
+         errorMsg = err.message;
+      }
+      else if (err.message) {
+         // Erros genéricos
+         errorMsg = err.message;
       }
 
-      setError(
-        err?.message ??
-        "Não foi possível concluir o cadastro. Tente novamente."
-      );
-      setSubmitting(false);
-    } finally {
-      if (!submitting) setShowModal(false); // Só fecha se não foi navegação
-    }
-  }
+      // Ignora erro se for abortamento de request
+      if (err.status === 0 || err.isAbort) return;
 
-  function cancelLink() {
-    setShowModal(false);
+      setError(errorMsg);
+      setSubmitting(false);
+    }
   }
 
   /* ============================================================
@@ -257,7 +209,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-4 py-10 relative">
 
-      {/* fundo */}
+      {/* Fundo decorativo */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-24 -top-24 w-80 h-80 bg-emerald-500/25 blur-3xl rounded-full" />
         <div className="absolute -right-24 bottom-[-40px] w-96 h-96 bg-sky-500/25 blur-3xl rounded-full" />
@@ -265,10 +217,10 @@ export default function RegisterPage() {
 
       <div className="w-full max-w-4xl mx-auto grid md:grid-cols-[1.2fr,1fr] gap-8 items-center">
 
-        {/* Lado esquerdo */}
+        {/* Lado esquerdo: Texto Marketing */}
         <div className="space-y-4">
           <p className="text-xs tracking-[0.18em] uppercase text-emerald-300/80">
-            TeaAgendei • Plataforma SaaS de agendamento
+            TeaAgendei • Plataforma SaaS
           </p>
           <h1 className="text-3xl md:text-4xl font-semibold leading-tight">
             Crie seu acesso e
@@ -276,20 +228,20 @@ export default function RegisterPage() {
           </h1>
 
           <p className="text-sm md:text-base text-slate-300 max-w-lg">
-            Donos gerenciam unidades, equipe e faturamento. Clientes agendam em poucos cliques na unidade preferida.
+            Donos gerenciam unidades e equipe. Clientes agendam em poucos cliques.
           </p>
 
           <ul className="mt-4 space-y-2 text-sm text-slate-300">
-            <li>• 15 dias grátis para testar.</li>
-            <li>• Clientes sempre vinculados à unidade onde se cadastrarem.</li>
+            <li>• Simples e Rápido.</li>
+            <li>• Histórico de agendamentos.</li>
             <li>• Agenda inteligente e antifuro.</li>
           </ul>
         </div>
 
-        {/* Card de formulário */}
+        {/* Lado direito: Formulário */}
         <div className="rounded-3xl border border-white/10 bg-slate-900/80 backdrop-blur-2xl shadow-2xl p-6 md:p-7 space-y-6">
 
-          {/* header mini brand */}
+          {/* Header do Card */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <div className="h-9 w-9 rounded-2xl bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-lg">
@@ -302,12 +254,12 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Toggle dono/cliente */}
-          <div className="inline-flex rounded-2xl bg-slate-950/60 border border-white/10 p-1 text-xs">
+          {/* Toggle Dono vs Cliente */}
+          <div className="inline-flex rounded-2xl bg-slate-950/60 border border-white/10 p-1 text-xs w-full">
             <button
               type="button"
               onClick={() => setMode("owner")}
-              className={`px-4 py-1.5 rounded-xl transition ${
+              className={`flex-1 px-4 py-2 rounded-xl transition text-center ${
                 mode === "owner"
                   ? "bg-emerald-500 text-slate-950 font-semibold shadow-sm shadow-emerald-500/40"
                   : "text-slate-300 hover:bg-slate-800/60"
@@ -318,7 +270,7 @@ export default function RegisterPage() {
             <button
               type="button"
               onClick={() => setMode("client")}
-              className={`px-4 py-1.5 rounded-xl transition ${
+              className={`flex-1 px-4 py-2 rounded-xl transition text-center ${
                 mode === "client"
                   ? "bg-sky-500 text-slate-950 font-semibold shadow-sm shadow-sky-500/40"
                   : "text-slate-300 hover:bg-slate-800/60"
@@ -331,7 +283,7 @@ export default function RegisterPage() {
           {/* Formulário */}
           <form className="space-y-4" onSubmit={handleSubmit}>
 
-            {/* Campos comuns */}
+            {/* Nome */}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-200">Nome completo</label>
               <input
@@ -344,6 +296,7 @@ export default function RegisterPage() {
               />
             </div>
 
+            {/* Email */}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-200">E-mail</label>
               <input
@@ -356,6 +309,7 @@ export default function RegisterPage() {
               />
             </div>
 
+            {/* Telefone */}
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-200">WhatsApp (opcional)</label>
               <input
@@ -378,33 +332,33 @@ export default function RegisterPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500
                   focus:outline-none focus:ring-2 focus:ring-emerald-400/80"
-                  placeholder="••••••••"
+                  placeholder="Min. 8 carac."
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-slate-200">Confirmar senha</label>
+                <label className="block text-xs font-medium text-slate-200">Confirmar</label>
                 <input
                   type="password"
                   value={passwordConfirm}
                   onChange={(e) => setPasswordConfirm(e.target.value)}
                   className="w-full rounded-2xl bg-black/40 border border-white/10 px-3 py-2.5 text-sm text-slate-50 placeholder-slate-500
                   focus:outline-none focus:ring-2 focus:ring-emerald-400/80"
-                  placeholder="••••••••"
+                  placeholder="Repita a senha"
                 />
               </div>
             </div>
 
-            {/* CLIENTE — Seleção de Unidade */}
+            {/* CLIENTE: Seleção de Unidade */}
             {mode === "client" && (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 pt-2 border-t border-white/5">
                 <label className="block text-xs font-medium text-slate-200">
                   Selecione a unidade onde você será atendido
                 </label>
 
                 {loadingShops ? (
-                  <div className="text-xs text-slate-400">Carregando unidades...</div>
+                  <div className="text-xs text-slate-400 py-2">Carregando unidades...</div>
                 ) : shops.length === 0 ? (
-                  <div className="text-xs text-slate-400">Nenhuma unidade disponível no momento.</div>
+                  <div className="text-xs text-slate-400 py-2">Nenhuma unidade disponível no momento.</div>
                 ) : (
                   <select
                     value={selectedShopId}
@@ -414,7 +368,7 @@ export default function RegisterPage() {
                   >
                     {shops.map(({ shop, company }) => (
                       <option key={shop.id} value={shop.id}>
-                        {company?.legal_name ?? "Empresa"} • {shop.name}
+                        {company?.legal_name || company?.fantasy_name || "Empresa"} • {shop.name}
                       </option>
                     ))}
                   </select>
@@ -422,19 +376,19 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* ERRO */}
+            {/* Mensagem de Erro */}
             {error && (
-              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-3 py-2 text-xs text-red-100 break-words">
                 {error}
               </div>
             )}
 
-            {/* BOTÃO SUBMIT */}
+            {/* Botão Submit */}
             <button
               type="submit"
               disabled={submitting || (mode === "client" && loadingShops)}
               className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm py-2.5 transition
-              shadow-lg shadow-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              shadow-lg shadow-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             >
               {submitting
                 ? "Criando acesso..."
@@ -443,48 +397,16 @@ export default function RegisterPage() {
                 : "Criar acesso de cliente"}
             </button>
 
-            {/* Link para login */}
+            {/* Link para Login */}
             <p className="text-[11px] text-center text-slate-400">
               Já tem acesso?{" "}
-              <a href="/login" className="text-emerald-300 hover:text-emerald-200">
+              <a href="/login" className="text-emerald-300 hover:text-emerald-200 transition">
                 Entrar no TeaAgendei
               </a>
             </p>
           </form>
         </div>
       </div>
-
-      {/* ============================================================
-          MODAL — Confirmar vínculo adicional
-      ============================================================ */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-xl text-center space-y-4">
-            <h2 className="text-xl font-semibold text-white">
-              Você já possui cadastro em outra empresa
-            </h2>
-            <p className="text-slate-300 text-sm">
-              Deseja também se cadastrar nesta unidade?
-            </p>
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <button
-                onClick={cancelLink}
-                className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 transition"
-                disabled={submitting}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirmLink}
-                className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:bg-emerald-400 shadow-lg shadow-emerald-500/40 transition"
-                disabled={submitting}
-              >
-                Sim, cadastrar também
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

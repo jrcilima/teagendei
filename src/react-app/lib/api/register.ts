@@ -1,12 +1,8 @@
-// src/react-app/lib/api/register.ts
-import {pb} from "./pocketbase";
-import type { RegisterOwnerInput, RegisterClientInput, ShopWithCompany } from "@/shared/types";
+import { pb } from "./pocketbase";
+import type { RegisterOwnerInput, RegisterClientInput, ShopWithCompany, User } from "@/shared/types";
 
 /* ============================================================
-   1) DONO DO NEGÓCIO — Fluxo:
-      - Criar usuário
-      - Login feito fora desta função
-      - Onboarding criará empresa + unidade
+   1) DONO DO NEGÓCIO
    ============================================================ */
 export async function registerOwner(input: RegisterOwnerInput) {
   const payload = {
@@ -16,6 +12,7 @@ export async function registerOwner(input: RegisterOwnerInput) {
     password: input.password,
     passwordConfirm: input.password,
     role: "dono",
+    // Dono não tem shop_id na criação do user, ele cria depois no onboarding
   };
 
   const user = await pb.collection("users").create(payload);
@@ -23,22 +20,19 @@ export async function registerOwner(input: RegisterOwnerInput) {
 }
 
 /* ============================================================
-  UTILITÁRIO — achar usuário por email
+  UTILITÁRIOS DE VÍNCULO
 ============================================================ */
-export async function findUserByEmail(email: string): Promise<any | null> {
+export async function findUserByEmail(email: string): Promise<User | null> {
   try {
     const user = await pb
       .collection("users")
-      .getFirstListItem(`email="${email}"`);
+      .getFirstListItem<User>(`email="${email}"`);
     return user;
   } catch {
     return null;
   }
 }
 
-/* ============================================================
-  UTILITÁRIO — verificar se user já está vinculado a empresa
-============================================================ */
 export async function isUserLinkedToCompany(
   userId: string,
   companyId: string
@@ -53,14 +47,18 @@ export async function isUserLinkedToCompany(
   }
 }
 
-/* ============================================================
-  UTILITÁRIO — criar vínculo cliente <-> empresa/unidade
-============================================================ */
 export async function linkUserToCompany(
   userId: string,
   companyId: string,
   shopId: string
 ) {
+  try {
+      const exists = await isUserLinkedToCompany(userId, companyId);
+      if (exists) return null;
+  } catch (e) {
+      // continua
+  }
+
   const payload = {
     user_id: userId,
     company_id: companyId,
@@ -72,48 +70,61 @@ export async function linkUserToCompany(
 }
 
 /* ============================================================
-   2) CLIENTE — Fluxo Real:
-      - Checar se email já existe
-         - Se existir → perguntar
-         - Se confirmar → criar vínculo novo
-      - Se não existir → criar user + vínculo
+   2) CLIENTE — Fluxo "Failover" (Criação ou Login Automático)
    ============================================================ */
 export async function registerClient(input: RegisterClientInput) {
   const { email, password, name, phone, companyId, shopId } = input;
+  let user: User | null = null;
 
-  const existingUser = await findUserByEmail(email);
+  // Passo A: Tentar Criar Usuário
+  try {
+    const payload = {
+      email,
+      name,
+      phone: phone ?? "",
+      password,
+      passwordConfirm: password,
+      role: "cliente",
+      // CORREÇÃO: Salva a empresa e loja de origem diretamente no usuário
+      company_id: companyId,
+      shop_id: shopId
+    };
+    
+    user = await pb.collection("users").create<User>(payload);
+    
+    // Se criou agora, precisamos logar para ter permissão de criar o vínculo na tabela auxiliar
+    const authData = await pb.collection("users").authWithPassword(email, password);
+    user = authData.record as unknown as User;
 
-  // --------------- Já existe usuário com mesmo email ---------------
-  if (existingUser) {
-    // Existe vínculo com esta empresa?
-    const alreadyLinked = await isUserLinkedToCompany(
-      existingUser.id,
-      companyId
-    );
-
-    if (!alreadyLinked) {
-      // Cria novo vínculo
-      await linkUserToCompany(existingUser.id, companyId, shopId);
+  } catch (createErr: any) {
+    // Passo B: Se deu erro na criação (400), pode ser duplicado OU validação.
+    try {
+        const authData = await pb.collection("users").authWithPassword(email, password);
+        user = authData.record as unknown as User;
+        // Sucesso! Era um usuário existente.
+    } catch (loginErr) {
+        // Se falhar o login, lança o erro original de criação (validação)
+        throw createErr;
     }
-
-    // Retorna o user já existente
-    return existingUser;
   }
 
-  // --------------- Criar novo usuário cliente ---------------
-  const payload = {
-    email,
-    name,
-    phone: phone ?? "",
-    password,
-    passwordConfirm: password,
-    role: "cliente",
-  };
-
-  const user = await pb.collection("users").create(payload);
-
-  // Criar vínculo obrigatório
-  await linkUserToCompany(user.id, companyId, shopId);
+  // Passo C: Criar Vínculo na tabela auxiliar (Garante histórico multi-loja)
+  if (user) {
+    try {
+        await linkUserToCompany(user.id, companyId, shopId);
+        
+        // Opcional: Se o usuário existente não tinha shop_id (era null), podemos atualizar agora
+        if (!user.shop_id) {
+           await pb.collection("users").update(user.id, {
+             company_id: companyId,
+             shop_id: shopId
+           });
+        }
+        
+    } catch (linkErr) {
+        console.error("Aviso: Vínculo já existia ou falhou", linkErr);
+    }
+  }
 
   return user;
 }
@@ -122,42 +133,34 @@ export async function registerClient(input: RegisterClientInput) {
    3) Buscar shops ativos + empresa
 ============================================================ */
 export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
-  // CORREÇÃO: O campo no banco é 'is_active', não 'status'
   const shops = await pb.collection("shops").getFullList({
     filter: `is_active = true`, 
     sort: "name",
+    expand: "company_id"
   });
 
-  const result: ShopWithCompany[] = [];
-
-  for (const shop of shops) {
-    try {
-        const company = await pb.collection("companies").getOne(shop.company_id);
-        result.push({ shop, company });
-    } catch (err) {
-        console.warn(`Empresa não encontrada para a loja ${shop.id}`, err);
-        // Opcional: Adicionar mesmo sem empresa ou ignorar
-        result.push({ shop, company: { legal_name: "Empresa não identificada" } });
-    }
-  }
+  const result: ShopWithCompany[] = shops.map((shop) => {
+      const company = shop.expand?.company_id;
+      return {
+          shop,
+          company: company || { legal_name: "Empresa", id: shop.company_id } 
+      };
+  });
 
   return result;
 }
 
 /* ============================================================
-   4) Buscar unidade por ID
+   4) Utilitários de busca
 ============================================================ */
 export async function getShopById(id: string) {
-  return await pb.collection("shops").getOne(id);
+  return await pb.collection("shops").getOne(id, { expand: 'company_id' });
 }
 
-/* ============================================================
-   5) Buscar unidade por slug
-============================================================ */
 export async function getShopBySlug(slug: string) {
   const list = await pb.collection("shops").getFullList({
     filter: `slug="${slug}"`,
+    expand: 'company_id'
   });
-
   return list.length > 0 ? list[0] : null;
 }
