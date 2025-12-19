@@ -1,5 +1,5 @@
-CONTEXTO DO PROJETO - VERSÃO 1.0.76
-Data de Geração: 18/12/2025 23:25:46
+CONTEXTO DO PROJETO - VERSÃO 1.0.84
+Data de Geração: 19/12/2025 17:07:43
 ### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
@@ -8,7 +8,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── index.html
 ├── package.json
 ├── pb_schema.md
-├── projeto_contexto_v1.0.75.md
+├── projeto_contexto_v1.0.83.md
 ├── Projeto_TeAgendei_v2.1.md
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -18,7 +18,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── public/
 ├── src/
 │   ├── index.css
-│   ├── vite-end.d.ts
+│   ├── vite-env.d.ts
 │   ├── react-app/
 │   │   ├── App.tsx
 │   │   ├── main.tsx
@@ -30,6 +30,8 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   │   ├── StepService.tsx
 │   │   │   ├── common/
 │   │   │   │   ├── Modal.tsx
+│   │   │   ├── dashboard/
+│   │   │   │   ├── StaffBookingModal.tsx
 │   │   │   ├── layout/
 │   │   │   │   ├── AppLayout.tsx
 │   │   │   │   ├── Header.tsx
@@ -142,6 +144,7 @@ Path: package.json
     "preview": "vite preview"
   },
   "dependencies": {
+    "lucide-react": "^0.562.0",
     "pocketbase": "^0.26.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -1003,8 +1006,8 @@ Path: pb_schema.md
   },
   {
     "id": "pbc_1037645436",
-    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
-    "viewRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
+    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id || @request.auth.id != \"\"",
+    "viewRule": "shop_id.owner_id = @request.auth.id || client_id = @request.auth.id || barber_id = @request.auth.id",
     "createRule": "client_id = @request.auth.id",
     "updateRule": "shop_id.company_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
     "deleteRule": null,
@@ -1132,7 +1135,7 @@ Path: pb_schema.md
         "minSelect": 0,
         "name": "client_id",
         "presentable": false,
-        "required": true,
+        "required": false,
         "system": false,
         "type": "relation"
       },
@@ -1174,6 +1177,34 @@ Path: pb_schema.md
         "required": true,
         "system": false,
         "type": "relation"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text179493489",
+        "max": 0,
+        "min": 0,
+        "name": "customer_name",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text2323309286",
+        "max": 0,
+        "min": 0,
+        "name": "customer_phone",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
       },
       {
         "hidden": false,
@@ -2364,11 +2395,11 @@ Path: pb_schema.md
 --- FIM DO ARQUIVO: pb_schema.md ---
 
 
---- INICIO DO ARQUIVO: projeto_contexto_v1.0.75.md ---
-Path: projeto_contexto_v1.0.75.md
+--- INICIO DO ARQUIVO: projeto_contexto_v1.0.83.md ---
+Path: projeto_contexto_v1.0.83.md
 ------------------------------
 
---- FIM DO ARQUIVO: projeto_contexto_v1.0.75.md ---
+--- FIM DO ARQUIVO: projeto_contexto_v1.0.83.md ---
 
 
 --- INICIO DO ARQUIVO: Projeto_TeAgendei_v2.1.md ---
@@ -2946,12 +2977,12 @@ body {
 --- FIM DO ARQUIVO: src\index.css ---
 
 
---- INICIO DO ARQUIVO: src\vite-end.d.ts ---
-Path: src\vite-end.d.ts
+--- INICIO DO ARQUIVO: src\vite-env.d.ts ---
+Path: src\vite-env.d.ts
 ------------------------------
 /// <reference types="vite/client" />
 
---- FIM DO ARQUIVO: src\vite-end.d.ts ---
+--- FIM DO ARQUIVO: src\vite-env.d.ts ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\App.tsx ---
@@ -3684,6 +3715,363 @@ export default function Modal({ isOpen, onClose, title, children }: Props) {
 --- FIM DO ARQUIVO: src\react-app\components\common\Modal.tsx ---
 
 
+--- INICIO DO ARQUIVO: src\react-app\components\dashboard\StaffBookingModal.tsx ---
+Path: src\react-app\components\dashboard\StaffBookingModal.tsx
+------------------------------
+import { useState, useEffect } from "react";
+import { X, User as UserIcon, Calendar, Clock, Scissors, Search } from "lucide-react";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { getServicesByShop } from "@/react-app/lib/api/services";
+import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
+import { generateSlots } from "@/react-app/lib/utils/slots";
+import { getShopHours, getProfessionalAppointments } from "@/react-app/lib/api/availability";
+import { createStaffAppointment, searchClients } from "@/react-app/lib/api/appointments";
+import { Service, User, TimeSlot, AppointmentStatus } from "@/shared/types";
+
+interface StaffBookingModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingModalProps) {
+  const { user } = useAuth();
+  
+  const [selectedService, setSelectedService] = useState<string>("");
+  const [selectedBarber, setSelectedBarber] = useState<string>("");
+  const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  
+  const [services, setServices] = useState<Service[]>([]);
+  const [barbers, setBarbers] = useState<User[]>([]);
+  const [slots, setSlots] = useState<TimeSlot[]>([]);
+  
+  const [clientMode, setClientMode] = useState<"registered" | "guest">("guest");
+  const [guestName, setGuestName] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
+  const [foundClients, setFoundClients] = useState<User[]>([]);
+  const [selectedClient, setSelectedClient] = useState<User | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [slotLoading, setSlotLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && user?.shop_id) {
+      getServicesByShop(user.shop_id).then(setServices);
+      getProfessionalsByShop(user.shop_id).then(users => {
+        setBarbers(users);
+        if (users.find(u => u.id === user.id)) {
+          setSelectedBarber(user.id);
+        }
+      });
+    }
+  }, [isOpen, user?.shop_id]);
+
+  useEffect(() => {
+    if (!selectedService || !selectedBarber || !date || !user?.shop_id) {
+        setSlots([]);
+        return;
+    }
+
+    async function fetchSlots() {
+      setSlotLoading(true);
+      try {
+        const srv = services.find(s => s.id === selectedService);
+        if (!srv) return;
+
+        const [hours, appointments] = await Promise.all([
+          getShopHours(user!.shop_id!),
+          getProfessionalAppointments(selectedBarber, date)
+        ]);
+
+        const generated = generateSlots(date, srv.duration, hours, appointments);
+        setSlots(generated);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSlotLoading(false);
+      }
+    }
+
+    fetchSlots();
+  }, [selectedService, selectedBarber, date, user?.shop_id, services]);
+
+  useEffect(() => {
+    if (clientMode === "registered" && clientSearch.length > 2) {
+      const timer = setTimeout(() => {
+        searchClients(clientSearch).then(res => setFoundClients(res.items as unknown as User[]));
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+        setFoundClients([]);
+    }
+  }, [clientSearch, clientMode]);
+
+  async function handleConfirm() {
+    if (!user?.shop_id || !selectedSlot || !selectedService || !selectedBarber) return;
+    
+    if (clientMode === "guest" && !guestName.trim()) {
+      alert("Digite o nome do cliente.");
+      return;
+    }
+    if (clientMode === "registered" && !selectedClient) {
+      alert("Selecione um cliente da lista.");
+      return;
+    }
+
+    const serviceObj = services.find(s => s.id === selectedService);
+    if (!serviceObj) return;
+
+    setLoading(true);
+    try {
+      await createStaffAppointment({
+        shop_id: user.shop_id,
+        barber_id: selectedBarber,
+        service_id: selectedService,
+        start_time: selectedSlot, 
+        duration_minutes: serviceObj.duration, 
+        total_amount: serviceObj.price, 
+        status: AppointmentStatus.Confirmed, 
+        client_id: clientMode === "registered" ? selectedClient?.id : undefined,
+        customer_name: clientMode === "guest" ? guestName : undefined,
+        customer_phone: clientMode === "guest" ? guestPhone : undefined,
+      });
+      
+      alert("Agendamento criado com sucesso!");
+      onSuccess();
+      onClose();
+      
+      setSelectedSlot(null);
+      setGuestName("");
+      setGuestPhone("");
+      setSelectedClient(null);
+      setClientSearch("");
+    } catch (error: any) {
+      // TRATAMENTO DE ERRO MELHORADO:
+      // Se tiver data, formata bonito. Se não, mostra mensagem genérica.
+      let msg = "Erro desconhecido";
+      if (error?.data && Object.keys(error.data).length > 0) {
+        // Pega a primeira chave de erro (ex: client_id) e a mensagem
+        const field = Object.keys(error.data)[0];
+        const detail = error.data[field]?.message;
+        msg = `Campo '${field}': ${detail}`;
+      } else if (error?.message) {
+        msg = error.message;
+      }
+
+      console.error("Erro completo:", error);
+      alert(`Erro ao criar agendamento:\n${msg}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 text-slate-50">
+      <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        
+        {/* HEADER */}
+        <div className="flex justify-between items-center p-6 border-b border-slate-800">
+          <h2 className="text-xl font-bold text-white">Novo Agendamento</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white">
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* CONTENT */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            
+            {/* SERVIÇO E PROFISSIONAL */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                        <Scissors size={14} /> Serviço
+                    </label>
+                    <select 
+                        value={selectedService} 
+                        onChange={e => setSelectedService(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                        <option value="">Selecione...</option>
+                        {services.map(s => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.duration} min) - R$ {s.price}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                         <UserIcon size={14} /> Profissional
+                    </label>
+                    <select 
+                        value={selectedBarber} 
+                        onChange={e => setSelectedBarber(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                    >
+                        <option value="">Selecione...</option>
+                        {barbers.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {/* DATA E HORÁRIO */}
+            <div className="border-t border-slate-800 pt-6">
+                <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <div className="w-full sm:w-1/3">
+                        <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                            <Calendar size={14} /> Data
+                        </label>
+                        <input 
+                            type="date" 
+                            value={date}
+                            onChange={e => setDate(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                            <Clock size={14} /> Horários
+                        </label>
+                        {slotLoading ? (
+                            <div className="text-slate-500 text-sm animate-pulse">Calculando...</div>
+                        ) : slots.length > 0 ? (
+                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                {slots.map((slot) => (
+                                    <button
+                                        key={slot.time}
+                                        disabled={!slot.isAvailable}
+                                        onClick={() => setSelectedSlot(slot.startISO)}
+                                        className={`text-xs py-2 rounded-lg border transition-all ${
+                                            selectedSlot === slot.startISO
+                                                ? "bg-emerald-500 border-emerald-500 text-white font-bold"
+                                                : slot.isAvailable
+                                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:border-emerald-500/50"
+                                                : "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
+                                        }`}
+                                    >
+                                        {slot.time}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-slate-500 text-sm italic border border-dashed border-slate-700 rounded p-2 text-center">
+                                Selecione serviço, profissional e data.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* CLIENTE */}
+            <div className="border-t border-slate-800 pt-6">
+                 <label className="block text-sm font-medium text-slate-400 mb-4">Dados do Cliente</label>
+                 
+                 <div className="flex gap-4 mb-4">
+                    <button 
+                        onClick={() => { setClientMode("guest"); setSelectedClient(null); }}
+                        className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "guest" ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}
+                    >
+                        Cliente Avulso (Sem conta)
+                    </button>
+                    <button 
+                         onClick={() => { setClientMode("registered"); setGuestName(""); }}
+                         className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "registered" ? "bg-blue-500/20 border-blue-500 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}
+                    >
+                        Cliente Cadastrado
+                    </button>
+                 </div>
+
+                 {clientMode === "guest" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <input 
+                            type="text" 
+                            placeholder="Nome do Cliente *"
+                            value={guestName}
+                            onChange={e => setGuestName(e.target.value)}
+                            className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500"
+                        />
+                         <input 
+                            type="text" 
+                            placeholder="Telefone (Opcional)"
+                            value={guestPhone}
+                            onChange={e => setGuestPhone(e.target.value)}
+                            className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500"
+                        />
+                    </div>
+                 ) : (
+                    <div className="space-y-3">
+                         {!selectedClient ? (
+                            <div className="relative">
+                                <Search className="absolute left-3 top-3 text-slate-500" size={16} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Buscar cliente por nome ou email..."
+                                    value={clientSearch}
+                                    onChange={e => setClientSearch(e.target.value)}
+                                    className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 pl-10 text-white w-full outline-none focus:border-blue-500"
+                                />
+                                {foundClients.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 bg-slate-800 border border-slate-700 mt-1 rounded-lg shadow-xl z-10 max-h-40 overflow-y-auto">
+                                        {foundClients.map(c => (
+                                            <button 
+                                                key={c.id} 
+                                                onClick={() => { setSelectedClient(c); setFoundClients([]); setClientSearch(""); }}
+                                                className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-slate-200 border-b border-slate-700 last:border-0"
+                                            >
+                                                <div className="font-bold">{c.name || "Sem Nome"}</div>
+                                                <div className="text-xs text-slate-500">{c.email}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                         ) : (
+                             <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg">
+                                 <div className="flex items-center gap-3">
+                                     <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xs">
+                                         {(selectedClient.name || "C").charAt(0).toUpperCase()}
+                                     </div>
+                                     <div>
+                                         <p className="text-sm font-bold text-white">{selectedClient.name}</p>
+                                         <p className="text-xs text-blue-300">{selectedClient.email}</p>
+                                     </div>
+                                 </div>
+                                 <button onClick={() => setSelectedClient(null)} className="text-xs text-slate-400 hover:text-white underline">
+                                     Trocar
+                                 </button>
+                             </div>
+                         )}
+                    </div>
+                 )}
+            </div>
+
+        </div>
+
+        {/* FOOTER */}
+        <div className="p-6 border-t border-slate-800 flex justify-end gap-3 bg-slate-900/50">
+            <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white transition text-sm">
+                Cancelar
+            </button>
+            <button 
+                onClick={handleConfirm}
+                disabled={loading || !selectedSlot || (clientMode === "guest" && !guestName)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {loading ? "Criando..." : "Confirmar Agendamento"}
+            </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\components\dashboard\StaffBookingModal.tsx ---
+
+
 --- INICIO DO ARQUIVO: src\react-app\components\layout\AppLayout.tsx ---
 Path: src\react-app\components\layout\AppLayout.tsx
 ------------------------------
@@ -3714,8 +4102,10 @@ export default function AppLayout() {
 --- INICIO DO ARQUIVO: src\react-app\components\layout\Header.tsx ---
 Path: src\react-app\components\layout\Header.tsx
 ------------------------------
+import { Link } from "react-router-dom";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { useTenant } from "@/react-app/contexts/TenantContext";
+import { LayoutDashboard, Menu, LogOut } from "lucide-react";
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -3723,14 +4113,29 @@ export default function Header() {
 
   return (
     <header className="h-16 bg-slate-950/50 backdrop-blur-md border-b border-white/5 flex items-center justify-between px-4 md:px-8 sticky top-0 z-10">
-      {/* Mobile Toggle (Placeholder) */}
-      <div className="md:hidden text-slate-400">☰</div>
+      
+      <div className="flex items-center gap-4">
+        {/* Ícone de Menu (Mobile - Visual por enquanto) */}
+        <div className="md:hidden text-slate-400">
+            <Menu size={24} />
+        </div>
 
-      {/* Info da Loja Atual */}
-      <div className="hidden md:block">
-        <h2 className="text-sm font-medium text-slate-200">
-          {currentShop ? currentShop.name : "Selecione uma unidade"}
-        </h2>
+        {/* Botão HOME - Atalho para Dashboard */}
+        <Link 
+            to="/owner/dashboard" 
+            className="text-slate-400 hover:text-emerald-400 transition p-1 rounded-lg hover:bg-white/5"
+            title="Ir para Visão Geral"
+        >
+            <LayoutDashboard size={22} />
+        </Link>
+
+        {/* Info da Loja Atual */}
+        <div className="hidden md:block h-6 w-px bg-white/10 mx-2"></div>
+        <div className="hidden md:block">
+            <h2 className="text-sm font-medium text-slate-200">
+            {currentShop ? currentShop.name : "Selecione uma unidade"}
+            </h2>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
@@ -3749,9 +4154,11 @@ export default function Header() {
 
         <button 
           onClick={logout}
-          className="text-xs text-red-400 hover:text-red-300 transition ml-2"
+          className="text-xs text-red-400 hover:text-red-300 transition ml-2 flex items-center gap-1"
+          title="Sair"
         >
-          Sair
+          <LogOut size={14} />
+          <span className="hidden sm:inline">Sair</span>
         </button>
       </div>
     </header>
@@ -3833,6 +4240,7 @@ Path: src\react-app\components\layout\StaffLayout.tsx
 import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/react-app/contexts/AuthContext";
+import { Calendar, Lock, LogOut, ArrowLeft, Scissors } from "lucide-react";
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -3844,10 +4252,9 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
     navigate("/login");
   };
 
-  // Menu simplificado conforme solicitado
   const menuItems = [
-    { label: "Minha Agenda", path: "/staff/agenda", icon: "📅" },
-    { label: "Meus Dados e Senha", path: "/staff/settings", icon: "🔒" },
+    { label: "Minha Agenda", path: "/staff/agenda", icon: Calendar },
+    { label: "Meus Dados e Senha", path: "/staff/settings", icon: Lock },
   ];
 
   return (
@@ -3856,8 +4263,8 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
       {/* SIDEBAR EXCLUSIVA STAFF */}
       <aside className="w-full md:w-64 bg-slate-900 border-r border-white/5 flex flex-col">
         <div className="p-6 border-b border-white/5 flex items-center gap-3">
-          <div className="h-10 w-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-xl border border-emerald-500/20">
-             ✂️
+          <div className="h-10 w-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-emerald-500 border border-emerald-500/20">
+             <Scissors size={20} />
           </div>
           <div>
             <h1 className="font-bold text-white tracking-tight">Área Staff</h1>
@@ -3866,8 +4273,21 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
+          {/* BOTÃO VOLTAR PARA DONO (Só aparece se for Dono) */}
+          {user?.role === "dono" && (
+            <Link
+              to="/owner/dashboard"
+              className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold bg-slate-800 text-slate-300 border border-white/5 hover:bg-slate-700 hover:text-white hover:border-white/10 transition mb-4 group"
+            >
+              <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+              Voltar ao Painel
+            </Link>
+          )}
+
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+            
             return (
               <Link
                 key={item.path}
@@ -3878,7 +4298,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
                     : "text-slate-400 hover:bg-white/5 hover:text-white border border-transparent"
                 }`}
               >
-                <span className="text-lg">{item.icon}</span>
+                <Icon size={18} />
                 {item.label}
               </Link>
             );
@@ -3890,7 +4310,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition border border-transparent hover:border-red-500/20"
           >
-            🚪 Sair do Sistema
+            <LogOut size={18} /> Sair do Sistema
           </button>
         </div>
       </aside>
@@ -4213,7 +4633,9 @@ Path: src\react-app\lib\api\appointments.ts
 import { pb } from "./pocketbase";
 import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
 
-// Função auxiliar para mapear o registro do PocketBase para o tipo Appointment
+// ... (mantenha as funções asAppointment, getStaffAppointmentsByDate, updateAppointmentStatus iguais) ...
+// Vou repetir o arquivo completo para garantir que nada se perca:
+
 function asAppointment(record: any): Appointment {
   const expand = record.expand || {};
 
@@ -4221,6 +4643,8 @@ function asAppointment(record: any): Appointment {
     id: record.id,
     shop_id: record.shop_id,
     client_id: record.client_id,
+    customer_name: record.customer_name,
+    customer_phone: record.customer_phone,
     barber_id: record.barber_id,
     service_id: record.service_id,
     start_time: record.start_time,
@@ -4228,7 +4652,7 @@ function asAppointment(record: any): Appointment {
     status: record.status,
     total_amount: record.total_amount,
     payment_status: record.payment_status,
-    payment_method: record.payment_method, // Novo campo mapeado
+    payment_method: record.payment_method, 
     notes: record.notes,
     created: record.created,
     updated: record.updated,
@@ -4243,7 +4667,7 @@ function asAppointment(record: any): Appointment {
         avatar: expand.barber_id.avatar ? pb.files.getURL(expand.barber_id, expand.barber_id.avatar) : undefined
       } : undefined,
       service_id: expand.service_id,
-      payment_method: expand.payment_method // Novo expand mapeado
+      payment_method: expand.payment_method
     }
   };
 }
@@ -4255,33 +4679,90 @@ export async function getStaffAppointmentsByDate(staffId: string, date: string):
   const records = await pb.collection("appointments").getFullList<Appointment>({
     filter: `barber_id = "${staffId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}"`,
     sort: "start_time",
-    expand: "client_id,service_id,shop_id,barber_id,payment_method", // Adicionado payment_method
+    expand: "client_id,service_id,shop_id,barber_id,payment_method",
   });
 
   return records.map(asAppointment);
 }
 
-// ATUALIZADO: Suporte para atualizar o Método de Pagamento ao finalizar
 export async function updateAppointmentStatus(
     id: string, 
     status: AppointmentStatus, 
     paymentStatus?: PaymentStatus,
-    paymentMethodId?: string // Parâmetro opcional novo
+    paymentMethodId?: string
 ): Promise<Appointment> {
-  
   const payload: any = { status };
-  
-  if (paymentStatus) {
-    payload.payment_status = paymentStatus;
-  }
-  
-  if (paymentMethodId) {
-    payload.payment_method = paymentMethodId;
-  }
+  if (paymentStatus) payload.payment_status = paymentStatus;
+  if (paymentMethodId) payload.payment_method = paymentMethodId;
 
   const record = await pb.collection("appointments").update(id, payload);
-  // Usa o helper para retornar o objeto formatado com expands
   return asAppointment(record);
+}
+
+// --- NOVAS FUNÇÕES (WALK-IN) ---
+
+export interface CreateStaffAppointmentDTO {
+  shop_id: string;
+  barber_id: string;
+  service_id: string;
+  start_time: string;
+  duration_minutes?: number;
+  total_amount?: number;
+  status: string;
+  client_id?: string; 
+  customer_name?: string; 
+  customer_phone?: string;
+}
+
+export async function createStaffAppointment(data: CreateStaffAppointmentDTO): Promise<Appointment> {
+  // Validação Frontend
+  if (!data.client_id && !data.customer_name) {
+    throw new Error("Informe um cliente cadastrado ou o nome do cliente avulso.");
+  }
+
+  // 1. Calcula End Time
+  let finalEndTime = undefined;
+  if (data.start_time && data.duration_minutes) {
+    const startDate = new Date(data.start_time);
+    const endDate = new Date(startDate.getTime() + data.duration_minutes * 60000);
+    finalEndTime = endDate.toISOString(); 
+  }
+
+  // 2. Monta Payload (Objeto Vazio Inicialmente)
+  const payload: any = {
+     shop_id: data.shop_id,
+     barber_id: data.barber_id,
+     service_id: data.service_id,
+     start_time: data.start_time,
+     end_time: finalEndTime,
+     status: data.status,
+     total_amount: data.total_amount,
+     // Campos Avulsos: Enviamos apenas se tiver texto, senão não envia a chave
+     customer_name: data.customer_name || undefined,
+     customer_phone: data.customer_phone || undefined,
+  };
+
+  // CORREÇÃO CRÍTICA: Só adiciona client_id no payload se ele existir.
+  // Enviar client_id: "" causa erro 400 no PocketBase para campos Relation.
+  if (data.client_id) {
+    payload.client_id = data.client_id;
+  }
+
+  console.log("🚀 Payload Enviado:", payload); // Para debug
+
+  try {
+    const record = await pb.collection("appointments").create(payload);
+    return asAppointment(record);
+  } catch (err: any) {
+    console.error("❌ ERRO POCKETBASE:", err.data);
+    throw err;
+  }
+}
+
+export async function searchClients(query: string) {
+  return await pb.collection("users").getList(1, 10, {
+    filter: `(name ~ "${query}" || email ~ "${query}")`,
+  });
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
 
@@ -4368,72 +4849,61 @@ export async function cancelMyAppointment(id: string): Promise<void> {
 Path: src\react-app\lib\api\dashboard.ts
 ------------------------------
 import { pb } from "./pocketbase";
-import type { Appointment } from "@/shared/types";
 
-// Interface para os dados do gráfico/cards (mantida para tipagem do estado)
-export interface DailyKpis {
-  total_bookings: number;
-  unique_clients: number;
-  total_value: number;
-}
-
+// Interface para os cards da dashboard e lista do dia
 export interface DailyBooking {
   id: string;
-  client_id: string; // Adicionado para contagem correta
+  client_id?: string; 
   client_name: string;
   professional_name: string;
   service_name: string;
-  time: string;
-  status: string;
+  time: string; // HH:MM
+  status: string; // Label legível
+  raw_status: string; // Código 0,1,2...
   value: number;
-  raw_status: string;
 }
 
-function formatTimeVisual(isoString: string) {
-  if (!isoString) return "--:--";
-  return isoString.substring(11, 16);
-}
+// Busca agendamentos do dia para a dashboard (Owner/Admin ver tudo)
+export async function getDailyBookings(shopId: string, date: string): Promise<DailyBooking[]> {
+  const startOfDay = `${date} 00:00:00`;
+  const endOfDay = `${date} 23:59:59`;
 
-/**
- * Busca lista de agendamentos.
- * OBS: Não precisamos mais da função fetchDailyKpis separada,
- * calcularemos os totais baseados no retorno desta função.
- */
-export async function fetchDailyBookings(shopId: string, dateString: string): Promise<DailyBooking[]> {
-  const startOfDay = `${dateString} 00:00:00`;
-  const endOfDay = `${dateString} 23:59:59`;
+  // requestKey: null -> Desativa o cancelamento automático do PocketBase
+  // Isso resolve o erro "ClientResponseError 0: The request was autocancelled"
+  const records = await pb.collection("appointments").getFullList({
+    filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != "0"`,
+    sort: "start_time",
+    expand: "client_id,barber_id,service_id",
+    requestKey: null 
+  });
 
-  try {
-    const records = await pb.collection("appointments").getFullList<Appointment>({
-      filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
-      sort: "+start_time",
-      expand: "client_id,barber_id,service_id",
-    });
+  return records.map((record) => {
+    // Lógica para pegar nome do cliente cadastrado OU avulso
+    const clientName = record.expand?.client_id?.name || record.customer_name || "Cliente Avulso";
+    const professionalName = record.expand?.barber_id?.name || "Profissional";
+    const serviceName = record.expand?.service_id?.name || "Serviço";
+    
+    // Formata hora (pega 11:30 de 2023-01-01 11:30:00)
+    const time = record.start_time.split(" ")[1].substring(0, 5);
 
-    return records.map((record) => {
-      const expanded = (record as any).expand || {};
-      const time = formatTimeVisual(record.start_time);
+    // Label Status
+    let statusLabel = "Pendente";
+    if (record.status === "2") statusLabel = "Confirmado";
+    if (record.status === "3") statusLabel = "Em Andamento";
+    if (record.status === "4") statusLabel = "Concluído";
 
-      return {
-        id: record.id,
-        client_id: record.client_id, // Importante para contar clientes únicos
-        client_name: expanded.client_id?.name || "Cliente",
-        professional_name: expanded.barber_id?.name || "Profissional",
-        service_name: expanded.service_id?.name || "Serviço",
-        time,
-        status: record.status,
-        raw_status: record.status,
-        value: record.total_amount || 0
-      };
-    });
-  } catch (err: any) {
-    // Se for cancelamento, relança o erro para o componente controlar
-    if (err.status === 0 || err.isAbort) {
-        throw err;
-    }
-    console.error("[Bookings] Erro ao buscar lista:", err);
-    return [];
-  }
+    return {
+      id: record.id,
+      client_id: record.client_id || undefined, 
+      client_name: clientName,
+      professional_name: professionalName,
+      service_name: serviceName,
+      time,
+      status: statusLabel,
+      raw_status: record.status,
+      value: record.total_amount || 0
+    };
+  });
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\dashboard.ts ---
 
@@ -6353,62 +6823,57 @@ export default function ClientPanelPage() {
 --- INICIO DO ARQUIVO: src\react-app\pages\dashboard\DashboardHome.tsx ---
 Path: src\react-app\pages\dashboard\DashboardHome.tsx
 ------------------------------
-import { useEffect, useState, useMemo } from "react";
-import { useTenant } from "@/react-app/contexts/TenantContext";
-import { fetchDailyBookings, type DailyBooking } from "@/react-app/lib/api/dashboard";
-import { Link } from "react-router-dom";
-import { AppointmentStatus } from "@/shared/types";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { 
+  getDailyBookings, 
+  type DailyBooking 
+} from "@/react-app/lib/api/dashboard";
+import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function DashboardHome() {
-  const { currentShop } = useTenant();
+  const { user } = useAuth();
   
-  // Data Inicial
+  // Estado de Data (Padrão: Hoje)
   const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return new Date().toISOString().split("T")[0];
   });
 
   const [bookings, setBookings] = useState<DailyBooking[]>([]);
+  const [stats, setStats] = useState({ revenue: 0, count: 0 });
   const [loading, setLoading] = useState(true);
 
-  // --- CÁLCULO AUTOMÁTICO DOS KPIS ---
-  // Sempre que 'bookings' mudar, isso é recalculado instantaneamente
-  const kpis = useMemo(() => {
-    return {
-      total_bookings: bookings.length,
-      unique_clients: new Set(bookings.map(b => b.client_id)).size,
-      total_value: bookings.reduce((acc, curr) => acc + curr.value, 0)
-    };
-  }, [bookings]);
-  // ------------------------------------
-
-  async function loadData() {
-    if (!currentShop) return;
-    
-    // Inicia loading se for uma troca de loja ou data manual
-    setLoading(true);
-
-    try {
-      const data = await fetchDailyBookings(currentShop.id, selectedDate);
-      setBookings(data);
-    } catch (error: any) {
-       // Se for cancelamento, não faz nada (mantém o estado anterior ou loading)
-       if (error.status !== 0 && !error.isAbort) {
-          console.error("Erro ao carregar:", error);
-          setBookings([]); // Zera em caso de erro real
-       }
-    } finally {
-       // Só tira o loading se a requisição não foi abortada (verificação simples)
-       setLoading(false);
-    }
-  }
-
+  // Carrega dados sempre que a data ou loja mudar
   useEffect(() => {
-    loadData();
-  }, [currentShop?.id, selectedDate]);
+    async function loadDashboard() {
+      if (!user?.shop_id) return;
+      
+      setLoading(true);
+      try {
+        // OTIMIZAÇÃO: Chamamos apenas UMA vez a API
+        const dataBookings = await getDailyBookings(user.shop_id, selectedDate);
+
+        // Calculamos os KPIs localmente (economiza requisições e evita erros)
+        const totalRevenue = dataBookings.reduce((acc, curr) => acc + curr.value, 0);
+        const totalCount = dataBookings.length;
+
+        setBookings(dataBookings);
+        setStats({
+          revenue: totalRevenue,
+          count: totalCount
+        });
+      } catch (error: any) {
+        // Ignora erro de cancelamento se ainda ocorrer (navegação rápida)
+        if (error.status !== 0) {
+            console.error("Erro ao carregar dashboard", error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, [user?.shop_id, selectedDate]);
 
   // Controles de Data
   const handlePrevDay = () => {
@@ -6423,144 +6888,153 @@ export default function DashboardHome() {
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
+  // Formata valor para BRL
   const formatMoney = (val: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", { 
-    weekday: 'long', day: 'numeric', month: 'long' 
+  // Formata data para exibição
+  const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", {
+    weekday: 'long', day: 'numeric', month: 'long'
   });
-  
-  const isToday = (() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return selectedDate === `${year}-${month}-${day}`;
-  })();
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case AppointmentStatus.Completed: return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
-      case AppointmentStatus.InProgress: return "bg-amber-500/20 text-amber-400 border-amber-500/30";
-      case AppointmentStatus.Confirmed: return "bg-sky-500/20 text-sky-400 border-sky-500/30";
-      default: return "bg-slate-800 text-slate-400 border-slate-700";
-    }
-  };
-
-  const getStatusName = (status: string) => {
-    switch(status) {
-      case AppointmentStatus.Completed: return "Concluído";
-      case AppointmentStatus.InProgress: return "Em Andamento";
-      case AppointmentStatus.Confirmed: return "Confirmado";
-      case AppointmentStatus.Pending: return "Pendente";
-      default: return "Agendado";
-    }
-  };
-
-  if (!currentShop) {
-    return <div className="text-slate-400 p-8">Selecione uma unidade.</div>;
+  if (loading) {
+    return (
+        <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-slate-500 animate-pulse">Carregando indicadores...</div>
+        </div>
+    );
   }
 
   return (
-    <div className="space-y-8 pb-20">
-      
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-8 pb-10">
+      {/* HEADER COM SELETOR DE DATA */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-             Visão Geral
-             {isToday && <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/20">Hoje</span>}
-          </h1>
-          <p className="text-slate-400 text-sm mt-1 capitalize">{displayDate}</p>
-          <p className="text-xs text-slate-500">{currentShop.name}</p>
+            <h1 className="text-2xl font-bold text-white mb-1">Visão Geral</h1>
+            <p className="text-slate-400 capitalize">{displayDate}</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded-xl border border-white/10">
-              <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
-              <input 
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:invert"
-              />
-              <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
+        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 shadow-sm">
+            <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                <ChevronLeft size={20} />
+            </button>
+            <div className="px-2 text-center">
+                <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">Data</span>
+                <input 
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
+                />
+            </div>
+            <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                <ChevronRight size={20} />
+            </button>
+        </div>
+      </div>
+
+      {/* CARDS DE KPI */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Faturamento */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-emerald-500/30 transition">
+          <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500">
+            <DollarSign size={24} />
           </div>
-          
-          <button 
-            onClick={loadData}
-            className="p-3 bg-slate-900 border border-white/10 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            title="Atualizar dados"
-          >
-            🔄
-          </button>
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Faturamento</p>
+            <p className="text-2xl font-bold text-white">{formatMoney(stats.revenue)}</p>
+          </div>
+        </div>
+
+        {/* Atendimentos */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-blue-500/30 transition">
+          <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
+            <Users size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Agendamentos</p>
+            <p className="text-2xl font-bold text-white">{stats.count}</p>
+          </div>
+        </div>
+
+        {/* Ticket Médio */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-purple-500/30 transition">
+          <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500">
+            <Calendar size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Ticket Médio</p>
+            <p className="text-2xl font-bold text-white">
+              {formatMoney(stats.count > 0 ? stats.revenue / stats.count : 0)}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* KPI CARDS (Calculados via useMemo) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-500 text-6xl group-hover:scale-110 transition">📅</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Agendamentos</p>
-          <h3 className="text-3xl font-bold text-white">
-            {loading ? "..." : kpis.total_bookings}
-          </h3>
-        </div>
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-sky-500 text-6xl group-hover:scale-110 transition">👥</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Clientes</p>
-          <h3 className="text-3xl font-bold text-white">
-            {loading ? "..." : kpis.unique_clients}
-          </h3>
-        </div>
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-violet-500 text-6xl group-hover:scale-110 transition">💰</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Faturamento Previsto</p>
-          <h3 className="text-3xl font-bold text-emerald-400">
-            {loading ? "..." : formatMoney(kpis.total_value)}
-          </h3>
-        </div>
-      </div>
-
-      {/* LISTA */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl overflow-hidden">
-        <div className="p-6 border-b border-white/5 flex justify-between items-center">
-          <h3 className="font-semibold text-white">Atendimentos do Dia</h3>
-          <Link to="/staff/agenda" className="text-xs text-emerald-400 hover:text-emerald-300">Ver Agenda Completa →</Link>
+      {/* TABELA DE AGENDAMENTOS */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+          <h2 className="font-bold text-white flex items-center gap-2">
+            <Clock size={18} className="text-slate-400" /> Agendamentos do Dia
+          </h2>
         </div>
         
-        {loading ? (
-          <div className="p-12 text-center text-slate-500 animate-pulse">Carregando dados...</div>
-        ) : bookings.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            Nenhum agendamento encontrado para esta data.
-            {isToday && <p className="text-xs text-slate-600 mt-2">Compartilhe seu link: /book/{currentShop.slug}</p>}
-          </div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {bookings.map((b) => (
-              <div key={b.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition">
-                <div className="flex items-center gap-4">
-                  <div className="bg-slate-800 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold font-mono border border-white/5">
-                    {b.time}
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-200">{b.client_name}</p>
-                    <p className="text-xs text-slate-500">
-                      <span className="text-emerald-400">{b.service_name}</span> • com {b.professional_name}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right flex flex-col items-end gap-1">
-                  <span className="block text-sm font-medium text-slate-300">{formatMoney(b.value)}</span>
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getStatusBadge(b.raw_status)}`}>
-                    {getStatusName(b.raw_status)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-400">
+            <thead className="bg-slate-950/50 text-slate-200 uppercase text-xs font-bold">
+              <tr>
+                <th className="px-6 py-4">Horário</th>
+                <th className="px-6 py-4">Cliente</th>
+                <th className="px-6 py-4">Serviço</th>
+                <th className="px-6 py-4">Profissional</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {bookings.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 flex flex-col items-center gap-2">
+                    <Calendar size={32} className="opacity-20" />
+                    <span>Nenhum agendamento encontrado para esta data.</span>
+                  </td>
+                </tr>
+              ) : (
+                bookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-slate-800/50 transition cursor-default">
+                    <td className="px-6 py-4 font-mono text-white">
+                        {booking.time}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-200">
+                      {booking.client_name}
+                      {/* Badge para Avulso */}
+                      {!booking.client_id && (
+                        <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10" title="Cliente sem cadastro">Avulso</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-slate-400">{booking.service_name}</td>
+                    <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
+                        ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                          booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                          booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                          booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                          'bg-slate-700 text-slate-300 border-slate-600'
+                        }`}
+                      >
+                        {booking.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-slate-200">
+                      {formatMoney(booking.value)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -8310,6 +8784,8 @@ import { getStaffAppointmentsByDate, updateAppointmentStatus } from "@/react-app
 import { getPaymentMethods } from "@/react-app/lib/api/shops"; 
 import { Appointment, AppointmentStatus, PaymentStatus, PaymentMethod } from "@/shared/types";
 import Modal from "@/react-app/components/common/Modal"; 
+// IMPORTANTE: Importar o novo Modal
+import { StaffBookingModal } from "@/react-app/components/dashboard/StaffBookingModal";
 
 // Helper Time Visual
 const formatTime = (isoString: string) => {
@@ -8342,27 +8818,32 @@ export default function StaffAgendaPage() {
   const [finalPaymentMethod, setFinalPaymentMethod] = useState("");
   const [finishing, setFinishing] = useState(false);
 
-  // Carrega Agendamentos
-  useEffect(() => {
-    let isMounted = true;
+  // --- Estado do Modal de Novo Agendamento ---
+  const [isBookingModalOpen, setBookingModalOpen] = useState(false);
 
-    async function loadAgenda() {
+  // Carrega Agendamentos
+  async function loadAgenda() {
       if (!user) return;
       setLoading(true);
       try {
         const data = await getStaffAppointmentsByDate(user.id, selectedDate);
-        if (isMounted) {
-          setAppointments(data);
-        }
+        setAppointments(data);
       } catch (err: any) {
         if (err.status === 0 || err.isAbort) return;
         console.error("Erro ao carregar agenda", err);
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
     }
 
-    loadAgenda();
+  useEffect(() => {
+    let isMounted = true;
+    
+    // Wrapper para verificar montagem
+    async function load() {
+        if(isMounted) await loadAgenda();
+    }
+    load();
 
     // Carrega métodos de pagamento
     if (user?.company_id) {
@@ -8414,9 +8895,7 @@ export default function StaffAgendaPage() {
       await updateAppointmentStatus(id, newStatus);
     } catch (err) {
       alert("Erro ao atualizar. Recarregando...");
-      // Recarrega em caso de erro
-      const data = await getStaffAppointmentsByDate(user!.id, selectedDate);
-      setAppointments(data);
+      loadAgenda();
     }
   }
 
@@ -8482,19 +8961,29 @@ export default function StaffAgendaPage() {
            <p className="text-slate-400">Aqui está sua programação de hoje.</p>
         </div>
         
-        {/* Seletor de Data Estilizado */}
-        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
-            <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
-            <div className="px-2 text-center">
-                <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">{isToday ? "Hoje" : "Data"}</span>
-                <input 
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
-                />
+        <div className="flex gap-3">
+             {/* BOTÃO NOVO AGENDAMENTO */}
+            <button 
+                onClick={() => setBookingModalOpen(true)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold px-4 py-2 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+            >
+                + Novo Agendamento
+            </button>
+
+            {/* Seletor de Data Estilizado */}
+            <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
+                <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
+                <div className="px-2 text-center">
+                    <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">{isToday ? "Hoje" : "Data"}</span>
+                    <input 
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
+                    />
+                </div>
+                <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
             </div>
-            <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
         </div>
       </div>
 
@@ -8539,7 +9028,8 @@ export default function StaffAgendaPage() {
       ) : (
         <div className="relative border-l border-white/10 ml-4 space-y-8">
           {appointments.map((appt: any) => {
-            const clientName = appt.expand?.client_id?.name || "Cliente";
+            // Lógica para mostrar nome do cliente OU nome do avulso
+            const clientName = appt.expand?.client_id?.name || appt.customer_name || "Cliente Avulso";
             const serviceName = appt.expand?.service_id?.name || "Serviço";
             const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
             const status = appt.status;
@@ -8576,6 +9066,7 @@ export default function StaffAgendaPage() {
                             <div className={`text-sm font-bold font-mono mb-1 ${timeColor}`}>{formatTime(appt.start_time)}</div>
                             <h3 className="text-lg font-bold text-slate-100">{clientName}</h3>
                             <p className="text-slate-400 text-sm">{serviceName}</p>
+                            {appt.customer_phone && <p className="text-xs text-slate-500 mt-1">📞 {appt.customer_phone}</p>}
                             
                             {/* Tags */}
                             <div className="flex gap-2 mt-3">
@@ -8676,6 +9167,13 @@ export default function StaffAgendaPage() {
             </button>
         </div>
       </Modal>
+
+      {/* MODAL DE NOVO AGENDAMENTO (STAFF) */}
+      <StaffBookingModal 
+         isOpen={isBookingModalOpen}
+         onClose={() => setBookingModalOpen(false)}
+         onSuccess={() => loadAgenda()}
+      />
 
     </div>
   );
@@ -8918,18 +9416,9 @@ export default function AppRouter() {
           }
         />
 
-        {/* DASHBOARD DO DONO (ACESSO DIRETO) */}
-        <Route
-          path="/owner/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={["dono"]}>
-              <DashboardHome />
-            </ProtectedRoute>
-          }
-        />
-
         {/* --- ROTAS DO PAINEL DO DONO (Layout AppLayout) --- */}
         <Route element={<AppLayout />}>
+          {/* CORREÇÃO: O Dashboard deve ficar APENAS aqui dentro para ter Sidebar e Header */}
           <Route
             path="/owner/dashboard"
             element={
@@ -8974,15 +9463,12 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-
-          {/* REMOVIDO DAQUI: A rota /staff/agenda estava forçando o layout errado */}
         </Route>
 
-        {/* --- ÁREA DO STAFF (NOVO LAYOUT SIMPLIFICADO) --- */}
+        {/* --- ÁREA DO STAFF (Layout StaffLayout) --- */}
         <Route
           path="/staff"
           element={
-            // Adicionei "dono" aqui também caso você queira espiar a agenda usando o layout do staff
             <ProtectedRoute allowedRoles={["staff", "dono"]}>
               <StaffLayout>
                 <Outlet />
@@ -9073,10 +9559,8 @@ Path: src\shared\types.ts
 // ENUMS / TIPOS BÁSICOS
 // ------------------------------------
 
-// Roles da tabela users
 export type UserRole = 'dono' | 'cliente' | 'staff';
 
-// Status do appointment (PocketBase usa "0"…"9")
 export enum AppointmentStatus {
   Cancelled = '0',
   Pending = '1',
@@ -9090,23 +9574,18 @@ export enum AppointmentStatus {
   Other = '9',
 }
 
-// Payment_status (1,2,3)
 export enum PaymentStatus {
   A_PAGAR = '1',
   PAGO = '2',
   PENDENTE = '3',
 }
 
-// Tipos de chave PIX
 export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria';
 
-// Dias da semana de shop_hours
 export type Weekday = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
 
-// Status do plano da empresa (campo antigo que ainda existe no schema)
 export type CompanyPlanStatus = 'trial' | 'active' | 'suspended' | 'cancelled';
 
-// Planos do SaaS (companies + subscriptions.plan)
 export type SubscriptionPlan = 'trial' | 'basic' | 'pro';
 
 // ------------------------------------
@@ -9120,19 +9599,17 @@ export interface BaseRecord {
 }
 
 // ------------------------------------
-// USERS (auth collection)
+// USERS
 // ------------------------------------
 
 export interface User extends BaseRecord {
   email: string;
   name?: string;
-  avatar?: string; // file path PB
+  avatar?: string;
   role: UserRole;
   phone?: string;
-
-  company_id?: string | null; // relation companies
-  shop_id?: string | null; // relation shops
-
+  company_id?: string | null;
+  shop_id?: string | null;
   is_professional?: boolean;
 }
 
@@ -9144,20 +9621,13 @@ export interface Company extends BaseRecord {
   legal_name: string;
   cnpj?: string;
   plan_status: CompanyPlanStatus;
-
-  owner_id: string; // relation user
-
-  // 🔹 CAMPO NOVO: plano atual direto na empresa (select trial/basic/pro)
+  owner_id: string;
   plan?: SubscriptionPlan | null;
-
-  // 🔹 Campo opcional de assinatura ativa (relation subscriptions)
   active_subscription_id?: string | null;
-
-  // 🔹 Helpers de billing / limites, espelhando o que você colocou no schema.
-  trial_expires_at?: string | null; // ISO date
+  trial_expires_at?: string | null;
   max_shops?: number | null;
   max_professionals?: number | null;
-  billing_cycle?: string | null; // ISO date (início do ciclo atual, por ex.)
+  billing_cycle?: string | null;
 }
 
 // ------------------------------------
@@ -9168,30 +9638,22 @@ export interface Shop extends BaseRecord {
   name: string;
   slug: string;
   logo?: string;
-
   address?: string;
   phone?: string;
-
   company_id: string;
   owner_id: string;
-
   description?: string;
-
   accepted_payment_methods?: string[];
-
   pix_key?: string;
   pix_key_type?: PixKeyType;
-
   segment_id?: string | null;
-
   min_advance_time?: number | null;
   max_advance_time?: number | null;
-
   is_active?: boolean;
 }
 
 // ------------------------------------
-// CATEGORIES
+// CATEGORIES & SERVICES
 // ------------------------------------
 
 export interface Category extends BaseRecord {
@@ -9199,18 +9661,12 @@ export interface Category extends BaseRecord {
   shop_id: string;
 }
 
-// ------------------------------------
-// SERVICES
-// ------------------------------------
-
 export interface Service extends BaseRecord {
   name: string;
   description?: string;
-
-  price: number; // obrigatório
-  duration: number; // minutos, obrigatório
+  price: number;
+  duration: number;
   is_active?: boolean;
-
   shop_id: string;
   category_id?: string | null;
 }
@@ -9222,17 +9678,14 @@ export interface Service extends BaseRecord {
 export interface ShopHour extends BaseRecord {
   company_id: string;
   shop_id: string;
-
-  weekday: Weekday; // dom..sab
-
-  start_time: string; // "HH:MM"
-  end_time: string; // "HH:MM"
-
+  weekday: Weekday;
+  start_time: string;
+  end_time: string;
   is_closed?: boolean;
 }
 
 // ------------------------------------
-// PAYMENT_METHODS
+// PAYMENT_METHODS & SEGMENTS
 // ------------------------------------
 
 export interface PaymentMethod extends BaseRecord {
@@ -9241,38 +9694,34 @@ export interface PaymentMethod extends BaseRecord {
   is_active: boolean;
 }
 
-// ------------------------------------
-// SEGMENTS
-// ------------------------------------
-
 export interface Segment extends BaseRecord {
   name: string;
   slug: string;
-  icon?: string; // file
+  icon?: string;
 }
 
 // ------------------------------------
-// APPOINTMENTS
+// APPOINTMENTS (Alterado)
 // ------------------------------------
 
 export interface Appointment extends BaseRecord {
-  start_time: string; // ISO
-  end_time?: string | null; // ISO
-
+  start_time: string;
+  end_time?: string | null;
   status: AppointmentStatus | string;
   payment_status: PaymentStatus | string;
-
-  payment_method?: string | null; // relation payment_methods
+  payment_method?: string | null;
   total_amount?: number | null;
   notes?: string;
 
-  client_id: string; // relation users
-  barber_id: string; // relation users
-  service_id: string; // relation services
-  shop_id: string; // relation shops
+  // ATUALIZAÇÃO: client_id opcional + campos avulsos
+  client_id?: string; 
+  customer_name?: string; // Novo: Nome do cliente avulso
+  customer_phone?: string; // Novo: Telefone do cliente avulso
+  
+  barber_id: string;
+  service_id: string;
+  shop_id: string;
 
-  // --- CORREÇÃO IMPORTANTE ---
-  // Adicionamos 'expand' para o TypeScript reconhecer os objetos expandidos
   expand?: {
     client_id?: User;
     barber_id?: User;
@@ -9283,30 +9732,34 @@ export interface Appointment extends BaseRecord {
 }
 
 // ------------------------------------
-// SUBSCRIPTIONS (nova tabela)
+// SUBSCRIPTIONS
 // ------------------------------------
 
 export interface Subscription extends BaseRecord {
-  company_id: string; // relation companies
+  company_id: string;
   plan: SubscriptionPlan;
-  trial_expires_at?: string | null; // ISO
+  trial_expires_at?: string | null;
   max_shops: number;
   max_professionals: number;
-  billing_cycle?: string | null; // ISO (início do ciclo, vencimento etc.)
+  billing_cycle?: string | null;
 }
 
 // ------------------------------------
-// DTOs
+// DTOs (Alterado)
 // ------------------------------------
 
 export interface CreateAppointmentDTO {
-  start_time: string; // ISO
+  start_time: string;
   end_time?: string;
-  client_id: string;
+  
+  // Opcionais para staff
+  client_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  
   barber_id: string;
   service_id: string;
   shop_id: string;
-
   total_amount?: number;
   notes?: string;
   payment_method?: string | null;
@@ -9339,9 +9792,9 @@ export interface CreateShopDTO {
 // ------------------------------------
 
 export interface TimeSlot {
-  time: string; // "HH:MM" local
-  startISO: string; // UTC ISO
-  endISO: string; // UTC ISO
+  time: string;
+  startISO: string;
+  endISO: string;
   isAvailable: boolean;
 }
 
@@ -9351,11 +9804,10 @@ export interface ProfessionalOption {
   avatar?: string;
 }
 
-// Vinculo cliente <-> empresa
 export interface ClientCompanyLink extends BaseRecord {
-  user_id: string;      // relation → users
-  company_id: string;   // relation → companies
-  shop_id?: string | null; // opcional
+  user_id: string;
+  company_id: string;
+  shop_id?: string | null;
 }
 
 export interface RegisterOwnerInput {

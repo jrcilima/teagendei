@@ -1,59 +1,54 @@
-import { useEffect, useState, useMemo } from "react";
-import { useTenant } from "@/react-app/contexts/TenantContext";
-import { fetchDailyBookings, type DailyBooking } from "@/react-app/lib/api/dashboard";
-import { Link } from "react-router-dom";
-import { AppointmentStatus } from "@/shared/types";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { 
+  getDailyBookings, 
+  type DailyBooking 
+} from "@/react-app/lib/api/dashboard";
+import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function DashboardHome() {
-  const { currentShop } = useTenant();
+  const { user } = useAuth();
   
-  // Data Inicial
+  // Estado de Data (Padrão: Hoje)
   const [selectedDate, setSelectedDate] = useState(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return new Date().toISOString().split("T")[0];
   });
 
   const [bookings, setBookings] = useState<DailyBooking[]>([]);
+  const [stats, setStats] = useState({ revenue: 0, count: 0 });
   const [loading, setLoading] = useState(true);
 
-  // --- CÁLCULO AUTOMÁTICO DOS KPIS ---
-  // Sempre que 'bookings' mudar, isso é recalculado instantaneamente
-  const kpis = useMemo(() => {
-    return {
-      total_bookings: bookings.length,
-      unique_clients: new Set(bookings.map(b => b.client_id)).size,
-      total_value: bookings.reduce((acc, curr) => acc + curr.value, 0)
-    };
-  }, [bookings]);
-  // ------------------------------------
-
-  async function loadData() {
-    if (!currentShop) return;
-    
-    // Inicia loading se for uma troca de loja ou data manual
-    setLoading(true);
-
-    try {
-      const data = await fetchDailyBookings(currentShop.id, selectedDate);
-      setBookings(data);
-    } catch (error: any) {
-       // Se for cancelamento, não faz nada (mantém o estado anterior ou loading)
-       if (error.status !== 0 && !error.isAbort) {
-          console.error("Erro ao carregar:", error);
-          setBookings([]); // Zera em caso de erro real
-       }
-    } finally {
-       // Só tira o loading se a requisição não foi abortada (verificação simples)
-       setLoading(false);
-    }
-  }
-
+  // Carrega dados sempre que a data ou loja mudar
   useEffect(() => {
-    loadData();
-  }, [currentShop?.id, selectedDate]);
+    async function loadDashboard() {
+      if (!user?.shop_id) return;
+      
+      setLoading(true);
+      try {
+        // OTIMIZAÇÃO: Chamamos apenas UMA vez a API
+        const dataBookings = await getDailyBookings(user.shop_id, selectedDate);
+
+        // Calculamos os KPIs localmente (economiza requisições e evita erros)
+        const totalRevenue = dataBookings.reduce((acc, curr) => acc + curr.value, 0);
+        const totalCount = dataBookings.length;
+
+        setBookings(dataBookings);
+        setStats({
+          revenue: totalRevenue,
+          count: totalCount
+        });
+      } catch (error: any) {
+        // Ignora erro de cancelamento se ainda ocorrer (navegação rápida)
+        if (error.status !== 0) {
+            console.error("Erro ao carregar dashboard", error);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, [user?.shop_id, selectedDate]);
 
   // Controles de Data
   const handlePrevDay = () => {
@@ -68,144 +63,153 @@ export default function DashboardHome() {
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
+  // Formata valor para BRL
   const formatMoney = (val: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", { 
-    weekday: 'long', day: 'numeric', month: 'long' 
+  // Formata data para exibição
+  const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", {
+    weekday: 'long', day: 'numeric', month: 'long'
   });
-  
-  const isToday = (() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return selectedDate === `${year}-${month}-${day}`;
-  })();
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case AppointmentStatus.Completed: return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
-      case AppointmentStatus.InProgress: return "bg-amber-500/20 text-amber-400 border-amber-500/30";
-      case AppointmentStatus.Confirmed: return "bg-sky-500/20 text-sky-400 border-sky-500/30";
-      default: return "bg-slate-800 text-slate-400 border-slate-700";
-    }
-  };
-
-  const getStatusName = (status: string) => {
-    switch(status) {
-      case AppointmentStatus.Completed: return "Concluído";
-      case AppointmentStatus.InProgress: return "Em Andamento";
-      case AppointmentStatus.Confirmed: return "Confirmado";
-      case AppointmentStatus.Pending: return "Pendente";
-      default: return "Agendado";
-    }
-  };
-
-  if (!currentShop) {
-    return <div className="text-slate-400 p-8">Selecione uma unidade.</div>;
+  if (loading) {
+    return (
+        <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-slate-500 animate-pulse">Carregando indicadores...</div>
+        </div>
+    );
   }
 
   return (
-    <div className="space-y-8 pb-20">
-      
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <div className="space-y-8 pb-10">
+      {/* HEADER COM SELETOR DE DATA */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-             Visão Geral
-             {isToday && <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/20">Hoje</span>}
-          </h1>
-          <p className="text-slate-400 text-sm mt-1 capitalize">{displayDate}</p>
-          <p className="text-xs text-slate-500">{currentShop.name}</p>
+            <h1 className="text-2xl font-bold text-white mb-1">Visão Geral</h1>
+            <p className="text-slate-400 capitalize">{displayDate}</p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded-xl border border-white/10">
-              <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
-              <input 
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:invert"
-              />
-              <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
+        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 shadow-sm">
+            <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                <ChevronLeft size={20} />
+            </button>
+            <div className="px-2 text-center">
+                <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">Data</span>
+                <input 
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
+                />
+            </div>
+            <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                <ChevronRight size={20} />
+            </button>
+        </div>
+      </div>
+
+      {/* CARDS DE KPI */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Faturamento */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-emerald-500/30 transition">
+          <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500">
+            <DollarSign size={24} />
           </div>
-          
-          <button 
-            onClick={loadData}
-            className="p-3 bg-slate-900 border border-white/10 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            title="Atualizar dados"
-          >
-            🔄
-          </button>
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Faturamento</p>
+            <p className="text-2xl font-bold text-white">{formatMoney(stats.revenue)}</p>
+          </div>
+        </div>
+
+        {/* Atendimentos */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-blue-500/30 transition">
+          <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
+            <Users size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Agendamentos</p>
+            <p className="text-2xl font-bold text-white">{stats.count}</p>
+          </div>
+        </div>
+
+        {/* Ticket Médio */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-purple-500/30 transition">
+          <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500">
+            <Calendar size={24} />
+          </div>
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Ticket Médio</p>
+            <p className="text-2xl font-bold text-white">
+              {formatMoney(stats.count > 0 ? stats.revenue / stats.count : 0)}
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* KPI CARDS (Calculados via useMemo) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-500 text-6xl group-hover:scale-110 transition">📅</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Agendamentos</p>
-          <h3 className="text-3xl font-bold text-white">
-            {loading ? "..." : kpis.total_bookings}
-          </h3>
-        </div>
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-sky-500 text-6xl group-hover:scale-110 transition">👥</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Clientes</p>
-          <h3 className="text-3xl font-bold text-white">
-            {loading ? "..." : kpis.unique_clients}
-          </h3>
-        </div>
-        <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-violet-500 text-6xl group-hover:scale-110 transition">💰</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Faturamento Previsto</p>
-          <h3 className="text-3xl font-bold text-emerald-400">
-            {loading ? "..." : formatMoney(kpis.total_value)}
-          </h3>
-        </div>
-      </div>
-
-      {/* LISTA */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl overflow-hidden">
-        <div className="p-6 border-b border-white/5 flex justify-between items-center">
-          <h3 className="font-semibold text-white">Atendimentos do Dia</h3>
-          <Link to="/staff/agenda" className="text-xs text-emerald-400 hover:text-emerald-300">Ver Agenda Completa →</Link>
+      {/* TABELA DE AGENDAMENTOS */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+          <h2 className="font-bold text-white flex items-center gap-2">
+            <Clock size={18} className="text-slate-400" /> Agendamentos do Dia
+          </h2>
         </div>
         
-        {loading ? (
-          <div className="p-12 text-center text-slate-500 animate-pulse">Carregando dados...</div>
-        ) : bookings.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            Nenhum agendamento encontrado para esta data.
-            {isToday && <p className="text-xs text-slate-600 mt-2">Compartilhe seu link: /book/{currentShop.slug}</p>}
-          </div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {bookings.map((b) => (
-              <div key={b.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition">
-                <div className="flex items-center gap-4">
-                  <div className="bg-slate-800 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold font-mono border border-white/5">
-                    {b.time}
-                  </div>
-                  <div>
-                    <p className="font-medium text-slate-200">{b.client_name}</p>
-                    <p className="text-xs text-slate-500">
-                      <span className="text-emerald-400">{b.service_name}</span> • com {b.professional_name}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right flex flex-col items-end gap-1">
-                  <span className="block text-sm font-medium text-slate-300">{formatMoney(b.value)}</span>
-                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getStatusBadge(b.raw_status)}`}>
-                    {getStatusName(b.raw_status)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-400">
+            <thead className="bg-slate-950/50 text-slate-200 uppercase text-xs font-bold">
+              <tr>
+                <th className="px-6 py-4">Horário</th>
+                <th className="px-6 py-4">Cliente</th>
+                <th className="px-6 py-4">Serviço</th>
+                <th className="px-6 py-4">Profissional</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Valor</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {bookings.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500 flex flex-col items-center gap-2">
+                    <Calendar size={32} className="opacity-20" />
+                    <span>Nenhum agendamento encontrado para esta data.</span>
+                  </td>
+                </tr>
+              ) : (
+                bookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-slate-800/50 transition cursor-default">
+                    <td className="px-6 py-4 font-mono text-white">
+                        {booking.time}
+                    </td>
+                    <td className="px-6 py-4 font-medium text-slate-200">
+                      {booking.client_name}
+                      {/* Badge para Avulso */}
+                      {!booking.client_id && (
+                        <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10" title="Cliente sem cadastro">Avulso</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-slate-400">{booking.service_name}</td>
+                    <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
+                        ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                          booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                          booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                          booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                          'bg-slate-700 text-slate-300 border-slate-600'
+                        }`}
+                      >
+                        {booking.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-slate-200">
+                      {formatMoney(booking.value)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

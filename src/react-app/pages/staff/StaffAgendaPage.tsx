@@ -4,6 +4,8 @@ import { getStaffAppointmentsByDate, updateAppointmentStatus } from "@/react-app
 import { getPaymentMethods } from "@/react-app/lib/api/shops"; 
 import { Appointment, AppointmentStatus, PaymentStatus, PaymentMethod } from "@/shared/types";
 import Modal from "@/react-app/components/common/Modal"; 
+// IMPORTANTE: Importar o novo Modal
+import { StaffBookingModal } from "@/react-app/components/dashboard/StaffBookingModal";
 
 // Helper Time Visual
 const formatTime = (isoString: string) => {
@@ -36,27 +38,32 @@ export default function StaffAgendaPage() {
   const [finalPaymentMethod, setFinalPaymentMethod] = useState("");
   const [finishing, setFinishing] = useState(false);
 
-  // Carrega Agendamentos
-  useEffect(() => {
-    let isMounted = true;
+  // --- Estado do Modal de Novo Agendamento ---
+  const [isBookingModalOpen, setBookingModalOpen] = useState(false);
 
-    async function loadAgenda() {
+  // Carrega Agendamentos
+  async function loadAgenda() {
       if (!user) return;
       setLoading(true);
       try {
         const data = await getStaffAppointmentsByDate(user.id, selectedDate);
-        if (isMounted) {
-          setAppointments(data);
-        }
+        setAppointments(data);
       } catch (err: any) {
         if (err.status === 0 || err.isAbort) return;
         console.error("Erro ao carregar agenda", err);
       } finally {
-        if (isMounted) setLoading(false);
+        setLoading(false);
       }
     }
 
-    loadAgenda();
+  useEffect(() => {
+    let isMounted = true;
+    
+    // Wrapper para verificar montagem
+    async function load() {
+        if(isMounted) await loadAgenda();
+    }
+    load();
 
     // Carrega métodos de pagamento
     if (user?.company_id) {
@@ -108,9 +115,7 @@ export default function StaffAgendaPage() {
       await updateAppointmentStatus(id, newStatus);
     } catch (err) {
       alert("Erro ao atualizar. Recarregando...");
-      // Recarrega em caso de erro
-      const data = await getStaffAppointmentsByDate(user!.id, selectedDate);
-      setAppointments(data);
+      loadAgenda();
     }
   }
 
@@ -176,19 +181,29 @@ export default function StaffAgendaPage() {
            <p className="text-slate-400">Aqui está sua programação de hoje.</p>
         </div>
         
-        {/* Seletor de Data Estilizado */}
-        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
-            <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
-            <div className="px-2 text-center">
-                <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">{isToday ? "Hoje" : "Data"}</span>
-                <input 
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
-                />
+        <div className="flex gap-3">
+             {/* BOTÃO NOVO AGENDAMENTO */}
+            <button 
+                onClick={() => setBookingModalOpen(true)}
+                className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold px-4 py-2 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+            >
+                + Novo Agendamento
+            </button>
+
+            {/* Seletor de Data Estilizado */}
+            <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
+                <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
+                <div className="px-2 text-center">
+                    <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">{isToday ? "Hoje" : "Data"}</span>
+                    <input 
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
+                    />
+                </div>
+                <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
             </div>
-            <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
         </div>
       </div>
 
@@ -233,7 +248,8 @@ export default function StaffAgendaPage() {
       ) : (
         <div className="relative border-l border-white/10 ml-4 space-y-8">
           {appointments.map((appt: any) => {
-            const clientName = appt.expand?.client_id?.name || "Cliente";
+            // Lógica para mostrar nome do cliente OU nome do avulso
+            const clientName = appt.expand?.client_id?.name || appt.customer_name || "Cliente Avulso";
             const serviceName = appt.expand?.service_id?.name || "Serviço";
             const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
             const status = appt.status;
@@ -270,6 +286,7 @@ export default function StaffAgendaPage() {
                             <div className={`text-sm font-bold font-mono mb-1 ${timeColor}`}>{formatTime(appt.start_time)}</div>
                             <h3 className="text-lg font-bold text-slate-100">{clientName}</h3>
                             <p className="text-slate-400 text-sm">{serviceName}</p>
+                            {appt.customer_phone && <p className="text-xs text-slate-500 mt-1">📞 {appt.customer_phone}</p>}
                             
                             {/* Tags */}
                             <div className="flex gap-2 mt-3">
@@ -370,6 +387,13 @@ export default function StaffAgendaPage() {
             </button>
         </div>
       </Modal>
+
+      {/* MODAL DE NOVO AGENDAMENTO (STAFF) */}
+      <StaffBookingModal 
+         isOpen={isBookingModalOpen}
+         onClose={() => setBookingModalOpen(false)}
+         onSuccess={() => loadAgenda()}
+      />
 
     </div>
   );

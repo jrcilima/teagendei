@@ -4,10 +4,8 @@
 // ENUMS / TIPOS BÁSICOS
 // ------------------------------------
 
-// Roles da tabela users
 export type UserRole = 'dono' | 'cliente' | 'staff';
 
-// Status do appointment (PocketBase usa "0"…"9")
 export enum AppointmentStatus {
   Cancelled = '0',
   Pending = '1',
@@ -21,23 +19,18 @@ export enum AppointmentStatus {
   Other = '9',
 }
 
-// Payment_status (1,2,3)
 export enum PaymentStatus {
   A_PAGAR = '1',
   PAGO = '2',
   PENDENTE = '3',
 }
 
-// Tipos de chave PIX
 export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'telefone' | 'aleatoria';
 
-// Dias da semana de shop_hours
 export type Weekday = 'dom' | 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab';
 
-// Status do plano da empresa (campo antigo que ainda existe no schema)
 export type CompanyPlanStatus = 'trial' | 'active' | 'suspended' | 'cancelled';
 
-// Planos do SaaS (companies + subscriptions.plan)
 export type SubscriptionPlan = 'trial' | 'basic' | 'pro';
 
 // ------------------------------------
@@ -51,19 +44,17 @@ export interface BaseRecord {
 }
 
 // ------------------------------------
-// USERS (auth collection)
+// USERS
 // ------------------------------------
 
 export interface User extends BaseRecord {
   email: string;
   name?: string;
-  avatar?: string; // file path PB
+  avatar?: string;
   role: UserRole;
   phone?: string;
-
-  company_id?: string | null; // relation companies
-  shop_id?: string | null; // relation shops
-
+  company_id?: string | null;
+  shop_id?: string | null;
   is_professional?: boolean;
 }
 
@@ -75,20 +66,13 @@ export interface Company extends BaseRecord {
   legal_name: string;
   cnpj?: string;
   plan_status: CompanyPlanStatus;
-
-  owner_id: string; // relation user
-
-  // 🔹 CAMPO NOVO: plano atual direto na empresa (select trial/basic/pro)
+  owner_id: string;
   plan?: SubscriptionPlan | null;
-
-  // 🔹 Campo opcional de assinatura ativa (relation subscriptions)
   active_subscription_id?: string | null;
-
-  // 🔹 Helpers de billing / limites, espelhando o que você colocou no schema.
-  trial_expires_at?: string | null; // ISO date
+  trial_expires_at?: string | null;
   max_shops?: number | null;
   max_professionals?: number | null;
-  billing_cycle?: string | null; // ISO date (início do ciclo atual, por ex.)
+  billing_cycle?: string | null;
 }
 
 // ------------------------------------
@@ -99,30 +83,22 @@ export interface Shop extends BaseRecord {
   name: string;
   slug: string;
   logo?: string;
-
   address?: string;
   phone?: string;
-
   company_id: string;
   owner_id: string;
-
   description?: string;
-
   accepted_payment_methods?: string[];
-
   pix_key?: string;
   pix_key_type?: PixKeyType;
-
   segment_id?: string | null;
-
   min_advance_time?: number | null;
   max_advance_time?: number | null;
-
   is_active?: boolean;
 }
 
 // ------------------------------------
-// CATEGORIES
+// CATEGORIES & SERVICES
 // ------------------------------------
 
 export interface Category extends BaseRecord {
@@ -130,18 +106,12 @@ export interface Category extends BaseRecord {
   shop_id: string;
 }
 
-// ------------------------------------
-// SERVICES
-// ------------------------------------
-
 export interface Service extends BaseRecord {
   name: string;
   description?: string;
-
-  price: number; // obrigatório
-  duration: number; // minutos, obrigatório
+  price: number;
+  duration: number;
   is_active?: boolean;
-
   shop_id: string;
   category_id?: string | null;
 }
@@ -153,17 +123,14 @@ export interface Service extends BaseRecord {
 export interface ShopHour extends BaseRecord {
   company_id: string;
   shop_id: string;
-
-  weekday: Weekday; // dom..sab
-
-  start_time: string; // "HH:MM"
-  end_time: string; // "HH:MM"
-
+  weekday: Weekday;
+  start_time: string;
+  end_time: string;
   is_closed?: boolean;
 }
 
 // ------------------------------------
-// PAYMENT_METHODS
+// PAYMENT_METHODS & SEGMENTS
 // ------------------------------------
 
 export interface PaymentMethod extends BaseRecord {
@@ -172,38 +139,34 @@ export interface PaymentMethod extends BaseRecord {
   is_active: boolean;
 }
 
-// ------------------------------------
-// SEGMENTS
-// ------------------------------------
-
 export interface Segment extends BaseRecord {
   name: string;
   slug: string;
-  icon?: string; // file
+  icon?: string;
 }
 
 // ------------------------------------
-// APPOINTMENTS
+// APPOINTMENTS (Alterado)
 // ------------------------------------
 
 export interface Appointment extends BaseRecord {
-  start_time: string; // ISO
-  end_time?: string | null; // ISO
-
+  start_time: string;
+  end_time?: string | null;
   status: AppointmentStatus | string;
   payment_status: PaymentStatus | string;
-
-  payment_method?: string | null; // relation payment_methods
+  payment_method?: string | null;
   total_amount?: number | null;
   notes?: string;
 
-  client_id: string; // relation users
-  barber_id: string; // relation users
-  service_id: string; // relation services
-  shop_id: string; // relation shops
+  // ATUALIZAÇÃO: client_id opcional + campos avulsos
+  client_id?: string; 
+  customer_name?: string; // Novo: Nome do cliente avulso
+  customer_phone?: string; // Novo: Telefone do cliente avulso
+  
+  barber_id: string;
+  service_id: string;
+  shop_id: string;
 
-  // --- CORREÇÃO IMPORTANTE ---
-  // Adicionamos 'expand' para o TypeScript reconhecer os objetos expandidos
   expand?: {
     client_id?: User;
     barber_id?: User;
@@ -214,30 +177,34 @@ export interface Appointment extends BaseRecord {
 }
 
 // ------------------------------------
-// SUBSCRIPTIONS (nova tabela)
+// SUBSCRIPTIONS
 // ------------------------------------
 
 export interface Subscription extends BaseRecord {
-  company_id: string; // relation companies
+  company_id: string;
   plan: SubscriptionPlan;
-  trial_expires_at?: string | null; // ISO
+  trial_expires_at?: string | null;
   max_shops: number;
   max_professionals: number;
-  billing_cycle?: string | null; // ISO (início do ciclo, vencimento etc.)
+  billing_cycle?: string | null;
 }
 
 // ------------------------------------
-// DTOs
+// DTOs (Alterado)
 // ------------------------------------
 
 export interface CreateAppointmentDTO {
-  start_time: string; // ISO
+  start_time: string;
   end_time?: string;
-  client_id: string;
+  
+  // Opcionais para staff
+  client_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  
   barber_id: string;
   service_id: string;
   shop_id: string;
-
   total_amount?: number;
   notes?: string;
   payment_method?: string | null;
@@ -270,9 +237,9 @@ export interface CreateShopDTO {
 // ------------------------------------
 
 export interface TimeSlot {
-  time: string; // "HH:MM" local
-  startISO: string; // UTC ISO
-  endISO: string; // UTC ISO
+  time: string;
+  startISO: string;
+  endISO: string;
   isAvailable: boolean;
 }
 
@@ -282,11 +249,10 @@ export interface ProfessionalOption {
   avatar?: string;
 }
 
-// Vinculo cliente <-> empresa
 export interface ClientCompanyLink extends BaseRecord {
-  user_id: string;      // relation → users
-  company_id: string;   // relation → companies
-  shop_id?: string | null; // opcional
+  user_id: string;
+  company_id: string;
+  shop_id?: string | null;
 }
 
 export interface RegisterOwnerInput {

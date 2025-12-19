@@ -46,18 +46,9 @@ export default function AppRouter() {
           }
         />
 
-        {/* DASHBOARD DO DONO (ACESSO DIRETO) */}
-        <Route
-          path="/owner/dashboard"
-          element={
-            <ProtectedRoute allowedRoles={["dono"]}>
-              <DashboardHome />
-            </ProtectedRoute>
-          }
-        />
-
         {/* --- ROTAS DO PAINEL DO DONO (Layout AppLayout) --- */}
         <Route element={<AppLayout />}>
+          {/* CORREÇÃO: O Dashboard deve ficar APENAS aqui dentro para ter Sidebar e Header */}
           <Route
             path="/owner/dashboard"
             element={
@@ -102,15 +93,12 @@ export default function AppRouter() {
               </ProtectedRoute>
             }
           />
-
-          {/* REMOVIDO DAQUI: A rota /staff/agenda estava forçando o layout errado */}
         </Route>
 
-        {/* --- ÁREA DO STAFF (NOVO LAYOUT SIMPLIFICADO) --- */}
+        {/* --- ÁREA DO STAFF (Layout StaffLayout) --- */}
         <Route
           path="/staff"
           element={
-            // Adicionei "dono" aqui também caso você queira espiar a agenda usando o layout do staff
             <ProtectedRoute allowedRoles={["staff", "dono"]}>
               <StaffLayout>
                 <Outlet />

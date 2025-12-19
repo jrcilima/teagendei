@@ -1,68 +1,57 @@
 import { pb } from "./pocketbase";
-import type { Appointment } from "@/shared/types";
 
-// Interface para os dados do gráfico/cards (mantida para tipagem do estado)
-export interface DailyKpis {
-  total_bookings: number;
-  unique_clients: number;
-  total_value: number;
-}
-
+// Interface para os cards da dashboard e lista do dia
 export interface DailyBooking {
   id: string;
-  client_id: string; // Adicionado para contagem correta
+  client_id?: string; 
   client_name: string;
   professional_name: string;
   service_name: string;
-  time: string;
-  status: string;
+  time: string; // HH:MM
+  status: string; // Label legível
+  raw_status: string; // Código 0,1,2...
   value: number;
-  raw_status: string;
 }
 
-function formatTimeVisual(isoString: string) {
-  if (!isoString) return "--:--";
-  return isoString.substring(11, 16);
-}
+// Busca agendamentos do dia para a dashboard (Owner/Admin ver tudo)
+export async function getDailyBookings(shopId: string, date: string): Promise<DailyBooking[]> {
+  const startOfDay = `${date} 00:00:00`;
+  const endOfDay = `${date} 23:59:59`;
 
-/**
- * Busca lista de agendamentos.
- * OBS: Não precisamos mais da função fetchDailyKpis separada,
- * calcularemos os totais baseados no retorno desta função.
- */
-export async function fetchDailyBookings(shopId: string, dateString: string): Promise<DailyBooking[]> {
-  const startOfDay = `${dateString} 00:00:00`;
-  const endOfDay = `${dateString} 23:59:59`;
+  // requestKey: null -> Desativa o cancelamento automático do PocketBase
+  // Isso resolve o erro "ClientResponseError 0: The request was autocancelled"
+  const records = await pb.collection("appointments").getFullList({
+    filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != "0"`,
+    sort: "start_time",
+    expand: "client_id,barber_id,service_id",
+    requestKey: null 
+  });
 
-  try {
-    const records = await pb.collection("appointments").getFullList<Appointment>({
-      filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
-      sort: "+start_time",
-      expand: "client_id,barber_id,service_id",
-    });
+  return records.map((record) => {
+    // Lógica para pegar nome do cliente cadastrado OU avulso
+    const clientName = record.expand?.client_id?.name || record.customer_name || "Cliente Avulso";
+    const professionalName = record.expand?.barber_id?.name || "Profissional";
+    const serviceName = record.expand?.service_id?.name || "Serviço";
+    
+    // Formata hora (pega 11:30 de 2023-01-01 11:30:00)
+    const time = record.start_time.split(" ")[1].substring(0, 5);
 
-    return records.map((record) => {
-      const expanded = (record as any).expand || {};
-      const time = formatTimeVisual(record.start_time);
+    // Label Status
+    let statusLabel = "Pendente";
+    if (record.status === "2") statusLabel = "Confirmado";
+    if (record.status === "3") statusLabel = "Em Andamento";
+    if (record.status === "4") statusLabel = "Concluído";
 
-      return {
-        id: record.id,
-        client_id: record.client_id, // Importante para contar clientes únicos
-        client_name: expanded.client_id?.name || "Cliente",
-        professional_name: expanded.barber_id?.name || "Profissional",
-        service_name: expanded.service_id?.name || "Serviço",
-        time,
-        status: record.status,
-        raw_status: record.status,
-        value: record.total_amount || 0
-      };
-    });
-  } catch (err: any) {
-    // Se for cancelamento, relança o erro para o componente controlar
-    if (err.status === 0 || err.isAbort) {
-        throw err;
-    }
-    console.error("[Bookings] Erro ao buscar lista:", err);
-    return [];
-  }
+    return {
+      id: record.id,
+      client_id: record.client_id || undefined, 
+      client_name: clientName,
+      professional_name: professionalName,
+      service_name: serviceName,
+      time,
+      status: statusLabel,
+      raw_status: record.status,
+      value: record.total_amount || 0
+    };
+  });
 }

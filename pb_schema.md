@@ -839,8 +839,8 @@
   },
   {
     "id": "pbc_1037645436",
-    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
-    "viewRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
+    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id || @request.auth.id != \"\"",
+    "viewRule": "shop_id.owner_id = @request.auth.id || client_id = @request.auth.id || barber_id = @request.auth.id",
     "createRule": "client_id = @request.auth.id",
     "updateRule": "shop_id.company_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
     "deleteRule": null,
@@ -968,7 +968,7 @@
         "minSelect": 0,
         "name": "client_id",
         "presentable": false,
-        "required": true,
+        "required": false,
         "system": false,
         "type": "relation"
       },
@@ -1010,6 +1010,34 @@
         "required": true,
         "system": false,
         "type": "relation"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text179493489",
+        "max": 0,
+        "min": 0,
+        "name": "customer_name",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
+      },
+      {
+        "autogeneratePattern": "",
+        "hidden": false,
+        "id": "text2323309286",
+        "max": 0,
+        "min": 0,
+        "name": "customer_phone",
+        "pattern": "",
+        "presentable": false,
+        "primaryKey": false,
+        "required": false,
+        "system": false,
+        "type": "text"
       },
       {
         "hidden": false,
