@@ -1,4 +1,3 @@
-// Caminho: src/react-app/lib/utils/slots.ts
 import type { ShopHour, Appointment, TimeSlot } from "@/shared/types";
 
 // Helper: converte "09:30" para minutos (570)
@@ -12,6 +11,14 @@ function minutesToTime(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// Helper: Limpa a data do PocketBase para garantir comparação local exata
+// Transforma "2025-12-19 08:00:00.000Z" em "2025-12-19T08:00:00"
+function normalizeDateStr(isoString: string): string {
+  if (!isoString) return "";
+  // Pega apenas os primeiros 19 caracteres (YYYY-MM-DDTHH:mm:ss) e troca espaço por T
+  return isoString.substring(0, 19).replace(" ", "T");
 }
 
 const WEEKDAY_MAP: Record<number, string> = {
@@ -29,6 +36,7 @@ export function generateSlots(
 ): TimeSlot[] {
   const dateObj = new Date(dateStr + "T00:00:00");
   const weekday = WEEKDAY_MAP[dateObj.getDay()];
+  const now = new Date(); // Hora atual do sistema
 
   // 1. Achar horário da loja para hoje
   const hours = shopHours.find((h) => h.weekday === weekday);
@@ -45,32 +53,57 @@ export function generateSlots(
   // 2. Loop para criar slots (ex: 09:00, 09:30, 10:00...)
   for (let current = startMin; current + serviceDuration <= endMin; current += serviceDuration) {
     const timeString = minutesToTime(current);
-    const slotStartISO = `${dateStr} ${timeString}:00`;
+    
+    // Monta o Slot usando formato ISO local (sem Z)
+    const slotStartISO = `${dateStr}T${timeString}:00`; 
     
     // Calcular fim do slot
     const slotEndMin = current + serviceDuration;
     const slotEndTimeString = minutesToTime(slotEndMin);
-    const slotEndISO = `${dateStr} ${slotEndTimeString}:00`;
+    const slotEndISO = `${dateStr}T${slotEndTimeString}:00`;
+
+    const slotStartDate = new Date(slotStartISO);
+    const slotEndDate = new Date(slotEndISO);
+
+    // [REGRA] Ignora horários que já passaram hoje
+    if (slotStartDate < now) {
+        continue;
+    }
+
+    const slotStartMs = slotStartDate.getTime();
+    const slotEndMs = slotEndDate.getTime();
 
     // 3. Verificar colisão com agendamentos existentes
     const isBusy = existingAppointments.some((appt) => {
-      const apptStart = new Date(appt.start_time).getTime(); // Assumindo que vem UTC ou ISO correto
-      // Pequeno ajuste: appointments no PB são salvos como string UTC.
-      // Simplificação para este passo: vamos comparar strings de hora se possível, 
-      // mas o ideal é comparar timestamps completos.
+      // Normaliza a data do banco para ignorar fuso horário (trata como local)
+      const apptStartStr = normalizeDateStr(appt.start_time);
       
-      const thisSlotStart = new Date(slotStartISO).getTime();
-      const thisSlotEnd = new Date(slotEndISO).getTime();
+      // Se a data for inválida, ignora
+      if (!apptStartStr) return false;
 
-      // Se o agendamento já existe, ele bloqueia o slot?
-      // Lógica básica de overlap
-      return (apptStart >= thisSlotStart && apptStart < thisSlotEnd);
+      const apptStartMs = new Date(apptStartStr).getTime();
+      let apptEndMs = 0;
+
+      // Tenta pegar o end_time do agendamento. Se não tiver, calcula baseado no slot (fallback)
+      const apptEndStr = normalizeDateStr(appt.end_time || "");
+      if (apptEndStr) {
+        apptEndMs = new Date(apptEndStr).getTime();
+      } else {
+        // Fallback: Se por algum motivo o banco não tem end_time, assume a duração do serviço atual
+        apptEndMs = apptStartMs + (serviceDuration * 60 * 1000);
+      }
+
+      // LÓGICA DE COLISÃO ROBUSTA (Intersecção de Intervalos)
+      // Um slot está ocupado se:
+      // (Inicio do Agendamento < Fim do Slot) E (Fim do Agendamento > Inicio do Slot)
+      return (apptStartMs < slotEndMs && apptEndMs > slotStartMs);
     });
 
     slots.push({
       time: timeString,
-      startISO: slotStartISO,
-      endISO: slotEndISO,
+      // Retorna com espaço para compatibilidade visual se necessário, ou T
+      startISO: slotStartISO.replace("T", " "), 
+      endISO: slotEndISO.replace("T", " "),
       isAvailable: !isBusy,
     });
   }

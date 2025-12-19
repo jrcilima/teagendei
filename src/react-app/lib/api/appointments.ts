@@ -1,66 +1,73 @@
 import { pb } from "./pocketbase";
-import type { CreateAppointmentDTO, Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
+import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
 
-/**
- * Cria um novo agendamento
- */
-export async function createAppointment(data: CreateAppointmentDTO): Promise<Appointment> {
-  // PocketBase espera datas em UTC. O front deve enviar ISO string completa.
-  const record = await pb.collection("appointments").create({
-    start_time: data.start_time,
-    end_time: data.end_time,
-    client_id: data.client_id,
-    barber_id: data.barber_id,
-    service_id: data.service_id,
-    shop_id: data.shop_id,
-    status: "1", // 1 = Pendente
-    payment_status: "1", // 1 = A Pagar
-    total_amount: data.total_amount,
-    notes: data.notes
-  });
-  return record as unknown as Appointment;
+// Função auxiliar para mapear o registro do PocketBase para o tipo Appointment
+function asAppointment(record: any): Appointment {
+  const expand = record.expand || {};
+
+  return {
+    id: record.id,
+    shop_id: record.shop_id,
+    client_id: record.client_id,
+    barber_id: record.barber_id,
+    service_id: record.service_id,
+    start_time: record.start_time,
+    end_time: record.end_time,
+    status: record.status,
+    total_amount: record.total_amount,
+    payment_status: record.payment_status,
+    payment_method: record.payment_method, // Novo campo mapeado
+    notes: record.notes,
+    created: record.created,
+    updated: record.updated,
+    expand: {
+      shop_id: expand.shop_id,
+      client_id: expand.client_id ? {
+        ...expand.client_id,
+        avatar: expand.client_id.avatar ? pb.files.getURL(expand.client_id, expand.client_id.avatar) : undefined
+      } : undefined,
+      barber_id: expand.barber_id ? {
+        ...expand.barber_id,
+        avatar: expand.barber_id.avatar ? pb.files.getURL(expand.barber_id, expand.barber_id.avatar) : undefined
+      } : undefined,
+      service_id: expand.service_id,
+      payment_method: expand.payment_method // Novo expand mapeado
+    }
+  };
 }
 
-/**
- * 🆕 Busca agendamentos do dia para um profissional (STAFF)
- * CORREÇÃO: Usa data local para definir o filtro de início e fim do dia
- */
-export async function getStaffAppointmentsToday(barberId: string): Promise<Appointment[]> {
-  // Cria data local correta (YYYY-MM-DD)
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const todayDateString = `${year}-${month}-${day}`;
-
-  // Filtro: do início (00:00:00) ao fim (23:59:59) do dia LOCAL
-  const startOfDay = `${todayDateString} 00:00:00`;
-  const endOfDay = `${todayDateString} 23:59:59`;
+export async function getStaffAppointmentsByDate(staffId: string, date: string): Promise<Appointment[]> {
+  const startOfDay = `${date} 00:00:00`;
+  const endOfDay = `${date} 23:59:59`;
 
   const records = await pb.collection("appointments").getFullList<Appointment>({
-    filter: `barber_id = "${barberId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
-    sort: "+start_time",
-    expand: "client_id,service_id,payment_method",
+    filter: `barber_id = "${staffId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}"`,
+    sort: "start_time",
+    expand: "client_id,service_id,shop_id,barber_id,payment_method", // Adicionado payment_method
   });
 
-  return records;
+  return records.map(asAppointment);
 }
 
-/**
- * 🆕 Atualiza status do agendamento (Iniciar, Finalizar, Cancelar)
- */
+// ATUALIZADO: Suporte para atualizar o Método de Pagamento ao finalizar
 export async function updateAppointmentStatus(
-  id: string, 
-  status: AppointmentStatus, 
-  paymentStatus?: PaymentStatus
+    id: string, 
+    status: AppointmentStatus, 
+    paymentStatus?: PaymentStatus,
+    paymentMethodId?: string // Parâmetro opcional novo
 ): Promise<Appointment> {
-  const data: any = { status };
   
-  // Se mudar o status de pagamento, envia junto
+  const payload: any = { status };
+  
   if (paymentStatus) {
-    data.payment_status = paymentStatus;
+    payload.payment_status = paymentStatus;
   }
   
-  const record = await pb.collection("appointments").update(id, data);
-  return record as unknown as Appointment;
+  if (paymentMethodId) {
+    payload.payment_method = paymentMethodId;
+  }
+
+  const record = await pb.collection("appointments").update(id, payload);
+  // Usa o helper para retornar o objeto formatado com expands
+  return asAppointment(record);
 }

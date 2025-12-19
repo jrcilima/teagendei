@@ -31,19 +31,53 @@ export default function ServicesPage() {
   const [newCatName, setNewCatName] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      if (!currentShop) return;
+      setLoading(true);
+      try {
+        const [srv, cat] = await Promise.all([
+          getServicesByShop(currentShop.id),
+          getCategoriesByShop(currentShop.id)
+        ]);
+        
+        if (isMounted) {
+          setServices(srv);
+          setCategories(cat);
+        }
+      } catch (err: any) {
+        // CORREÇÃO: Ignora erro de auto-cancelamento (status 0)
+        if (err.status === 0 || err.isAbort) return;
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
     loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentShop?.id]);
 
-  async function loadData() {
+  // Função auxiliar para recarregar após ações (create/delete)
+  async function reload() {
     if (!currentShop) return;
     setLoading(true);
-    const [srv, cat] = await Promise.all([
-      getServicesByShop(currentShop.id),
-      getCategoriesByShop(currentShop.id)
-    ]);
-    setServices(srv);
-    setCategories(cat);
-    setLoading(false);
+    try {
+        const [srv, cat] = await Promise.all([
+            getServicesByShop(currentShop.id),
+            getCategoriesByShop(currentShop.id)
+        ]);
+        setServices(srv);
+        setCategories(cat);
+    } catch(err: any) {
+        console.error(err);
+    } finally {
+        setLoading(false);
+    }
   }
 
   async function handleCreateService() {
@@ -60,7 +94,7 @@ export default function ServicesPage() {
       setServiceModalOpen(false);
       setNewServiceName("");
       setNewServicePrice("");
-      loadData();
+      reload();
     } catch (err) {
       alert("Erro ao criar serviço");
     }
@@ -72,7 +106,7 @@ export default function ServicesPage() {
       await createCategory(currentShop.id, newCatName);
       setCatModalOpen(false);
       setNewCatName("");
-      loadData();
+      reload();
     } catch (err) {
       alert("Erro ao criar categoria");
     }
@@ -81,14 +115,14 @@ export default function ServicesPage() {
   async function handleDeleteService(id: string) {
     if (confirm("Desativar este serviço?")) {
       await deleteService(id);
-      loadData();
+      reload();
     }
   }
 
   async function handleDeleteCategory(id: string) {
     if (confirm("Apagar categoria?")) {
       await deleteCategory(id);
-      loadData();
+      reload();
     }
   }
 

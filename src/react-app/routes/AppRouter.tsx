@@ -1,26 +1,27 @@
-// src/react-app/routes/AppRouter.tsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import LandingPage from "../pages/public/LandingPage";
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
-
 import BookPage from "../pages/booking/BookPage";
-
 import OnboardingRouter from "../pages/onboarding/OnboardingRouter";
 import DashboardHome from "../pages/dashboard/DashboardHome";
 
-// Certifique-se de ter renomeado o arquivo para StaffAgendaPage.tsx
+// Pages Staff
 import StaffAgendaPage from "../pages/staff/StaffAgendaPage";
+import StaffProfilePage from "../pages/staff/StaffProfilePage"; 
+
+// Pages Owner
 import ClientPanelPage from "../pages/client/ClientPanelPage";
 import SettingsPage from "../pages/owner/SettingsPage";
 import ServicesPage from "../pages/owner/ServicesPage";
 import ShopsPage from "../pages/owner/ShopsPage";
 import StaffPage from "../pages/owner/StaffPage";
 
-
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../components/layout/AppLayout";
+import StaffLayout from "../components/layout/StaffLayout" 
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -35,7 +36,7 @@ export default function AppRouter() {
         {/* BOOKING PÚBLICO */}
         <Route path="/book/:slug" element={<BookPage />} />
 
-        {/* ONBOARDING MULTI-ETAPA (DONO) */}
+        {/* ONBOARDING (DONO) */}
         <Route
           path="/onboarding/*"
           element={
@@ -45,7 +46,7 @@ export default function AppRouter() {
           }
         />
 
-        {/* DASHBOARD DO DONO */}
+        {/* DASHBOARD DO DONO (ACESSO DIRETO) */}
         <Route
           path="/owner/dashboard"
           element={
@@ -54,7 +55,8 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         />
-        {/* --- ROTAS DO PAINEL (COM LAYOUT) --- */}
+
+        {/* --- ROTAS DO PAINEL DO DONO (Layout AppLayout) --- */}
         <Route element={<AppLayout />}>
           <Route
             path="/owner/dashboard"
@@ -101,27 +103,26 @@ export default function AppRouter() {
             }
           />
 
-          <Route
-            path="/staff/agenda"
-            element={
-              <ProtectedRoute allowedRoles={["staff", "dono"]}>
-                <StaffAgendaPage />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Adicione as rotas futuras aqui (services, shops, etc) */}
+          {/* REMOVIDO DAQUI: A rota /staff/agenda estava forçando o layout errado */}
         </Route>
-        {/* --- FIM ROTAS DO PAINEL --- */}
-        {/* AGENDA DO PROFISSIONAL */}
+
+        {/* --- ÁREA DO STAFF (NOVO LAYOUT SIMPLIFICADO) --- */}
         <Route
-          path="/staff/agenda"
+          path="/staff"
           element={
-            <ProtectedRoute allowedRoles={["staff"]}>
-              <StaffAgendaPage />
+            // Adicionei "dono" aqui também caso você queira espiar a agenda usando o layout do staff
+            <ProtectedRoute allowedRoles={["staff", "dono"]}>
+              <StaffLayout>
+                <Outlet />
+              </StaffLayout>
             </ProtectedRoute>
           }
-        />
+        >
+            <Route index element={<Navigate to="agenda" replace />} />
+            <Route path="agenda" element={<StaffAgendaPage />} />
+            <Route path="settings" element={<StaffProfilePage />} />
+        </Route>
+
 
         {/* PAINEL DO CLIENTE */}
         <Route
@@ -133,15 +134,9 @@ export default function AppRouter() {
           }
         />
 
-        {/* CONFIGURAÇÕES DA LOJA (Corrigido: Removida a duplicata) */}
-        <Route
-          path="/owner/settings"
-          element={
-            <ProtectedRoute allowedRoles={["dono"]}>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* FALLBACK */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
       </Routes>
     </BrowserRouter>
   );

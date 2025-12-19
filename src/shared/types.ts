@@ -190,8 +190,8 @@ export interface Appointment extends BaseRecord {
   start_time: string; // ISO
   end_time?: string | null; // ISO
 
-  status: AppointmentStatus;
-  payment_status: PaymentStatus;
+  status: AppointmentStatus | string;
+  payment_status: PaymentStatus | string;
 
   payment_method?: string | null; // relation payment_methods
   total_amount?: number | null;
@@ -201,6 +201,16 @@ export interface Appointment extends BaseRecord {
   barber_id: string; // relation users
   service_id: string; // relation services
   shop_id: string; // relation shops
+
+  // --- CORREÇÃO IMPORTANTE ---
+  // Adicionamos 'expand' para o TypeScript reconhecer os objetos expandidos
+  expand?: {
+    client_id?: User;
+    barber_id?: User;
+    service_id?: Service;
+    shop_id?: Shop;
+    payment_method?: PaymentMethod;
+  };
 }
 
 // ------------------------------------

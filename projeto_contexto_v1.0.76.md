@@ -1,5 +1,5 @@
-CONTEXTO DO PROJETO - VERSÃO 1.0.39
-Data de Geração: 17/12/2025 17:16:34
+CONTEXTO DO PROJETO - VERSÃO 1.0.76
+Data de Geração: 18/12/2025 23:25:46
 ### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
@@ -8,7 +8,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── index.html
 ├── package.json
 ├── pb_schema.md
-├── projeto_contexto_v1.0.38.md
+├── projeto_contexto_v1.0.75.md
 ├── Projeto_TeAgendei_v2.1.md
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -34,8 +34,10 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   │   ├── AppLayout.tsx
 │   │   │   │   ├── Header.tsx
 │   │   │   │   ├── Sidebar.tsx
+│   │   │   │   ├── StaffLayout.tsx
 │   │   ├── contexts/
 │   │   │   ├── AuthContext.tsx
+│   │   │   ├── BookingContext.tsx
 │   │   │   ├── TenantContext.tsx
 │   │   ├── lib/
 │   │   │   ├── api/
@@ -77,6 +79,7 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   │   ├── LandingPage.tsx
 │   │   │   ├── staff/
 │   │   │   │   ├── StaffAgendaPage.tsx
+│   │   │   │   ├── StaffProfilePage.tsx
 │   │   ├── routes/
 │   │   │   ├── AppRouter.tsx
 │   │   │   ├── ProtectedRoute.tsx
@@ -2361,11 +2364,11 @@ Path: pb_schema.md
 --- FIM DO ARQUIVO: pb_schema.md ---
 
 
---- INICIO DO ARQUIVO: projeto_contexto_v1.0.38.md ---
-Path: projeto_contexto_v1.0.38.md
+--- INICIO DO ARQUIVO: projeto_contexto_v1.0.75.md ---
+Path: projeto_contexto_v1.0.75.md
 ------------------------------
 
---- FIM DO ARQUIVO: projeto_contexto_v1.0.38.md ---
+--- FIM DO ARQUIVO: projeto_contexto_v1.0.75.md ---
 
 
 --- INICIO DO ARQUIVO: Projeto_TeAgendei_v2.1.md ---
@@ -2994,16 +2997,17 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepConfirm.tsx ---
 Path: src\react-app\components\booking\StepConfirm.tsx
 ------------------------------
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Service, User, TimeSlot } from "@/shared/types";
-import { createAppointment } from "../../lib/api/appointments";
+import { Service, User, TimeSlot, PaymentMethod } from "@/shared/types";
+import { createAppointment } from "../../lib/api/client";
 import { useAuth } from "../../contexts/AuthContext";
+import { pb } from "../../lib/api/pocketbase";
 
 interface StepConfirmProps {
-  shop: any; // Mantemos any para facilitar o acesso aos dados da loja
+  shop: any; 
   service: Service;
-  professional: User | null; // CORREÇÃO: Aceita null (Qualquer profissional)
+  professional: User | null; 
   timeSlot: TimeSlot;
   onBack: () => void;
 }
@@ -3015,57 +3019,99 @@ export default function StepConfirm({
   timeSlot,
   onBack,
 }: StepConfirmProps) {
-  const { user } = useAuth(); // Usuário logado (Cliente)
+  const { user } = useAuth();
   const navigate = useNavigate();
+  
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [selectedPayment, setSelectedPayment] = useState("");
+
+  // Busca métodos de pagamento
+  useEffect(() => {
+    let isMounted = true;
+    async function loadPayments() {
+        if (!shop?.accepted_payment_methods || shop.accepted_payment_methods.length === 0) return;
+        
+        try {
+            const filterQuery = shop.accepted_payment_methods.map((id: string) => `id="${id}"`).join(" || ");
+            if (filterQuery) {
+                const methods = await pb.collection("payment_methods").getFullList<PaymentMethod>({
+                    filter: filterQuery,
+                    sort: "name"
+                });
+                if (isMounted) {
+                    setPaymentMethods(methods);
+                    if (methods.length > 0) setSelectedPayment(methods[0].id);
+                }
+            }
+        } catch (err: any) {
+            if (err.status === 0 || err.isAbort) return;
+            console.error("Erro pagamentos", err);
+        }
+    }
+    loadPayments();
+    return () => { isMounted = false; };
+  }, [shop]);
 
   const handleConfirm = async () => {
     if (!user) {
-      // Redireciona para login/registro se não estiver logado
-      // Salvamos o estado atual na URL ou localStorage idealmente, 
-      // mas por simplicidade vamos mandar pro login.
       alert("Você precisa estar logado para finalizar.");
-      navigate("/register?mode=client"); // ou /login
+      navigate("/register?mode=client");
       return;
     }
 
     setSubmitting(true);
-    try {
-      // Se professional for null, o backend deve decidir ou pegamos um ID aleatório/disponível.
-      // Neste MVP, se for null, enviamos string vazia ou tratamos antes.
-      // O ideal é que o StepDateTime já tenha retornado um profissional real alocado no horário.
-      // Se a lógica do sistema permitir "qualquer", o backend distribui.
-      
-      // Assumindo que o ID do profissional é obrigatório no banco:
-      // Se for "qualquer", precisamos que a lógica anterior (StepDateTime) tenha definido quem vai atender,
-      // OU enviamos um ID específico de "Fila".
-      
-      // AJUSTE: Se professional for null, usamos o primeiro ID disponível na loja (simplificação) ou tratamos erro.
-      // Para este código funcionar sem erro 400, professional_id não pode ser vazio se o banco exige.
-      
-      const barberId = professional?.id || ""; 
+    setError("");
 
+    try {
+      // 1. Define quem é o profissional responsável
+      // Se user escolheu 'Qualquer' (null), usamos o ID do dono da loja como fallback
+      const finalBarberId = professional?.id || shop.owner_id;
+
+      if (!finalBarberId) {
+          throw new Error("Erro de configuração: A loja não possui um responsável padrão definido.");
+      }
+
+      // 2. Cria o agendamento
       await createAppointment({
         shop_id: shop.id,
         client_id: user.id,
         service_id: service.id,
-        barber_id: barberId, // O PocketBase vai exigir um ID válido se o campo for required
+        barber_id: finalBarberId,
         start_time: timeSlot.startISO,
         end_time: timeSlot.endISO,
         total_amount: service.price,
-        notes: "Agendamento via App",
+        payment_method: selectedPayment || undefined,
       });
 
       alert("Agendamento realizado com sucesso!");
-      navigate("/client"); // Vai para o painel do cliente
+      navigate("/client");
       
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao confirmar agendamento.");
+    } catch (err: any) {
+      console.error("Erro ao agendar:", err);
+      // Tratamento específico para erro 400 (Validação)
+      if (err.status === 400) {
+        // Tenta ler a resposta do servidor para ver qual campo falhou
+        const data = err.data?.data || {};
+        const fieldErrors = Object.keys(data).join(", ");
+        setError(`Erro de validação nos campos: ${fieldErrors || "Dados inválidos"}.`);
+      } else {
+        setError(err.message || "Erro ao confirmar agendamento. Tente novamente.");
+      }
     } finally {
       setSubmitting(false);
     }
   };
+
+  const dateDisplay = new Date(timeSlot.startISO).toLocaleDateString("pt-BR", { 
+      weekday: 'long', day: 'numeric', month: 'long' 
+  });
+  
+  const priceDisplay = new Intl.NumberFormat('pt-BR', { 
+      style: 'currency', currency: 'BRL' 
+  }).format(service.price);
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -3086,18 +3132,16 @@ export default function StepConfirm({
             <p className="font-semibold text-white">{service.name}</p>
             <p className="text-xs text-slate-400">{service.duration} min</p>
           </div>
-          <p className="font-bold text-emerald-400">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(service.price)}
-          </p>
+          <p className="font-bold text-emerald-400">{priceDisplay}</p>
         </div>
 
         {/* Profissional */}
         <div className="pb-4 border-b border-white/5">
           <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Profissional</p>
           <div className="flex items-center gap-3">
-             <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">
+             <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 overflow-hidden">
                 {professional?.avatar ? (
-                   <img src={professional.avatar} className="h-full w-full rounded-full object-cover"/>
+                   <img src={professional.avatar} className="h-full w-full object-cover"/>
                 ) : (
                    professional?.name?.[0] || "?"
                 )}
@@ -3112,9 +3156,7 @@ export default function StepConfirm({
         <div>
            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Data e Hora</p>
            <p className="text-lg font-bold text-white capitalize">
-              {new Date(timeSlot.startISO).toLocaleDateString("pt-BR", { 
-                  weekday: 'long', day: 'numeric', month: 'long' 
-              })}
+              {dateDisplay}
            </p>
            <p className="text-2xl font-mono text-emerald-400">
               {timeSlot.time}
@@ -3122,6 +3164,43 @@ export default function StepConfirm({
         </div>
 
       </div>
+
+      {/* SELEÇÃO DE PAGAMENTO */}
+      {paymentMethods.length > 0 && (
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6">
+            <h3 className="text-sm font-semibold text-white mb-4">Como prefere pagar?</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {paymentMethods.map(pm => (
+                    <label 
+                        key={pm.id} 
+                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition relative select-none
+                        ${selectedPayment === pm.id 
+                            ? "bg-emerald-500/10 border-emerald-500 text-emerald-400" 
+                            : "bg-black/20 border-white/5 hover:border-white/20 text-slate-400"}`}
+                    >
+                        <input 
+                            type="radio" 
+                            name="payment" 
+                            value={pm.id} 
+                            checked={selectedPayment === pm.id}
+                            onChange={(e) => setSelectedPayment(e.target.value)}
+                            className="w-4 h-4 accent-emerald-500"
+                        />
+                        <span className="font-medium">{pm.name}</span>
+                    </label>
+                ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-3 text-center">
+                * O pagamento será realizado no local.
+            </p>
+          </div>
+      )}
+
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm text-center">
+          {error}
+        </div>
+      )}
 
       <button 
         onClick={handleConfirm}
@@ -3141,6 +3220,7 @@ Path: src\react-app\components\booking\StepDateTime.tsx
 ------------------------------
 import { useEffect, useState } from "react";
 import type { Shop, Service, User, TimeSlot, ShopHour } from "@/shared/types";
+// CORREÇÃO: Importando do lugar certo (availability.ts)
 import { getShopHours, getProfessionalAppointments } from "@/react-app/lib/api/availability";
 import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
 import { generateSlots } from "@/react-app/lib/utils/slots";
@@ -3182,12 +3262,16 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         setSelectedDate(today);
       }
 
-      // Se professional for null, buscamos um default da loja
+      // Se professional for null (Opção "Qualquer"), buscamos um default da loja
+      // (Geralmente o primeiro da lista ou o dono, para fins de cálculo de slot)
       if (!professional) {
         try {
           const profs = await getProfessionalsByShop(shop.id);
           if (isMounted && profs.length > 0) {
             setEffectiveProfessional(profs[0]);
+          } else if (isMounted) {
+             // Fallback se não achar ninguém, tenta usar o dono se disponível nos dados da loja
+             // Mas idealmente a loja deve ter profissionais.
           }
         } catch (err: any) {
            if (err.status !== 0 && !err.isAbort) console.error(err);
@@ -3211,6 +3295,7 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
     async function loadSlots() {
       setLoading(true);
       try {
+        // CORREÇÃO: Usando a função correta getProfessionalAppointments
         const appointments = await getProfessionalAppointments(effectiveProfessional!.id, selectedDate);
         
         if (!isMounted) return;
@@ -3224,7 +3309,6 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         
         setSlots(generated);
       } catch (err: any) {
-        // Ignora cancelamento
         if (err.status === 0 || err.isAbort) return;
         console.error("Erro ao gerar slots", err);
       } finally {
@@ -3244,7 +3328,7 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">Passo 3 • Data e Hora</p>
         <h2 className="text-xl md:text-2xl font-semibold text-slate-50">Quando será o atendimento?</h2>
         <p className="text-sm text-slate-300 mt-1">
-          Profissional: <span className="text-emerald-300">{professional ? professional.name : "Qualquer profissional"}</span> • Duração: {service.duration} min
+          Profissional: <span className="text-emerald-300">{effectiveProfessional ? effectiveProfessional.name : "Carregando..."}</span> • Duração: {service.duration} min
         </p>
       </div>
 
@@ -3254,17 +3338,24 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         <input 
           type="date" 
           value={selectedDate}
+          min={new Date().toISOString().split("T")[0]}
           onChange={(e) => {
             setSelectedDate(e.target.value);
             setSelectedSlot(null);
           }}
-          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 color-scheme-dark"
+          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 color-scheme-dark font-bold tracking-wide"
         />
       </div>
 
       {/* Grid de Horários */}
       <div className="space-y-2">
-        <label className="text-xs font-medium text-slate-400">Horários disponíveis</label>
+        <div className="flex justify-between items-end">
+             <label className="text-xs font-medium text-slate-400">Horários</label>
+             <div className="flex gap-3 text-[10px] text-slate-500">
+                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div> Livre</span>
+                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500/20 border border-red-500/50"></div> Ocupado</span>
+             </div>
+        </div>
         
         {!effectiveProfessional ? (
            <div className="py-8 text-center text-slate-500 text-sm">Carregando disponibilidade...</div>
@@ -3275,25 +3366,35 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
             Nenhum horário disponível nesta data.
           </div>
         ) : (
-          <div className="grid grid-cols-4 gap-2 md:grid-cols-5">
-            {slots.map((slot) => (
-              <button
-                key={slot.time}
-                disabled={!slot.isAvailable}
-                onClick={() => setSelectedSlot(slot)}
-                className={`
-                  py-2 px-1 rounded-lg text-sm font-medium transition relative
-                  ${!slot.isAvailable 
-                    ? "bg-slate-800/30 text-slate-600 cursor-not-allowed" 
-                    : selectedSlot?.time === slot.time
-                      ? "bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-105 z-10"
-                      : "bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white"
-                  }
-                `}
-              >
-                {slot.time}
-              </button>
-            ))}
+          <div className="grid grid-cols-4 gap-2 md:grid-cols-5 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
+            {slots.map((slot) => {
+              const isSelected = selectedSlot?.time === slot.time;
+              
+              // LÓGICA DE ESTILOS (VERMELHO VS VERDE)
+              let btnClass = "py-2 px-1 rounded-lg text-sm font-bold transition relative border ";
+              
+              if (!slot.isAvailable) {
+                  // OCUPADO: Vermelho, riscado, opaco
+                  btnClass += "bg-red-500/10 border-red-500/20 text-red-400/60 cursor-not-allowed line-through decoration-red-500/30";
+              } else if (isSelected) {
+                  // SELECIONADO: Verde Sólido, Destaque
+                  btnClass += "bg-emerald-500 border-emerald-500 text-black shadow-lg shadow-emerald-500/20 scale-105 z-10";
+              } else {
+                  // LIVRE: Verde transparente, Hover
+                  btnClass += "bg-emerald-500/5 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/40 cursor-pointer";
+              }
+
+              return (
+                <button
+                  key={slot.time}
+                  disabled={!slot.isAvailable}
+                  onClick={() => setSelectedSlot(slot)}
+                  className={btnClass}
+                >
+                  {slot.time}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -3726,6 +3827,86 @@ export default function Sidebar() {
 --- FIM DO ARQUIVO: src\react-app\components\layout\Sidebar.tsx ---
 
 
+--- INICIO DO ARQUIVO: src\react-app\components\layout\StaffLayout.tsx ---
+Path: src\react-app\components\layout\StaffLayout.tsx
+------------------------------
+import { ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+
+export default function StaffLayout({ children }: { children: ReactNode }) {
+  const { user, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  // Menu simplificado conforme solicitado
+  const menuItems = [
+    { label: "Minha Agenda", path: "/staff/agenda", icon: "📅" },
+    { label: "Meus Dados e Senha", path: "/staff/settings", icon: "🔒" },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col md:flex-row">
+      
+      {/* SIDEBAR EXCLUSIVA STAFF */}
+      <aside className="w-full md:w-64 bg-slate-900 border-r border-white/5 flex flex-col">
+        <div className="p-6 border-b border-white/5 flex items-center gap-3">
+          <div className="h-10 w-10 bg-emerald-500/10 rounded-xl flex items-center justify-center text-xl border border-emerald-500/20">
+             ✂️
+          </div>
+          <div>
+            <h1 className="font-bold text-white tracking-tight">Área Staff</h1>
+            <p className="text-xs text-slate-500 truncate max-w-[120px]">{user?.name}</p>
+          </div>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2">
+          {menuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${
+                  isActive
+                    ? "bg-emerald-600/10 text-emerald-400 border border-emerald-500/20"
+                    : "text-slate-400 hover:bg-white/5 hover:text-white border border-transparent"
+                }`}
+              >
+                <span className="text-lg">{item.icon}</span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-white/5">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition border border-transparent hover:border-red-500/20"
+          >
+            🚪 Sair do Sistema
+          </button>
+        </div>
+      </aside>
+
+      {/* ÁREA DE CONTEÚDO */}
+      <main className="flex-1 overflow-y-auto h-screen relative bg-slate-950">
+        <div className="p-4 md:p-8 max-w-5xl mx-auto">
+            {children}
+        </div>
+      </main>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\components\layout\StaffLayout.tsx ---
+
+
 --- INICIO DO ARQUIVO: src\react-app\contexts\AuthContext.tsx ---
 Path: src\react-app\contexts\AuthContext.tsx
 ------------------------------
@@ -3833,6 +4014,75 @@ export const useAuth = (): AuthContextType => {
 };
 
 --- FIM DO ARQUIVO: src\react-app\contexts\AuthContext.tsx ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\contexts\BookingContext.tsx ---
+Path: src\react-app\contexts\BookingContext.tsx
+------------------------------
+import { createContext, useContext, useState, ReactNode } from "react";
+import type { Shop, Service, User, TimeSlot } from "@/shared/types";
+
+type BookingContextType = {
+  shop: Shop | null;
+  service: Service | null;
+  professional: User | null;
+  selectedDate: string; // YYYY-MM-DD
+  selectedTime: string; // HH:MM
+  
+  setShop: (shop: Shop) => void;
+  setService: (service: Service | null) => void;
+  setProfessional: (professional: User | null) => void;
+  setDate: (date: string) => void;
+  setTime: (time: string) => void;
+  
+  resetBooking: () => void;
+};
+
+const BookingContext = createContext<BookingContextType | undefined>(undefined);
+
+export function BookingProvider({ children }: { children: ReactNode }) {
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [service, setService] = useState<Service | null>(null);
+  const [professional, setProfessional] = useState<User | null>(null);
+  const [selectedDate, setDate] = useState("");
+  const [selectedTime, setTime] = useState("");
+
+  const resetBooking = () => {
+    setService(null);
+    setProfessional(null);
+    setDate("");
+    setTime("");
+  };
+
+  return (
+    <BookingContext.Provider
+      value={{
+        shop,
+        service,
+        professional,
+        selectedDate,
+        selectedTime,
+        setShop,
+        setService,
+        setProfessional,
+        setDate,
+        setTime,
+        resetBooking
+      }}
+    >
+      {children}
+    </BookingContext.Provider>
+  );
+}
+
+export function useBooking() {
+  const context = useContext(BookingContext);
+  if (!context) {
+    throw new Error("useBooking deve ser usado dentro de BookingProvider");
+  }
+  return context;
+}
+--- FIM DO ARQUIVO: src\react-app\contexts\BookingContext.tsx ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\contexts\TenantContext.tsx ---
@@ -3961,70 +4211,77 @@ export const useTenant = (): TenantContextType => {
 Path: src\react-app\lib\api\appointments.ts
 ------------------------------
 import { pb } from "./pocketbase";
-import type { CreateAppointmentDTO, Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
+import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
 
-/**
- * Cria um novo agendamento
- */
-export async function createAppointment(data: CreateAppointmentDTO): Promise<Appointment> {
-  // PocketBase espera datas em UTC. O front deve enviar ISO string completa.
-  const record = await pb.collection("appointments").create({
-    start_time: data.start_time,
-    end_time: data.end_time,
-    client_id: data.client_id,
-    barber_id: data.barber_id,
-    service_id: data.service_id,
-    shop_id: data.shop_id,
-    status: "1", // 1 = Pendente
-    payment_status: "1", // 1 = A Pagar
-    total_amount: data.total_amount,
-    notes: data.notes
-  });
-  return record as unknown as Appointment;
+// Função auxiliar para mapear o registro do PocketBase para o tipo Appointment
+function asAppointment(record: any): Appointment {
+  const expand = record.expand || {};
+
+  return {
+    id: record.id,
+    shop_id: record.shop_id,
+    client_id: record.client_id,
+    barber_id: record.barber_id,
+    service_id: record.service_id,
+    start_time: record.start_time,
+    end_time: record.end_time,
+    status: record.status,
+    total_amount: record.total_amount,
+    payment_status: record.payment_status,
+    payment_method: record.payment_method, // Novo campo mapeado
+    notes: record.notes,
+    created: record.created,
+    updated: record.updated,
+    expand: {
+      shop_id: expand.shop_id,
+      client_id: expand.client_id ? {
+        ...expand.client_id,
+        avatar: expand.client_id.avatar ? pb.files.getURL(expand.client_id, expand.client_id.avatar) : undefined
+      } : undefined,
+      barber_id: expand.barber_id ? {
+        ...expand.barber_id,
+        avatar: expand.barber_id.avatar ? pb.files.getURL(expand.barber_id, expand.barber_id.avatar) : undefined
+      } : undefined,
+      service_id: expand.service_id,
+      payment_method: expand.payment_method // Novo expand mapeado
+    }
+  };
 }
 
-/**
- * 🆕 Busca agendamentos do dia para um profissional (STAFF)
- * CORREÇÃO: Usa data local para definir o filtro de início e fim do dia
- */
-export async function getStaffAppointmentsToday(barberId: string): Promise<Appointment[]> {
-  // Cria data local correta (YYYY-MM-DD)
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const todayDateString = `${year}-${month}-${day}`;
-
-  // Filtro: do início (00:00:00) ao fim (23:59:59) do dia LOCAL
-  const startOfDay = `${todayDateString} 00:00:00`;
-  const endOfDay = `${todayDateString} 23:59:59`;
+export async function getStaffAppointmentsByDate(staffId: string, date: string): Promise<Appointment[]> {
+  const startOfDay = `${date} 00:00:00`;
+  const endOfDay = `${date} 23:59:59`;
 
   const records = await pb.collection("appointments").getFullList<Appointment>({
-    filter: `barber_id = "${barberId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
-    sort: "+start_time",
-    expand: "client_id,service_id,payment_method",
+    filter: `barber_id = "${staffId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}"`,
+    sort: "start_time",
+    expand: "client_id,service_id,shop_id,barber_id,payment_method", // Adicionado payment_method
   });
 
-  return records;
+  return records.map(asAppointment);
 }
 
-/**
- * 🆕 Atualiza status do agendamento (Iniciar, Finalizar, Cancelar)
- */
+// ATUALIZADO: Suporte para atualizar o Método de Pagamento ao finalizar
 export async function updateAppointmentStatus(
-  id: string, 
-  status: AppointmentStatus, 
-  paymentStatus?: PaymentStatus
+    id: string, 
+    status: AppointmentStatus, 
+    paymentStatus?: PaymentStatus,
+    paymentMethodId?: string // Parâmetro opcional novo
 ): Promise<Appointment> {
-  const data: any = { status };
   
-  // Se mudar o status de pagamento, envia junto
+  const payload: any = { status };
+  
   if (paymentStatus) {
-    data.payment_status = paymentStatus;
+    payload.payment_status = paymentStatus;
   }
   
-  const record = await pb.collection("appointments").update(id, data);
-  return record as unknown as Appointment;
+  if (paymentMethodId) {
+    payload.payment_method = paymentMethodId;
+  }
+
+  const record = await pb.collection("appointments").update(id, payload);
+  // Usa o helper para retornar o objeto formatado com expands
+  return asAppointment(record);
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
 
@@ -4034,6 +4291,7 @@ Path: src\react-app\lib\api\availability.ts
 ------------------------------
 import { pb } from "./pocketbase";
 import type { ShopHour, Appointment } from "@/shared/types";
+import { AppointmentStatus } from "@/shared/types"; // Importamos para usar o enum se disponível, ou usamos string direta
 
 // Busca horários da loja (Sem try/catch interno, deixa o componente tratar)
 export async function getShopHours(shopId: string): Promise<ShopHour[]> {
@@ -4050,8 +4308,11 @@ export async function getProfessionalAppointments(
   const startOfDay = `${date} 00:00:00`;
   const endOfDay = `${date} 23:59:59`;
 
+  // CORREÇÃO:
+  // 1. Mudamos status != 'cancelled' para status != '0' (Código real do banco)
+  // 2. Adicionamos sort criado para garantir ordem
   return await pb.collection("appointments").getFullList<Appointment>({
-    filter: `barber_id = "${professionalId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != 'cancelled'`,
+    filter: `barber_id = "${professionalId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != "0"`,
     sort: "start_time",
   });
 }
@@ -4062,30 +4323,43 @@ export async function getProfessionalAppointments(
 Path: src\react-app\lib\api\client.ts
 ------------------------------
 import { pb } from "./pocketbase";
-import { Appointment, AppointmentStatus } from "@/shared/types";
+import type { Appointment } from "@/shared/types";
 
-// ... (mantenha createClientUser, findExistingClientByEmail, etc.)
-
-/**
- * Busca todos os agendamentos do cliente logado
- */
-export async function getMyAppointments(userId: string): Promise<Appointment[]> {
-  const records = await pb.collection("appointments").getFullList<Appointment>({
-    filter: `client_id = "${userId}"`,
-    sort: "-start_time", // Mais recentes primeiro
-    expand: "shop_id,service_id,barber_id", // Traz dados da loja, serviço e barbeiro
-  });
-  return records;
+// Tipagem do payload de criação
+export interface CreateAppointmentPayload {
+  shop_id: string;
+  client_id: string;
+  service_id: string;
+  barber_id: string;
+  start_time: string; // ISO string UTC
+  end_time: string;   // ISO string UTC
+  total_amount: number;
+  payment_method?: string;
 }
 
-/**
- * Cancela um agendamento (pelo próprio cliente)
- */
-export async function cancelMyAppointment(appointmentId: string): Promise<boolean> {
-  await pb.collection("appointments").update(appointmentId, {
-    status: AppointmentStatus.Cancelled,
+export async function getMyAppointments(userId: string): Promise<Appointment[]> {
+  return await pb.collection("appointments").getFullList<Appointment>({
+    filter: `client_id = "${userId}"`,
+    sort: "-start_time",
+    expand: "shop_id,service_id,barber_id,payment_method",
   });
-  return true;
+}
+
+export async function createAppointment(data: CreateAppointmentPayload): Promise<Appointment> {
+  // CORREÇÃO: Enviamos '1' (string) para payment_status, compatível com o Enum e Select do PB.
+  // status '1' = Pendente (Confirmação)
+  // payment_status '1' = A Pagar
+  
+  return await pb.collection("appointments").create<Appointment>({
+    ...data,
+    status: "1", 
+    payment_status: "1" 
+  });
+}
+
+export async function cancelMyAppointment(id: string): Promise<void> {
+  // Status "0" = Cancelado
+  await pb.collection("appointments").update(id, { status: "0" });
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\client.ts ---
 
@@ -4093,85 +4367,74 @@ export async function cancelMyAppointment(appointmentId: string): Promise<boolea
 --- INICIO DO ARQUIVO: src\react-app\lib\api\dashboard.ts ---
 Path: src\react-app\lib\api\dashboard.ts
 ------------------------------
-// src/react-app/lib/api/dashboard.ts
+import { pb } from "./pocketbase";
+import type { Appointment } from "@/shared/types";
 
-import {pb} from "./pocketbase";
-
-/* ------------------------------------------------------
-   Tipos do Dashboard
------------------------------------------------------- */
-
-export type TodayKpis = {
+// Interface para os dados do gráfico/cards (mantida para tipagem do estado)
+export interface DailyKpis {
   total_bookings: number;
   unique_clients: number;
   total_value: number;
-};
+}
 
-export type TodayBooking = {
+export interface DailyBooking {
   id: string;
+  client_id: string; // Adicionado para contagem correta
   client_name: string;
   professional_name: string;
   service_name: string;
   time: string;
-};
-
-/* ------------------------------------------------------
-   Função: KPIs do dia
------------------------------------------------------- */
-
-export async function fetchTodayKpis(shopId: string): Promise<TodayKpis> {
-  const today = new Date();
-  const dateStr = today.toISOString().split("T")[0]; // yyyy-mm-dd
-
-  const records = await pb.collection("appointments").getFullList({
-    filter: `shop_id = "${shopId}" && date = "${dateStr}"`,
-    expand: "client_id,professional_id,service_id",
-  });
-
-  const total_bookings = records.length;
-
-  const unique_clients = new Set(
-    records.map((r) => r.client_id)
-  ).size;
-
-  const total_value = records.reduce((sum, r) => {
-    const service = r.expand?.service_id;
-    const value = service?.price ?? 0;
-    return sum + Number(value);
-  }, 0);
-
-  return {
-    total_bookings,
-    unique_clients,
-    total_value,
-  };
+  status: string;
+  value: number;
+  raw_status: string;
 }
 
-/* ------------------------------------------------------
-   Função: Próximos atendimentos do dia
------------------------------------------------------- */
-
-export async function fetchTodayBookings(
-  shopId: string
-): Promise<TodayBooking[]> {
-  const today = new Date();
-  const dateStr = today.toISOString().split("T")[0];
-
-  const records = await pb.collection("appointments").getFullList({
-    filter: `shop_id = "${shopId}" && date = "${dateStr}"`,
-    sort: "start_time",
-    expand: "client_id,professional_id,service_id",
-  });
-
-  return records.map((r) => ({
-    id: r.id,
-    client_name: r.expand?.client_id?.name ?? "Cliente",
-    professional_name: r.expand?.professional_id?.name ?? "Profissional",
-    service_name: r.expand?.service_id?.name ?? "Serviço",
-    time: r.start_time ?? "",
-  }));
+function formatTimeVisual(isoString: string) {
+  if (!isoString) return "--:--";
+  return isoString.substring(11, 16);
 }
 
+/**
+ * Busca lista de agendamentos.
+ * OBS: Não precisamos mais da função fetchDailyKpis separada,
+ * calcularemos os totais baseados no retorno desta função.
+ */
+export async function fetchDailyBookings(shopId: string, dateString: string): Promise<DailyBooking[]> {
+  const startOfDay = `${dateString} 00:00:00`;
+  const endOfDay = `${dateString} 23:59:59`;
+
+  try {
+    const records = await pb.collection("appointments").getFullList<Appointment>({
+      filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
+      sort: "+start_time",
+      expand: "client_id,barber_id,service_id",
+    });
+
+    return records.map((record) => {
+      const expanded = (record as any).expand || {};
+      const time = formatTimeVisual(record.start_time);
+
+      return {
+        id: record.id,
+        client_id: record.client_id, // Importante para contar clientes únicos
+        client_name: expanded.client_id?.name || "Cliente",
+        professional_name: expanded.barber_id?.name || "Profissional",
+        service_name: expanded.service_id?.name || "Serviço",
+        time,
+        status: record.status,
+        raw_status: record.status,
+        value: record.total_amount || 0
+      };
+    });
+  } catch (err: any) {
+    // Se for cancelamento, relança o erro para o componente controlar
+    if (err.status === 0 || err.isAbort) {
+        throw err;
+    }
+    console.error("[Bookings] Erro ao buscar lista:", err);
+    return [];
+  }
+}
 --- FIM DO ARQUIVO: src\react-app\lib\api\dashboard.ts ---
 
 
@@ -4537,6 +4800,7 @@ export async function registerOwner(input: RegisterOwnerInput) {
     password: input.password,
     passwordConfirm: input.password,
     role: "dono",
+    // Dono não tem shop_id na criação do user, ele cria depois no onboarding
   };
 
   const user = await pb.collection("users").create(payload);
@@ -4576,7 +4840,6 @@ export async function linkUserToCompany(
   companyId: string,
   shopId: string
 ) {
-  // Tenta verificar se já existe. Se der erro (ex: permissão), ignora e tenta criar.
   try {
       const exists = await isUserLinkedToCompany(userId, companyId);
       if (exists) return null;
@@ -4610,35 +4873,42 @@ export async function registerClient(input: RegisterClientInput) {
       password,
       passwordConfirm: password,
       role: "cliente",
+      // CORREÇÃO: Salva a empresa e loja de origem diretamente no usuário
+      company_id: companyId,
+      shop_id: shopId
     };
     
     user = await pb.collection("users").create<User>(payload);
     
-    // Se criou agora, precisamos logar para ter permissão de criar o vínculo
+    // Se criou agora, precisamos logar para ter permissão de criar o vínculo na tabela auxiliar
     const authData = await pb.collection("users").authWithPassword(email, password);
     user = authData.record as unknown as User;
 
   } catch (createErr: any) {
     // Passo B: Se deu erro na criação (400), pode ser duplicado OU validação.
-    // Vamos tentar Logar. Se logar, era duplicado e a senha está certa.
-    // Se não logar, o erro original (createErr) era o importante (ex: senha curta, email inválido).
-    
     try {
         const authData = await pb.collection("users").authWithPassword(email, password);
         user = authData.record as unknown as User;
         // Sucesso! Era um usuário existente.
     } catch (loginErr) {
-        // O login falhou. Isso significa que não era um usuário existente com essa senha.
-        // Provavelmente era um erro de validação (ex: email inválido, senha muito curta)
-        // Então, lançamos o erro original de criação para o frontend mostrar.
+        // Se falhar o login, lança o erro original de criação (validação)
         throw createErr;
     }
   }
 
-  // Passo C: Criar Vínculo (Agora estamos logados com certeza)
+  // Passo C: Criar Vínculo na tabela auxiliar (Garante histórico multi-loja)
   if (user) {
     try {
         await linkUserToCompany(user.id, companyId, shopId);
+        
+        // Opcional: Se o usuário existente não tinha shop_id (era null), podemos atualizar agora
+        if (!user.shop_id) {
+           await pb.collection("users").update(user.id, {
+             company_id: companyId,
+             shop_id: shopId
+           });
+        }
+        
     } catch (linkErr) {
         console.error("Aviso: Vínculo já existia ou falhou", linkErr);
     }
@@ -4648,11 +4918,9 @@ export async function registerClient(input: RegisterClientInput) {
 }
 
 /* ============================================================
-   3) Buscar shops ativos + empresa (CORRIGIDO COM EXPAND)
+   3) Buscar shops ativos + empresa
 ============================================================ */
 export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> {
-  // CORREÇÃO: Usamos 'expand' para trazer os dados da empresa na mesma requisição.
-  // Isso evita o erro de permissão ao tentar buscar a empresa separadamente.
   const shops = await pb.collection("shops").getFullList({
     filter: `is_active = true`, 
     sort: "name",
@@ -4660,13 +4928,10 @@ export async function fetchActiveShopsWithCompany(): Promise<ShopWithCompany[]> 
   });
 
   const result: ShopWithCompany[] = shops.map((shop) => {
-      // O PocketBase retorna o objeto expandido dentro da propriedade 'expand'
-      // O nome da propriedade dentro de expand é o nome do campo de relação (company_id)
       const company = shop.expand?.company_id;
-      
       return {
           shop,
-          company: company || { legal_name: "Empresa", id: shop.company_id } // Fallback visual
+          company: company || { legal_name: "Empresa", id: shop.company_id } 
       };
   });
 
@@ -4890,7 +5155,6 @@ Path: src\react-app\lib\api\staff.ts
 import { pb } from "./pocketbase";
 import type { User } from "@/shared/types";
 
-// Função auxiliar interna
 function asUser(record: any): User {
     return {
       id: record.id,
@@ -4898,14 +5162,14 @@ function asUser(record: any): User {
       name: record.name,
       role: record.role,
       phone: record.phone,
-      avatar: record.avatar ? pb.files.getUrl(record, record.avatar) : undefined,
+      avatar: record.avatar ? pb.files.getURL(record, record.avatar) : undefined,
       company_id: record.company_id,
       shop_id: record.shop_id,
       is_professional: record.is_professional,
       created: record.created,
       updated: record.updated,
     };
-  }
+}
 
 export async function getProfessionalsByShop(shopId: string): Promise<User[]> {
   const records = await pb.collection("users").getFullList({
@@ -4915,33 +5179,57 @@ export async function getProfessionalsByShop(shopId: string): Promise<User[]> {
   return records.map(asUser);
 }
 
-// Criação simplificada de profissional (simulando convite)
 export async function createProfessionalUser(data: {
     email: string;
     name: string;
+    phone?: string;
+    password?: string;
     company_id: string;
     shop_id: string;
 }): Promise<User> {
-    // Senha provisória padrão
-    const tempPassword = "Mudar@123"; 
     
-    const record = await pb.collection("users").create({
-        email: data.email,
-        emailVisibility: true,
-        password: tempPassword,
-        passwordConfirm: tempPassword,
-        name: data.name,
-        role: "staff", // ou 'dono' se for sócio
+    // Define senha: Se vier vazia ou curta (<8), usa a padrão.
+    const passwordToUse = (data.password && data.password.trim().length >= 8) 
+        ? data.password 
+        : "Mudar@123";
+
+    // Payload de criação
+    const payload: any = {
+        email: data.email.trim(), 
+        emailVisibility: false, // CORREÇÃO: False para manter padrão
+        // verified: true, // OBS: O PocketBase ignora isso se quem cria não for Admin.
+                           // Por isso é necessário desativar "Require email verification" nas configurações.
+        password: passwordToUse,
+        passwordConfirm: passwordToUse,
+        name: data.name.trim(),
+        role: "staff",
         is_professional: true,
         company_id: data.company_id,
         shop_id: data.shop_id
-    });
+    };
+
+    if (data.phone && data.phone.trim() !== "") {
+        payload.phone = data.phone.trim();
+    }
+
+    const record = await pb.collection("users").create(payload);
+    return asUser(record);
+}
+
+export async function updateProfessionalUser(id: string, data: {
+    name?: string;
+    phone?: string;
+}): Promise<User> {
+    const payload: any = {};
     
+    if (data.name !== undefined) payload.name = data.name.trim();
+    if (data.phone !== undefined) payload.phone = data.phone.trim();
+
+    const record = await pb.collection("users").update(id, payload);
     return asUser(record);
 }
 
 export async function removeProfessional(userId: string): Promise<boolean> {
-    // Apenas remove a flag, não apaga o user para manter histórico
     await pb.collection("users").update(userId, { is_professional: false });
     return true;
 }
@@ -4951,7 +5239,6 @@ export async function removeProfessional(userId: string): Promise<boolean> {
 --- INICIO DO ARQUIVO: src\react-app\lib\utils\slots.ts ---
 Path: src\react-app\lib\utils\slots.ts
 ------------------------------
-// Caminho: src/react-app/lib/utils/slots.ts
 import type { ShopHour, Appointment, TimeSlot } from "@/shared/types";
 
 // Helper: converte "09:30" para minutos (570)
@@ -4965,6 +5252,14 @@ function minutesToTime(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+// Helper: Limpa a data do PocketBase para garantir comparação local exata
+// Transforma "2025-12-19 08:00:00.000Z" em "2025-12-19T08:00:00"
+function normalizeDateStr(isoString: string): string {
+  if (!isoString) return "";
+  // Pega apenas os primeiros 19 caracteres (YYYY-MM-DDTHH:mm:ss) e troca espaço por T
+  return isoString.substring(0, 19).replace(" ", "T");
 }
 
 const WEEKDAY_MAP: Record<number, string> = {
@@ -4982,6 +5277,7 @@ export function generateSlots(
 ): TimeSlot[] {
   const dateObj = new Date(dateStr + "T00:00:00");
   const weekday = WEEKDAY_MAP[dateObj.getDay()];
+  const now = new Date(); // Hora atual do sistema
 
   // 1. Achar horário da loja para hoje
   const hours = shopHours.find((h) => h.weekday === weekday);
@@ -4998,32 +5294,57 @@ export function generateSlots(
   // 2. Loop para criar slots (ex: 09:00, 09:30, 10:00...)
   for (let current = startMin; current + serviceDuration <= endMin; current += serviceDuration) {
     const timeString = minutesToTime(current);
-    const slotStartISO = `${dateStr} ${timeString}:00`;
+    
+    // Monta o Slot usando formato ISO local (sem Z)
+    const slotStartISO = `${dateStr}T${timeString}:00`; 
     
     // Calcular fim do slot
     const slotEndMin = current + serviceDuration;
     const slotEndTimeString = minutesToTime(slotEndMin);
-    const slotEndISO = `${dateStr} ${slotEndTimeString}:00`;
+    const slotEndISO = `${dateStr}T${slotEndTimeString}:00`;
+
+    const slotStartDate = new Date(slotStartISO);
+    const slotEndDate = new Date(slotEndISO);
+
+    // [REGRA] Ignora horários que já passaram hoje
+    if (slotStartDate < now) {
+        continue;
+    }
+
+    const slotStartMs = slotStartDate.getTime();
+    const slotEndMs = slotEndDate.getTime();
 
     // 3. Verificar colisão com agendamentos existentes
     const isBusy = existingAppointments.some((appt) => {
-      const apptStart = new Date(appt.start_time).getTime(); // Assumindo que vem UTC ou ISO correto
-      // Pequeno ajuste: appointments no PB são salvos como string UTC.
-      // Simplificação para este passo: vamos comparar strings de hora se possível, 
-      // mas o ideal é comparar timestamps completos.
+      // Normaliza a data do banco para ignorar fuso horário (trata como local)
+      const apptStartStr = normalizeDateStr(appt.start_time);
       
-      const thisSlotStart = new Date(slotStartISO).getTime();
-      const thisSlotEnd = new Date(slotEndISO).getTime();
+      // Se a data for inválida, ignora
+      if (!apptStartStr) return false;
 
-      // Se o agendamento já existe, ele bloqueia o slot?
-      // Lógica básica de overlap
-      return (apptStart >= thisSlotStart && apptStart < thisSlotEnd);
+      const apptStartMs = new Date(apptStartStr).getTime();
+      let apptEndMs = 0;
+
+      // Tenta pegar o end_time do agendamento. Se não tiver, calcula baseado no slot (fallback)
+      const apptEndStr = normalizeDateStr(appt.end_time || "");
+      if (apptEndStr) {
+        apptEndMs = new Date(apptEndStr).getTime();
+      } else {
+        // Fallback: Se por algum motivo o banco não tem end_time, assume a duração do serviço atual
+        apptEndMs = apptStartMs + (serviceDuration * 60 * 1000);
+      }
+
+      // LÓGICA DE COLISÃO ROBUSTA (Intersecção de Intervalos)
+      // Um slot está ocupado se:
+      // (Inicio do Agendamento < Fim do Slot) E (Fim do Agendamento > Inicio do Slot)
+      return (apptStartMs < slotEndMs && apptEndMs > slotStartMs);
     });
 
     slots.push({
       time: timeString,
-      startISO: slotStartISO,
-      endISO: slotEndISO,
+      // Retorna com espaço para compatibilidade visual se necessário, ou T
+      startISO: slotStartISO.replace("T", " "), 
+      endISO: slotEndISO.replace("T", " "),
       isAvailable: !isBusy,
     });
   }
@@ -5668,11 +5989,11 @@ export default function BookPage() {
   const { slug } = useParams();
   
   // Dados da Loja
-  const [shop, setShop] = useState<any>(null); // any para aceitar o expand sem erros
+  const [shop, setShop] = useState<any>(null); // any para aceitar o expand sem erros de tipagem estrita
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estado do Wizard
+  // Estado do Wizard (Passo a passo)
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<User | null>(null);
@@ -5699,7 +6020,6 @@ export default function BookPage() {
         }
       } catch (err: any) {
         if (!isMounted) return;
-
         // Ignora erro de auto-cancelamento
         if (err.status === 0 || err.isAbort) return;
 
@@ -5796,9 +6116,9 @@ export default function BookPage() {
 
         {step === 3 && selectedService && (
           <StepDateTime 
-            shop={shop}                         // CORREÇÃO: Passa objeto shop
-            service={selectedService}           // CORREÇÃO: Passa objeto service
-            professional={selectedProfessional} // CORREÇÃO: Passa objeto user | null
+            shop={shop}
+            service={selectedService}
+            professional={selectedProfessional}
             onSelect={handleTimeSelect}
             onBack={handleBack}
           />
@@ -5827,6 +6147,8 @@ Path: src\react-app\pages\client\ClientPanelPage.tsx
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/react-app/contexts/AuthContext";
+// Importamos getShopById para pegar o slug da loja do cliente
+import { getShopById } from "@/react-app/lib/api/register";
 import { getMyAppointments, cancelMyAppointment } from "@/react-app/lib/api/client";
 import { Appointment, AppointmentStatus } from "@/shared/types";
 
@@ -5842,46 +6164,75 @@ const getStatusLabel = (status: string) => {
   }
 };
 
+// CORREÇÃO: Removemos o 'Z' para tratar a data como Local Literal (evita cair para 05:00)
 const formatDate = (iso: string) => {
-  return new Date(iso).toLocaleDateString("pt-BR", { 
-    day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" 
-  });
+  if (!iso) return "--";
+  
+  // Corta o fuso horário (Z) para o JS não converter para UTC-3
+  const cleanIso = iso.replace("Z", "");
+  const date = new Date(cleanIso);
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = date.toLocaleString('pt-BR', { month: 'long' });
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  
+  return `${day} de ${month} de ${year} às ${hours}:${minutes}`;
 };
 
 export default function ClientPanelPage() {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bookingSlug, setBookingSlug] = useState("");
 
   useEffect(() => {
-    loadData();
-  }, [user?.id]);
-
-  async function loadData() {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const data = await getMyAppointments(user.id);
-      setAppointments(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+    let isMounted = true;
+    async function loadData() {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const data = await getMyAppointments(user.id);
+        if (isMounted) {
+          setAppointments(data);
+          
+          if (user.shop_id) {
+             getShopById(user.shop_id).then(shop => {
+                 if (isMounted && shop) setBookingSlug(shop.slug);
+             }).catch(() => {});
+          } else if (data.length > 0) {
+             const lastShop = data[0].expand?.shop_id;
+             if (lastShop?.slug) setBookingSlug(lastShop.slug);
+          }
+        }
+      } catch (err: any) {
+        if (err.status !== 0) console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
-  }
+    loadData();
+    return () => { isMounted = false; };
+  }, [user?.id, user?.shop_id]);
 
   async function handleCancel(id: string) {
     if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return;
     try {
       await cancelMyAppointment(id);
-      loadData(); // Recarrega a lista
+      setAppointments(prev => prev.map(appt => 
+        appt.id === id ? { ...appt, status: AppointmentStatus.Cancelled } : appt
+      ));
     } catch (error) {
       alert("Erro ao cancelar.");
     }
   }
 
-  // Separar futuros e passados
   const now = new Date();
+  
+  // Lógica corrigida para Próximos vs Histórico
+  // Para comparação lógica (maior/menor que hoje), ainda usamos new Date(iso) normal ou comparamos strings
+  // Mas aqui vamos usar a data do objeto direto para filtrar corretamente
   const upcoming = appointments.filter(a => new Date(a.start_time) >= now && a.status !== AppointmentStatus.Cancelled);
   const history = appointments.filter(a => new Date(a.start_time) < now || a.status === AppointmentStatus.Cancelled);
 
@@ -5889,18 +6240,18 @@ export default function ClientPanelPage() {
     return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Carregando...</div>;
   }
 
+  const newBookingLink = bookingSlug ? `/book/${bookingSlug}` : "/";
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 p-6">
       <div className="max-w-3xl mx-auto space-y-8">
         
-        {/* Cabeçalho */}
         <div className="flex justify-between items-end">
           <div>
             <h1 className="text-2xl font-bold text-white">Meus Agendamentos</h1>
             <p className="text-sm text-slate-400">Gerencie seus horários marcados.</p>
           </div>
-          {/* Opcional: Link para voltar a agendar se tiver slug salvo, senão home */}
-          <Link to="/" className="text-xs bg-emerald-500/10 text-emerald-400 px-4 py-2 rounded-xl hover:bg-emerald-500/20 transition">
+          <Link to={newBookingLink} className="text-xs bg-emerald-500/10 text-emerald-400 px-4 py-2 rounded-xl hover:bg-emerald-500/20 transition border border-emerald-500/20">
             Novo Agendamento
           </Link>
         </div>
@@ -5920,6 +6271,15 @@ export default function ClientPanelPage() {
                 const barberName = appt.expand?.barber_id?.name || "Profissional";
                 const { text, color } = getStatusLabel(appt.status);
 
+                // Lógica de Cancelamento (Antecedência)
+                const startTime = new Date(appt.start_time);
+                // Pega o tempo mínimo da loja (ou padrão 120 min / 2 horas)
+                const minAdvanceMinutes = appt.expand?.shop_id?.min_advance_time || 120; 
+                const diffMs = startTime.getTime() - now.getTime();
+                const canCancel = diffMs > (minAdvanceMinutes * 60 * 1000);
+
+                const isCancellableStatus = appt.status === AppointmentStatus.Pending || appt.status === AppointmentStatus.Confirmed;
+
                 return (
                   <div key={appt.id} className="bg-slate-900 border border-white/10 rounded-2xl p-5 flex flex-col sm:flex-row justify-between gap-4 transition hover:border-emerald-500/30">
                     <div>
@@ -5936,13 +6296,19 @@ export default function ClientPanelPage() {
                     </div>
 
                     <div className="flex items-center">
-                      {(appt.status === AppointmentStatus.Pending || appt.status === AppointmentStatus.Confirmed) && (
-                        <button 
-                          onClick={() => handleCancel(appt.id)}
-                          className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-4 py-2 rounded-xl hover:bg-red-500/10 transition w-full sm:w-auto"
-                        >
-                          Cancelar
-                        </button>
+                      {isCancellableStatus && (
+                        canCancel ? (
+                            <button 
+                              onClick={() => handleCancel(appt.id)}
+                              className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-4 py-2 rounded-xl hover:bg-red-500/10 transition w-full sm:w-auto"
+                            >
+                              Cancelar
+                            </button>
+                        ) : (
+                            <span className="text-[10px] text-slate-500 italic bg-slate-800 px-2 py-1 rounded border border-white/5">
+                                Cancelamento indisponível<br/>(Antecedência mínima: {minAdvanceMinutes/60}h)
+                            </span>
+                        )
                       )}
                     </div>
                   </div>
@@ -5981,119 +6347,214 @@ export default function ClientPanelPage() {
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\pages\client\ClientPanelPage.tsx ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\pages\dashboard\DashboardHome.tsx ---
 Path: src\react-app\pages\dashboard\DashboardHome.tsx
 ------------------------------
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useTenant } from "@/react-app/contexts/TenantContext";
-import { fetchTodayKpis, fetchTodayBookings, type TodayKpis, type TodayBooking } from "@/react-app/lib/api/dashboard";
+import { fetchDailyBookings, type DailyBooking } from "@/react-app/lib/api/dashboard";
 import { Link } from "react-router-dom";
+import { AppointmentStatus } from "@/shared/types";
 
 export default function DashboardHome() {
   const { currentShop } = useTenant();
   
-  const [kpis, setKpis] = useState<TodayKpis | null>(null);
-  const [bookings, setBookings] = useState<TodayBooking[]>([]);
+  // Data Inicial
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+
+  const [bookings, setBookings] = useState<DailyBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  // --- CÁLCULO AUTOMÁTICO DOS KPIS ---
+  // Sempre que 'bookings' mudar, isso é recalculado instantaneamente
+  const kpis = useMemo(() => {
+    return {
+      total_bookings: bookings.length,
+      unique_clients: new Set(bookings.map(b => b.client_id)).size,
+      total_value: bookings.reduce((acc, curr) => acc + curr.value, 0)
+    };
+  }, [bookings]);
+  // ------------------------------------
+
+  async function loadData() {
     if (!currentShop) return;
+    
+    // Inicia loading se for uma troca de loja ou data manual
+    setLoading(true);
 
-    async function load() {
-      setLoading(true);
-      try {
-        const [kpiData, bookingData] = await Promise.all([
-          fetchTodayKpis(currentShop!.id),
-          fetchTodayBookings(currentShop!.id)
-        ]);
-        setKpis(kpiData);
-        setBookings(bookingData);
-      } catch (error) {
-        console.error("Erro ao carregar dashboard:", error);
-      } finally {
-        setLoading(false);
-      }
+    try {
+      const data = await fetchDailyBookings(currentShop.id, selectedDate);
+      setBookings(data);
+    } catch (error: any) {
+       // Se for cancelamento, não faz nada (mantém o estado anterior ou loading)
+       if (error.status !== 0 && !error.isAbort) {
+          console.error("Erro ao carregar:", error);
+          setBookings([]); // Zera em caso de erro real
+       }
+    } finally {
+       // Só tira o loading se a requisição não foi abortada (verificação simples)
+       setLoading(false);
     }
-
-    load();
-  }, [currentShop?.id]);
-
-  if (!currentShop) {
-    return <div className="text-slate-400">Nenhuma unidade selecionada.</div>;
   }
 
-  // Formatador de Moeda
+  useEffect(() => {
+    loadData();
+  }, [currentShop?.id, selectedDate]);
+
+  // Controles de Data
+  const handlePrevDay = () => {
+    const date = new Date(selectedDate + "T00:00:00");
+    date.setDate(date.getDate() - 1);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
+  const handleNextDay = () => {
+    const date = new Date(selectedDate + "T00:00:00");
+    date.setDate(date.getDate() + 1);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
   const formatMoney = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+  const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", { 
+    weekday: 'long', day: 'numeric', month: 'long' 
+  });
+  
+  const isToday = (() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return selectedDate === `${year}-${month}-${day}`;
+  })();
+
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case AppointmentStatus.Completed: return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
+      case AppointmentStatus.InProgress: return "bg-amber-500/20 text-amber-400 border-amber-500/30";
+      case AppointmentStatus.Confirmed: return "bg-sky-500/20 text-sky-400 border-sky-500/30";
+      default: return "bg-slate-800 text-slate-400 border-slate-700";
+    }
+  };
+
+  const getStatusName = (status: string) => {
+    switch(status) {
+      case AppointmentStatus.Completed: return "Concluído";
+      case AppointmentStatus.InProgress: return "Em Andamento";
+      case AppointmentStatus.Confirmed: return "Confirmado";
+      case AppointmentStatus.Pending: return "Pendente";
+      default: return "Agendado";
+    }
+  };
+
+  if (!currentShop) {
+    return <div className="text-slate-400 p-8">Selecione uma unidade.</div>;
+  }
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Visão Geral</h1>
-        <p className="text-slate-400">Resumo da operação hoje em {currentShop.name}</p>
+    <div className="space-y-8 pb-20">
+      
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+             Visão Geral
+             {isToday && <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/20">Hoje</span>}
+          </h1>
+          <p className="text-slate-400 text-sm mt-1 capitalize">{displayDate}</p>
+          <p className="text-xs text-slate-500">{currentShop.name}</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-900 p-1 rounded-xl border border-white/10">
+              <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
+              <input 
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer [&::-webkit-calendar-picker-indicator]:invert"
+              />
+              <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
+          </div>
+          
+          <button 
+            onClick={loadData}
+            className="p-3 bg-slate-900 border border-white/10 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            title="Atualizar dados"
+          >
+            🔄
+          </button>
+        </div>
       </div>
 
-      {/* CARDS DE KPI */}
+      {/* KPI CARDS (Calculados via useMemo) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-500 text-6xl group-hover:scale-110 transition">📅</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Agendamentos Hoje</p>
+          <p className="text-sm text-slate-400 font-medium mb-1">Agendamentos</p>
           <h3 className="text-3xl font-bold text-white">
-            {loading ? "..." : kpis?.total_bookings || 0}
+            {loading ? "..." : kpis.total_bookings}
           </h3>
         </div>
-
         <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-           <div className="absolute top-0 right-0 p-4 opacity-10 text-sky-500 text-6xl group-hover:scale-110 transition">👥</div>
-          <p className="text-sm text-slate-400 font-medium mb-1">Clientes Únicos</p>
+          <div className="absolute top-0 right-0 p-4 opacity-10 text-sky-500 text-6xl group-hover:scale-110 transition">👥</div>
+          <p className="text-sm text-slate-400 font-medium mb-1">Clientes</p>
           <h3 className="text-3xl font-bold text-white">
-            {loading ? "..." : kpis?.unique_clients || 0}
+            {loading ? "..." : kpis.unique_clients}
           </h3>
         </div>
-
         <div className="bg-slate-900 border border-white/5 p-6 rounded-2xl relative overflow-hidden group">
-           <div className="absolute top-0 right-0 p-4 opacity-10 text-violet-500 text-6xl group-hover:scale-110 transition">💰</div>
+          <div className="absolute top-0 right-0 p-4 opacity-10 text-violet-500 text-6xl group-hover:scale-110 transition">💰</div>
           <p className="text-sm text-slate-400 font-medium mb-1">Faturamento Previsto</p>
           <h3 className="text-3xl font-bold text-emerald-400">
-            {loading ? "..." : formatMoney(kpis?.total_value || 0)}
+            {loading ? "..." : formatMoney(kpis.total_value)}
           </h3>
         </div>
       </div>
 
-      {/* LISTA DE PRÓXIMOS AGENDAMENTOS */}
+      {/* LISTA */}
       <div className="bg-slate-900 border border-white/5 rounded-2xl overflow-hidden">
         <div className="p-6 border-b border-white/5 flex justify-between items-center">
-          <h3 className="font-semibold text-white">Próximos atendimentos</h3>
-          <Link to="/staff/agenda" className="text-xs text-emerald-400 hover:text-emerald-300">Ver agenda completa →</Link>
+          <h3 className="font-semibold text-white">Atendimentos do Dia</h3>
+          <Link to="/staff/agenda" className="text-xs text-emerald-400 hover:text-emerald-300">Ver Agenda Completa →</Link>
         </div>
         
         {loading ? (
-          <div className="p-8 text-center text-slate-500">Carregando...</div>
+          <div className="p-12 text-center text-slate-500 animate-pulse">Carregando dados...</div>
         ) : bookings.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-slate-400 mb-2">Nenhum agendamento para hoje.</p>
-            <p className="text-xs text-slate-600">Compartilhe seu link: /book/{currentShop.slug}</p>
+          <div className="p-12 text-center text-slate-400">
+            Nenhum agendamento encontrado para esta data.
+            {isToday && <p className="text-xs text-slate-600 mt-2">Compartilhe seu link: /book/{currentShop.slug}</p>}
           </div>
         ) : (
           <div className="divide-y divide-white/5">
             {bookings.map((b) => (
               <div key={b.id} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition">
                 <div className="flex items-center gap-4">
-                  <div className="bg-slate-800 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold font-mono">
-                    {b.time.slice(11, 16)}
+                  <div className="bg-slate-800 text-slate-200 px-3 py-2 rounded-lg text-sm font-bold font-mono border border-white/5">
+                    {b.time}
                   </div>
                   <div>
                     <p className="font-medium text-slate-200">{b.client_name}</p>
-                    <p className="text-xs text-slate-500">{b.service_name} • com {b.professional_name}</p>
+                    <p className="text-xs text-slate-500">
+                      <span className="text-emerald-400">{b.service_name}</span> • com {b.professional_name}
+                    </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-medium bg-sky-500/10 text-sky-400">
-                    Confirmado
+                <div className="text-right flex flex-col items-end gap-1">
+                  <span className="block text-sm font-medium text-slate-300">{formatMoney(b.value)}</span>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${getStatusBadge(b.raw_status)}`}>
+                    {getStatusName(b.raw_status)}
                   </span>
                 </div>
               </div>
@@ -6768,19 +7229,53 @@ export default function ServicesPage() {
   const [newCatName, setNewCatName] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      if (!currentShop) return;
+      setLoading(true);
+      try {
+        const [srv, cat] = await Promise.all([
+          getServicesByShop(currentShop.id),
+          getCategoriesByShop(currentShop.id)
+        ]);
+        
+        if (isMounted) {
+          setServices(srv);
+          setCategories(cat);
+        }
+      } catch (err: any) {
+        // CORREÇÃO: Ignora erro de auto-cancelamento (status 0)
+        if (err.status === 0 || err.isAbort) return;
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
     loadData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentShop?.id]);
 
-  async function loadData() {
+  // Função auxiliar para recarregar após ações (create/delete)
+  async function reload() {
     if (!currentShop) return;
     setLoading(true);
-    const [srv, cat] = await Promise.all([
-      getServicesByShop(currentShop.id),
-      getCategoriesByShop(currentShop.id)
-    ]);
-    setServices(srv);
-    setCategories(cat);
-    setLoading(false);
+    try {
+        const [srv, cat] = await Promise.all([
+            getServicesByShop(currentShop.id),
+            getCategoriesByShop(currentShop.id)
+        ]);
+        setServices(srv);
+        setCategories(cat);
+    } catch(err: any) {
+        console.error(err);
+    } finally {
+        setLoading(false);
+    }
   }
 
   async function handleCreateService() {
@@ -6797,7 +7292,7 @@ export default function ServicesPage() {
       setServiceModalOpen(false);
       setNewServiceName("");
       setNewServicePrice("");
-      loadData();
+      reload();
     } catch (err) {
       alert("Erro ao criar serviço");
     }
@@ -6809,7 +7304,7 @@ export default function ServicesPage() {
       await createCategory(currentShop.id, newCatName);
       setCatModalOpen(false);
       setNewCatName("");
-      loadData();
+      reload();
     } catch (err) {
       alert("Erro ao criar categoria");
     }
@@ -6818,14 +7313,14 @@ export default function ServicesPage() {
   async function handleDeleteService(id: string) {
     if (confirm("Desativar este serviço?")) {
       await deleteService(id);
-      loadData();
+      reload();
     }
   }
 
   async function handleDeleteCategory(id: string) {
     if (confirm("Apagar categoria?")) {
       await deleteCategory(id);
-      loadData();
+      reload();
     }
   }
 
@@ -7015,7 +7510,8 @@ export default function SettingsPage() {
       setSelectedPayments(currentShop.accepted_payment_methods || []);
 
       if (currentShop.logo) {
-        const url = pb.files.getUrl(currentShop, currentShop.logo);
+        // CORREÇÃO: getUrl -> getURL
+        const url = pb.files.getURL(currentShop, currentShop.logo);
         setLogoPreview(url);
       } else {
         setLogoPreview(null);
@@ -7035,7 +7531,9 @@ export default function SettingsPage() {
       setHours(h);
       setSegments(s);
       setAllPaymentMethods(p);
-    } catch (err) {
+    } catch (err: any) {
+      // CORREÇÃO: Ignora cancelamento automático
+      if (err.status === 0 || err.isAbort) return;
       console.error(err);
     } finally {
       setLoading(false);
@@ -7495,7 +7993,12 @@ Path: src\react-app\pages\owner\StaffPage.tsx
 ------------------------------
 import { useEffect, useState } from "react";
 import { useTenant } from "@/react-app/contexts/TenantContext";
-import { getProfessionalsByShop, createProfessionalUser, removeProfessional } from "@/react-app/lib/api/staff";
+import { 
+    getProfessionalsByShop, 
+    createProfessionalUser, 
+    updateProfessionalUser, 
+    removeProfessional 
+} from "@/react-app/lib/api/staff";
 import type { User } from "@/shared/types";
 import Modal from "@/react-app/components/common/Modal";
 
@@ -7503,47 +8006,112 @@ export default function StaffPage() {
   const { currentShop, currentCompany } = useTenant();
   const [staff, setStaff] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Controle do Modal
   const [isModalOpen, setModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
-  // Form
+  // Form State
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      if (!currentShop) return;
+      setLoading(true);
+      try {
+        const data = await getProfessionalsByShop(currentShop.id);
+        if (isMounted) {
+          setStaff(data);
+        }
+      } catch (err: any) {
+        if (err.status === 0 || err.isAbort) return;
+        console.error(err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
     load();
+
+    return () => {
+      isMounted = false;
+    };
   }, [currentShop?.id]);
 
-  async function load() {
-    if (!currentShop) return;
-    setLoading(true);
-    const data = await getProfessionalsByShop(currentShop.id);
-    setStaff(data);
-    setLoading(false);
-  }
-
-  async function handleCreate() {
-    if (!currentShop || !currentCompany) return;
-    try {
-      await createProfessionalUser({
-        name, 
-        email, 
-        company_id: currentCompany.id, 
-        shop_id: currentShop.id
-      });
-      setModalOpen(false);
+  // Abre modal para CRIAR
+  const handleOpenCreate = () => {
+      setEditingUser(null);
       setName("");
       setEmail("");
-      load();
+      setPhone("");
+      setPassword("");
+      setModalOpen(true);
+  };
+
+  // Abre modal para EDITAR
+  const handleOpenEdit = (user: User) => {
+      setEditingUser(user);
+      setName(user.name || ""); 
+      setEmail(user.email);
+      setPhone(user.phone || ""); 
+      setPassword(""); 
+      setModalOpen(true);
+  };
+
+  async function handleSave() {
+    if (!currentShop || !currentCompany) {
+        alert("Erro de contexto: Loja ou Empresa não identificada.");
+        return;
+    }
+    
+    if (!name.trim()) return alert("O Nome é obrigatório.");
+    if (!editingUser && !email.trim()) return alert("O E-mail é obrigatório.");
+    if (!editingUser && password && password.length < 8) {
+        return alert("A senha deve ter no mínimo 8 caracteres.");
+    }
+
+    try {
+      if (editingUser) {
+          // MODO EDIÇÃO
+          await updateProfessionalUser(editingUser.id, { name, phone });
+          alert("Dados atualizados com sucesso!");
+      } else {
+          // MODO CRIAÇÃO
+          await createProfessionalUser({
+            name, 
+            email, 
+            phone,
+            password, 
+            company_id: currentCompany.id, 
+            shop_id: currentShop.id
+          });
+          alert("Profissional cadastrado com sucesso!");
+      }
+      
+      setModalOpen(false);
+      const data = await getProfessionalsByShop(currentShop.id);
+      setStaff(data);
+      
     } catch (err: any) {
-        // Se der erro de email duplicado, o PB retorna 400
-        alert("Erro ao adicionar. Verifique se o email já existe.");
+        console.error("Erro completo:", err);
+        if (err.status === 400) {
+            alert("Erro de validação (400). Verifique se o e-mail já está em uso.");
+        } else {
+            alert(`Ocorreu um erro: ${err.message}`);
+        }
     }
   }
 
   async function handleRemove(id: string) {
     if (confirm("Remover acesso de profissional deste usuário?")) {
         await removeProfessional(id);
-        load();
+        const data = await getProfessionalsByShop(currentShop!.id);
+        setStaff(data);
     }
   }
 
@@ -7553,47 +8121,70 @@ export default function StaffPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-white">Profissionais</h1>
-        <button onClick={() => setModalOpen(true)} className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-xl">
+        <button onClick={handleOpenCreate} className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold px-4 py-2 rounded-xl">
           + Adicionar Profissional
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {loading ? <p className="text-slate-500">Carregando...</p> : staff.map(user => (
-          <div key={user.id} className="bg-slate-900 border border-white/5 p-4 rounded-xl flex items-center gap-4">
-             <div className="h-12 w-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold">
-                {user.avatar ? <img src={user.avatar} className="w-full h-full rounded-full object-cover"/> : user.name?.[0]}
+          <div key={user.id} className="bg-slate-900 border border-white/5 p-4 rounded-xl flex items-center gap-4 relative group">
+             <div className="h-12 w-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 font-bold overflow-hidden shrink-0">
+                {user.avatar ? <img src={user.avatar} className="w-full h-full object-cover"/> : user.name?.[0]}
              </div>
+             
              <div className="flex-1 min-w-0">
                 <p className="font-semibold text-white truncate">{user.name}</p>
                 <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                {user.phone && <p className="text-xs text-slate-600 truncate">{user.phone}</p>}
              </div>
+
              {user.role !== 'dono' && (
-                 <button onClick={() => handleRemove(user.id)} className="text-slate-600 hover:text-red-400 text-sm">
-                    Remover
-                 </button>
+                 <div className="flex items-center gap-2">
+                     <button onClick={() => handleOpenEdit(user)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition" title="Editar">✏️</button>
+                     <button onClick={() => handleRemove(user.id)} className="p-2 text-slate-600 hover:text-red-400 hover:bg-slate-800 rounded-lg transition" title="Remover">🗑️</button>
+                 </div>
              )}
           </div>
         ))}
       </div>
 
-      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title="Novo Profissional">
+      <Modal isOpen={isModalOpen} onClose={() => setModalOpen(false)} title={editingUser ? "Editar Profissional" : "Novo Profissional"}>
          <div className="space-y-4">
-            <p className="text-xs text-slate-400 bg-slate-800 p-2 rounded">
-                Uma senha provisória "Mudar@123" será criada automaticamente.
-            </p>
+            {!editingUser && (
+                <div className="bg-slate-800 p-3 rounded-lg text-xs text-slate-300 border border-white/5">
+                    <p>O profissional usará o <strong>e-mail</strong> e a <strong>senha</strong> abaixo para acessar.</p>
+                </div>
+            )}
             <div>
-                <label className="block text-xs text-slate-400 mb-1">Nome Completo</label>
-                <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white"
-                   value={name} onChange={e => setName(e.target.value)} />
+                <label className="block text-xs text-slate-400 mb-1">Nome Completo *</label>
+                <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white outline-none focus:border-emerald-500"
+                   value={name} onChange={e => setName(e.target.value)} placeholder="Ex: João Silva" />
             </div>
-            <div>
-                <label className="block text-xs text-slate-400 mb-1">E-mail de acesso</label>
-                <input type="email" className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white"
-                   value={email} onChange={e => setEmail(e.target.value)} />
+            
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">E-mail</label>
+                    <input type="email" className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white outline-none focus:border-emerald-500 disabled:opacity-50"
+                    value={email} onChange={e => setEmail(e.target.value)} placeholder="joao@email.com" disabled={!!editingUser} />
+                </div>
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">Telefone</label>
+                    <input className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white outline-none focus:border-emerald-500"
+                    value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 00000-0000" />
+                </div>
             </div>
-            <button onClick={handleCreate} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-2 rounded-lg mt-2">
-                Cadastrar
+
+            {!editingUser && (
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">Senha (Opcional)</label>
+                    <input type="text" className="w-full bg-black/30 border border-white/10 rounded-lg p-2 text-white outline-none focus:border-emerald-500"
+                    value={password} onChange={e => setPassword(e.target.value)} placeholder="Padrão: Mudar@123" />
+                </div>
+            )}
+
+            <button onClick={handleSave} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold py-2 rounded-lg mt-2 transition">
+                {editingUser ? "Salvar Alterações" : "Cadastrar Profissional"}
             </button>
          </div>
       </Modal>
@@ -7713,263 +8304,596 @@ export default function LandingPage() {
 --- INICIO DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
 Path: src\react-app\pages\staff\StaffAgendaPage.tsx
 ------------------------------
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-import { getStaffAppointmentsToday, updateAppointmentStatus } from "@/react-app/lib/api/appointments";
-import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
+import { getStaffAppointmentsByDate, updateAppointmentStatus } from "@/react-app/lib/api/appointments";
+import { getPaymentMethods } from "@/react-app/lib/api/shops"; 
+import { Appointment, AppointmentStatus, PaymentStatus, PaymentMethod } from "@/shared/types";
+import Modal from "@/react-app/components/common/Modal"; 
 
-// Helper: Formata hora (14:30)
+// Helper Time Visual
 const formatTime = (isoString: string) => {
   if (!isoString) return "--:--";
-  const date = new Date(isoString);
-  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return isoString.substring(11, 16);
 };
 
-// Helper: Formata dinheiro (R$ 50,00)
+// Helper Money
 const formatMoney = (val: number) => 
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
 export default function StaffAgendaPage() {
   const { user } = useAuth();
+  
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Carrega ao montar ou mudar usuário
+  // --- Estados do Modal de Finalização ---
+  const [isFinishModalOpen, setFinishModalOpen] = useState(false);
+  const [apptToFinish, setApptToFinish] = useState<Appointment | null>(null);
+  const [availableMethods, setAvailableMethods] = useState<PaymentMethod[]>([]);
+  const [finalPaymentMethod, setFinalPaymentMethod] = useState("");
+  const [finishing, setFinishing] = useState(false);
+
+  // Carrega Agendamentos
   useEffect(() => {
+    let isMounted = true;
+
+    async function loadAgenda() {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const data = await getStaffAppointmentsByDate(user.id, selectedDate);
+        if (isMounted) {
+          setAppointments(data);
+        }
+      } catch (err: any) {
+        if (err.status === 0 || err.isAbort) return;
+        console.error("Erro ao carregar agenda", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
     loadAgenda();
+
+    // Carrega métodos de pagamento
+    if (user?.company_id) {
+        getPaymentMethods(user.company_id).then(methods => {
+            if(isMounted) setAvailableMethods(methods);
+        }).catch(err => {
+            if (err.status !== 0) console.error("Erro pagamentos", err);
+        });
+    }
     
-    // Auto-refresh a cada 60 segundos para pegar novos agendamentos
-    const interval = setInterval(loadAgenda, 60000);
-    return () => clearInterval(interval);
-  }, [user?.id]);
+    // Auto-refresh a cada 1 min
+    const interval = setInterval(() => { if(isMounted) loadAgenda(); }, 60000);
+    return () => { isMounted = false; clearInterval(interval); };
+  }, [user?.id, selectedDate, user?.company_id]);
 
-  async function loadAgenda() {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const data = await getStaffAppointmentsToday(user.id);
-      setAppointments(data);
-    } catch (err) {
-      console.error("Erro ao carregar agenda", err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  // Lógica de atualização de status
-  async function handleStatusChange(id: string, newStatus: AppointmentStatus, payStatus?: PaymentStatus) {
-    // 1. Atualização Otimista (Muda na tela antes de ir pro servidor para parecer instantâneo)
+  // --- CÁLCULOS DO DASHBOARD (KPIS DIÁRIOS) ---
+  const dailyStats = useMemo(() => {
+    const totalCount = appointments.filter(a => a.status !== AppointmentStatus.Cancelled).length;
+    
+    const totalRevenue = appointments
+        .filter(a => a.status !== AppointmentStatus.Cancelled)
+        .reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
+        
+    const completedCount = appointments.filter(a => a.status === AppointmentStatus.Completed).length;
+
+    return { totalCount, totalRevenue, completedCount };
+  }, [appointments]);
+
+
+  // Controles de Data
+  const handlePrevDay = () => {
+    const date = new Date(selectedDate + "T00:00:00");
+    date.setDate(date.getDate() - 1);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+  const handleNextDay = () => {
+    const date = new Date(selectedDate + "T00:00:00");
+    date.setDate(date.getDate() + 1);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
+  // Alteração Simples de Status
+  async function handleStatusChange(id: string, newStatus: AppointmentStatus) {
     setAppointments(prev => prev.map(appt => 
-      appt.id === id ? { ...appt, status: newStatus, payment_status: payStatus || appt.payment_status } : appt
+      appt.id === id ? { ...appt, status: newStatus } : appt
     ));
-
     try {
-      // 2. Envia pro servidor
-      await updateAppointmentStatus(id, newStatus, payStatus);
+      await updateAppointmentStatus(id, newStatus);
     } catch (err) {
-      console.error("Erro ao atualizar status", err);
-      alert("Erro ao atualizar o agendamento. Recarregando...");
-      loadAgenda(); // Reverte se der erro
+      alert("Erro ao atualizar. Recarregando...");
+      // Recarrega em caso de erro
+      const data = await getStaffAppointmentsByDate(user!.id, selectedDate);
+      setAppointments(data);
     }
   }
 
-  // --- RENDER ---
+  // --- Fluxo de Finalização com Pagamento ---
+  const openFinishModal = (appt: Appointment) => {
+    setApptToFinish(appt);
+    setFinalPaymentMethod(appt.payment_method || (availableMethods[0]?.id || ""));
+    setFinishModalOpen(true);
+  };
 
-  if (loading && appointments.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] text-slate-500 space-y-4">
-        <div className="animate-spin h-8 w-8 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
-        <p>Sincronizando agenda...</p>
-      </div>
-    );
-  }
+  const handleConfirmFinish = async () => {
+    if (!apptToFinish) return;
+    setFinishing(true);
+    try {
+        await updateAppointmentStatus(
+            apptToFinish.id, 
+            AppointmentStatus.Completed, 
+            PaymentStatus.PAGO, 
+            finalPaymentMethod
+        );
+
+        setAppointments(prev => prev.map(appt => 
+            appt.id === apptToFinish.id ? { 
+                ...appt, 
+                status: AppointmentStatus.Completed, 
+                payment_status: PaymentStatus.PAGO,
+                payment_method: finalPaymentMethod,
+                expand: {
+                   ...appt.expand,
+                   payment_method: availableMethods.find(m => m.id === finalPaymentMethod)
+                }
+            } : appt
+        ));
+
+        setFinishModalOpen(false);
+        setApptToFinish(null);
+    } catch (error) {
+        alert("Erro ao finalizar atendimento.");
+    } finally {
+        setFinishing(false);
+    }
+  };
+
+  const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", { 
+    weekday: 'long', day: 'numeric', month: 'long' 
+  });
+  
+  const isToday = (() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return selectedDate === `${year}-${month}-${day}`;
+  })();
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-20">
+    <div className="space-y-8 pb-20">
       
-      {/* Cabeçalho da Agenda */}
-      <div className="flex items-center justify-between bg-slate-900/50 p-4 rounded-2xl border border-white/5 backdrop-blur-sm sticky top-0 z-10">
+      {/* HEADER PESSOAL */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-white">Minha Agenda</h1>
-          <p className="text-slate-400 text-xs md:text-sm capitalize">
-            {new Date().toLocaleDateString("pt-BR", { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
+           <h1 className="text-3xl font-bold text-white mb-1">Olá, {user?.name?.split(' ')[0]} 👋</h1>
+           <p className="text-slate-400">Aqui está sua programação de hoje.</p>
         </div>
-        <button 
-          onClick={loadAgenda} 
-          className="p-3 bg-slate-800 rounded-xl hover:bg-slate-700 text-slate-300 transition border border-white/5 shadow-lg"
-          title="Atualizar agora"
-        >
-          🔄
-        </button>
+        
+        {/* Seletor de Data Estilizado */}
+        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
+            <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
+            <div className="px-2 text-center">
+                <span className="block text-xs text-slate-500 uppercase font-bold tracking-wider">{isToday ? "Hoje" : "Data"}</span>
+                <input 
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
+                />
+            </div>
+            <button onClick={handleNextDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">→</button>
+        </div>
       </div>
 
-      {/* Lista Vazia */}
-      {appointments.length === 0 ? (
-        <div className="text-center py-20 px-6 bg-slate-900/30 rounded-3xl border border-white/5 border-dashed">
-          <div className="text-5xl mb-4 grayscale opacity-50">☕</div>
-          <h3 className="text-lg font-medium text-white">Agenda livre hoje</h3>
-          <p className="text-slate-400 text-sm mt-2 max-w-xs mx-auto">
-            Nenhum agendamento encontrado para hoje até o momento. Aproveite para descansar ou organizar o espaço.
-          </p>
+      {/* CARDS DE RESUMO DO DIA */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-indigo-600/10 border border-indigo-500/20 p-4 rounded-2xl flex flex-col justify-between h-28">
+             <div className="text-indigo-400 text-sm font-medium">Agendamentos</div>
+             <div className="text-3xl font-bold text-white">{dailyStats.totalCount}</div>
+          </div>
+          <div className="bg-emerald-600/10 border border-emerald-500/20 p-4 rounded-2xl flex flex-col justify-between h-28">
+             <div className="text-emerald-400 text-sm font-medium">Faturamento do Dia</div>
+             <div className="text-2xl font-bold text-white">{formatMoney(dailyStats.totalRevenue)}</div>
+          </div>
+          <div className="bg-slate-800/50 border border-white/5 p-4 rounded-2xl flex flex-col justify-between h-28 col-span-2 md:col-span-2">
+             <div className="text-slate-400 text-sm font-medium">Progresso</div>
+             <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden mt-2">
+                 <div 
+                    className="bg-indigo-500 h-full transition-all duration-500" 
+                    style={{ width: `${dailyStats.totalCount > 0 ? (dailyStats.completedCount / dailyStats.totalCount) * 100 : 0}%` }}
+                 />
+             </div>
+             <div className="text-xs text-slate-500 mt-2 text-right">
+                {dailyStats.completedCount} de {dailyStats.totalCount} finalizados
+             </div>
+          </div>
+      </div>
+
+      <div className="h-px bg-white/5 w-full my-6"></div>
+
+      <h2 className="text-xl font-bold text-white flex items-center gap-2">
+         Agenda <span className="text-slate-500 text-base font-normal capitalize">({displayDate})</span>
+      </h2>
+
+      {/* LISTA TIMELINE */}
+      {loading ? (
+        <div className="flex justify-center py-20 text-slate-500">Carregando agenda...</div>
+      ) : appointments.length === 0 ? (
+        <div className="text-center py-16 px-6 bg-slate-900/30 rounded-3xl border border-white/5 border-dashed">
+          <p className="text-slate-400 text-lg">Livre! 🎉</p>
+          <p className="text-sm text-slate-500">Nenhum agendamento para este dia.</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="relative border-l border-white/10 ml-4 space-y-8">
           {appointments.map((appt: any) => {
-            // Extração segura dos dados expandidos
-            const clientName = appt.expand?.client_id?.name || "Cliente (Sem nome)";
+            const clientName = appt.expand?.client_id?.name || "Cliente";
             const serviceName = appt.expand?.service_id?.name || "Serviço";
-            const status = appt.status as AppointmentStatus;
+            const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
+            const status = appt.status;
             
-            // Estilos dinâmicos baseados no status
-            let statusColor = "border-slate-600";
-            let bgColor = "bg-slate-900";
-            let opacity = "opacity-100";
-            
-            if (status === AppointmentStatus.Confirmed || status === AppointmentStatus.Pending) { // Confirmado (2) ou Pendente (1)
-               statusColor = "border-sky-500";
-            } else if (status === AppointmentStatus.InProgress) { // Em andamento (3)
-               statusColor = "border-amber-500";
-               bgColor = "bg-slate-800 ring-1 ring-amber-500/30";
-            } else if (status === AppointmentStatus.Completed) { // Concluído (4)
-               statusColor = "border-emerald-500";
-               opacity = "opacity-60 hover:opacity-100 transition-opacity";
+            // Estilos dinâmicos
+            const isCompleted = status === AppointmentStatus.Completed;
+            const isCancelled = status === AppointmentStatus.Cancelled;
+            const isInProgress = status === AppointmentStatus.InProgress;
+
+            let cardBg = "bg-slate-900";
+            let borderColor = "border-white/5";
+            let timeColor = "text-slate-400";
+
+            if (isInProgress) {
+                cardBg = "bg-indigo-900/20";
+                borderColor = "border-indigo-500/50";
+                timeColor = "text-indigo-400";
+            } else if (isCompleted) {
+                cardBg = "bg-emerald-900/10";
+                borderColor = "border-emerald-500/20";
+                timeColor = "text-emerald-500";
             }
 
             return (
-              <div key={appt.id} className={`relative flex flex-col md:flex-row gap-4 p-5 rounded-2xl border-l-4 shadow-lg ${statusColor} ${bgColor} ${opacity} border-y border-r border-white/5`}>
+              <div key={appt.id} className="relative pl-8">
+                {/* Bolinha da Timeline */}
+                <div className={`absolute -left-[5px] top-6 w-2.5 h-2.5 rounded-full border-2 border-slate-950 ${isInProgress ? 'bg-indigo-500 animate-pulse' : isCompleted ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
                 
-                {/* Coluna 1: Horário e Status Visual */}
-                <div className="flex md:flex-col items-center md:items-start justify-between min-w-[80px] gap-2">
-                  <span className="text-2xl font-bold font-mono text-white tracking-tight">
-                    {formatTime(appt.start_time)}
-                  </span>
-                  
-                  {status === AppointmentStatus.InProgress && (
-                    <span className="text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 px-2 py-1 rounded-full animate-pulse border border-amber-500/30">
-                      Andamento
-                    </span>
-                  )}
-                  {status === AppointmentStatus.Completed && (
-                    <span className="text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full border border-emerald-500/30">
-                      Concluído
-                    </span>
-                  )}
-                  {(status === AppointmentStatus.Confirmed || status === AppointmentStatus.Pending) && (
-                    <span className="text-[10px] font-bold uppercase bg-sky-500/20 text-sky-300 px-2 py-1 rounded-full border border-sky-500/30">
-                      Agendado
-                    </span>
-                  )}
+                <div className={`p-5 rounded-2xl border ${borderColor} ${cardBg} transition hover:border-white/10 ${isCancelled ? 'opacity-50 grayscale' : ''}`}>
+                    <div className="flex flex-col md:flex-row gap-4 justify-between">
+                        
+                        {/* Info Principal */}
+                        <div>
+                            <div className={`text-sm font-bold font-mono mb-1 ${timeColor}`}>{formatTime(appt.start_time)}</div>
+                            <h3 className="text-lg font-bold text-slate-100">{clientName}</h3>
+                            <p className="text-slate-400 text-sm">{serviceName}</p>
+                            
+                            {/* Tags */}
+                            <div className="flex gap-2 mt-3">
+                                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-white/5 uppercase tracking-wide">
+                                    {paymentName}
+                                </span>
+                                {isCancelled && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 uppercase">Cancelado</span>}
+                                {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase">Concluído</span>}
+                            </div>
+                        </div>
+
+                        {/* Ações e Valor */}
+                        <div className="flex flex-col justify-between items-end gap-4">
+                            <p className="text-xl font-bold text-white">{formatMoney(appt.total_amount || 0)}</p>
+                            
+                            <div className="flex gap-2">
+                                {!isCancelled && !isCompleted && (
+                                    <>
+                                        {status !== AppointmentStatus.InProgress && (
+                                            <button 
+                                                onClick={() => { if(confirm("Cancelar?")) handleStatusChange(appt.id, AppointmentStatus.Cancelled) }}
+                                                className="px-3 py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 text-xs font-medium transition"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        )}
+                                        
+                                        {status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed ? (
+                                            <button 
+                                                onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
+                                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 transition"
+                                            >
+                                                Iniciar Atendimento
+                                            </button>
+                                        ) : status === AppointmentStatus.InProgress ? (
+                                            <button 
+                                                onClick={() => openFinishModal(appt)}
+                                                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition animate-pulse"
+                                            >
+                                                Finalizar & Receber
+                                            </button>
+                                        ) : null}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-
-                {/* Coluna 2: Detalhes do Cliente/Serviço */}
-                <div className="flex-1 border-t md:border-t-0 md:border-l border-white/10 pt-3 md:pt-0 md:pl-4">
-                  <h3 className="text-lg font-semibold text-slate-100">{clientName}</h3>
-                  <div className="flex items-center gap-2 text-sm text-slate-400 mt-1">
-                    <span className="text-emerald-400 font-medium">{serviceName}</span>
-                    {appt.notes && (
-                        <span className="bg-slate-800 px-2 py-0.5 rounded text-xs text-slate-300 truncate max-w-[200px]">
-                            Nota: {appt.notes}
-                        </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Coluna 3: Ações e Pagamento */}
-                <div className="flex flex-row md:flex-col justify-between items-center md:items-end gap-4 border-t md:border-t-0 border-white/10 pt-3 md:pt-0">
-                  <div className="text-left md:text-right">
-                    <p className="text-lg font-bold text-white">
-                      {formatMoney(appt.total_amount || 0)}
-                    </p>
-                    <p className={`text-xs font-medium ${appt.payment_status === PaymentStatus.PAGO ? "text-emerald-400" : "text-amber-400"}`}>
-                      {appt.payment_status === PaymentStatus.PAGO ? "Pago ✅" : "Pendente ⏳"}
-                    </p>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {/* Botões para Agendado */}
-                    {(status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed) && (
-                      <>
-                        <button 
-                          onClick={() => {
-                              if(confirm("Cancelar este agendamento?")) 
-                                handleStatusChange(appt.id, AppointmentStatus.Cancelled)
-                          }}
-                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-red-900/30 text-slate-400 hover:text-red-400 text-xs font-medium transition"
-                        >
-                          Cancelar
-                        </button>
-                        <button 
-                          onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
-                          className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-lg shadow-sky-500/20 transition transform active:scale-95"
-                        >
-                          Iniciar Atendimento
-                        </button>
-                      </>
-                    )}
-
-                    {/* Botões para Em Andamento */}
-                    {status === AppointmentStatus.InProgress && (
-                      <button 
-                        onClick={() => handleStatusChange(appt.id, AppointmentStatus.Completed, PaymentStatus.PAGO)}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/20 transition transform active:scale-95 flex items-center gap-2"
-                      >
-                        <span>Finalizar & Receber</span>
-                      </button>
-                    )}
-
-                    {/* Botões para Concluído */}
-                    {status === AppointmentStatus.Completed && (
-                       <button 
-                          onClick={() => {
-                              if(confirm("Reabrir este atendimento?"))
-                                handleStatusChange(appt.id, AppointmentStatus.Confirmed, PaymentStatus.A_PAGAR)
-                          }}
-                          className="text-xs text-slate-600 hover:text-slate-400 underline"
-                        >
-                          Reabrir
-                        </button>
-                    )}
-                  </div>
-                </div>
-
               </div>
             );
           })}
         </div>
       )}
+
+      {/* MODAL DE FINALIZAÇÃO */}
+      <Modal 
+        isOpen={isFinishModalOpen} 
+        onClose={() => setFinishModalOpen(false)} 
+        title="Finalizar Atendimento"
+      >
+        <div className="space-y-6">
+            <div className="bg-slate-800 p-6 rounded-2xl text-center border border-white/5">
+                <p className="text-slate-400 text-sm mb-1 uppercase tracking-wider">Valor a Receber</p>
+                <p className="text-4xl font-bold text-emerald-400">
+                    {formatMoney(apptToFinish?.total_amount || 0)}
+                </p>
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium text-slate-300 mb-3">Como o cliente pagou?</label>
+                {availableMethods.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-4">Nenhum método cadastrado na loja.</p>
+                ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                        {availableMethods.map(method => (
+                            <button
+                                key={method.id}
+                                onClick={() => setFinalPaymentMethod(method.id)}
+                                className={`p-3 rounded-xl text-sm font-medium border transition flex items-center justify-center gap-2
+                                    ${finalPaymentMethod === method.id 
+                                        ? "bg-emerald-500 text-slate-950 border-emerald-500 shadow-lg shadow-emerald-500/20" 
+                                        : "bg-slate-900 border-white/10 text-slate-400 hover:bg-slate-800 hover:text-white"}
+                                `}
+                            >
+                                {method.name}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <button 
+                onClick={handleConfirmFinish}
+                disabled={finishing || !finalPaymentMethod}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-4 rounded-xl transition shadow-xl shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
+            >
+                {finishing ? "Processando..." : "Confirmar Recebimento 💰"}
+            </button>
+        </div>
+      </Modal>
+
     </div>
   );
 }
 --- FIM DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
 
 
+--- INICIO DO ARQUIVO: src\react-app\pages\staff\StaffProfilePage.tsx ---
+Path: src\react-app\pages\staff\StaffProfilePage.tsx
+------------------------------
+import { useState, useEffect } from "react";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { pb } from "@/react-app/lib/api/pocketbase";
+
+export default function StaffProfilePage() {
+  const { user } = useAuth();
+  
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setName(user.name || "");
+      setEmail(user.email || "");
+      setPhone(user.phone || "");
+    }
+  }, [user]);
+
+  const handleUpdateProfile = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      await pb.collection("users").update(user.id, {
+        name: name.trim(),
+        phone: phone.trim(),
+      });
+      alert("Dados atualizados com sucesso!");
+    } catch (error: any) {
+      console.error(error);
+      alert("Erro ao atualizar dados.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!user) return;
+    
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      return alert("Preencha todos os campos de senha.");
+    }
+    if (newPassword.length < 8) {
+        return alert("A nova senha deve ter no mínimo 8 caracteres.");
+    }
+    if (newPassword !== confirmPassword) {
+      return alert("A nova senha e a confirmação não conferem.");
+    }
+
+    setLoading(true);
+    try {
+      // Exige senha antiga para troca
+      await pb.collection("users").update(user.id, {
+        oldPassword: oldPassword,
+        password: newPassword,
+        passwordConfirm: confirmPassword,
+      });
+      
+      alert("Senha alterada com sucesso!");
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (error: any) {
+      console.error(error);
+      alert("Erro ao alterar senha. Verifique se a senha atual está correta.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8 pb-20">
+      <div>
+        <h1 className="text-2xl font-bold text-white">Configurações da Conta</h1>
+        <p className="text-slate-400">Mantenha seus dados de acesso e contato atualizados.</p>
+      </div>
+
+      {/* DADOS BÁSICOS */}
+      <section className="bg-slate-900 border border-white/5 rounded-2xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-white border-b border-white/5 pb-2">Meus Dados</h2>
+        
+        <div className="grid md:grid-cols-2 gap-4">
+            <div>
+                <label className="block text-xs text-slate-400 mb-1">Nome Completo</label>
+                <input 
+                    type="text" 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-emerald-500 transition"
+                />
+            </div>
+            <div>
+                <label className="block text-xs text-slate-400 mb-1">E-mail (Não alterável)</label>
+                <input 
+                    type="email" 
+                    value={email}
+                    disabled
+                    className="w-full bg-black/30 border border-white/5 rounded-lg p-3 text-slate-500 cursor-not-allowed"
+                />
+            </div>
+            <div className="md:col-span-2">
+                <label className="block text-xs text-slate-400 mb-1">Telefone / WhatsApp</label>
+                <input 
+                    type="text" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-emerald-500 transition"
+                />
+            </div>
+        </div>
+        
+        <div className="pt-2 text-right">
+            <button 
+                onClick={handleUpdateProfile}
+                disabled={loading}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-6 py-2 rounded-xl transition disabled:opacity-50"
+            >
+                {loading ? "Salvando..." : "Salvar Alterações"}
+            </button>
+        </div>
+      </section>
+
+      {/* SEGURANÇA */}
+      <section className="bg-slate-900 border border-white/5 rounded-2xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-white border-b border-white/5 pb-2">Segurança</h2>
+        
+        <div className="space-y-4">
+            <div>
+                <label className="block text-xs text-slate-400 mb-1">Senha Atual</label>
+                <input 
+                    type="password" 
+                    value={oldPassword}
+                    onChange={(e) => setOldPassword(e.target.value)}
+                    className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-emerald-500 transition"
+                />
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">Nova Senha</label>
+                    <input 
+                        type="password" 
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-emerald-500 transition"
+                        placeholder="Mínimo 8 caracteres"
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">Confirmar Nova Senha</label>
+                    <input 
+                        type="password" 
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-emerald-500 transition"
+                    />
+                </div>
+            </div>
+        </div>
+
+        <div className="pt-2 text-right">
+            <button 
+                onClick={handleChangePassword}
+                disabled={loading}
+                className="bg-slate-700 hover:bg-slate-600 text-white font-medium px-6 py-2 rounded-xl transition disabled:opacity-50"
+            >
+                {loading ? "Atualizando..." : "Trocar Senha"}
+            </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\pages\staff\StaffProfilePage.tsx ---
+
+
 --- INICIO DO ARQUIVO: src\react-app\routes\AppRouter.tsx ---
 Path: src\react-app\routes\AppRouter.tsx
 ------------------------------
-// src/react-app/routes/AppRouter.tsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 
 import LandingPage from "../pages/public/LandingPage";
 import LoginPage from "../pages/auth/LoginPage";
 import RegisterPage from "../pages/auth/RegisterPage";
-
 import BookPage from "../pages/booking/BookPage";
-
 import OnboardingRouter from "../pages/onboarding/OnboardingRouter";
 import DashboardHome from "../pages/dashboard/DashboardHome";
 
-// Certifique-se de ter renomeado o arquivo para StaffAgendaPage.tsx
+// Pages Staff
 import StaffAgendaPage from "../pages/staff/StaffAgendaPage";
+import StaffProfilePage from "../pages/staff/StaffProfilePage"; 
+
+// Pages Owner
 import ClientPanelPage from "../pages/client/ClientPanelPage";
 import SettingsPage from "../pages/owner/SettingsPage";
 import ServicesPage from "../pages/owner/ServicesPage";
 import ShopsPage from "../pages/owner/ShopsPage";
 import StaffPage from "../pages/owner/StaffPage";
 
-
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../components/layout/AppLayout";
+import StaffLayout from "../components/layout/StaffLayout" 
+
 export default function AppRouter() {
   return (
     <BrowserRouter>
@@ -7984,7 +8908,7 @@ export default function AppRouter() {
         {/* BOOKING PÚBLICO */}
         <Route path="/book/:slug" element={<BookPage />} />
 
-        {/* ONBOARDING MULTI-ETAPA (DONO) */}
+        {/* ONBOARDING (DONO) */}
         <Route
           path="/onboarding/*"
           element={
@@ -7994,7 +8918,7 @@ export default function AppRouter() {
           }
         />
 
-        {/* DASHBOARD DO DONO */}
+        {/* DASHBOARD DO DONO (ACESSO DIRETO) */}
         <Route
           path="/owner/dashboard"
           element={
@@ -8003,7 +8927,8 @@ export default function AppRouter() {
             </ProtectedRoute>
           }
         />
-        {/* --- ROTAS DO PAINEL (COM LAYOUT) --- */}
+
+        {/* --- ROTAS DO PAINEL DO DONO (Layout AppLayout) --- */}
         <Route element={<AppLayout />}>
           <Route
             path="/owner/dashboard"
@@ -8050,27 +8975,26 @@ export default function AppRouter() {
             }
           />
 
-          <Route
-            path="/staff/agenda"
-            element={
-              <ProtectedRoute allowedRoles={["staff", "dono"]}>
-                <StaffAgendaPage />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Adicione as rotas futuras aqui (services, shops, etc) */}
+          {/* REMOVIDO DAQUI: A rota /staff/agenda estava forçando o layout errado */}
         </Route>
-        {/* --- FIM ROTAS DO PAINEL --- */}
-        {/* AGENDA DO PROFISSIONAL */}
+
+        {/* --- ÁREA DO STAFF (NOVO LAYOUT SIMPLIFICADO) --- */}
         <Route
-          path="/staff/agenda"
+          path="/staff"
           element={
-            <ProtectedRoute allowedRoles={["staff"]}>
-              <StaffAgendaPage />
+            // Adicionei "dono" aqui também caso você queira espiar a agenda usando o layout do staff
+            <ProtectedRoute allowedRoles={["staff", "dono"]}>
+              <StaffLayout>
+                <Outlet />
+              </StaffLayout>
             </ProtectedRoute>
           }
-        />
+        >
+            <Route index element={<Navigate to="agenda" replace />} />
+            <Route path="agenda" element={<StaffAgendaPage />} />
+            <Route path="settings" element={<StaffProfilePage />} />
+        </Route>
+
 
         {/* PAINEL DO CLIENTE */}
         <Route
@@ -8082,20 +9006,13 @@ export default function AppRouter() {
           }
         />
 
-        {/* CONFIGURAÇÕES DA LOJA (Corrigido: Removida a duplicata) */}
-        <Route
-          path="/owner/settings"
-          element={
-            <ProtectedRoute allowedRoles={["dono"]}>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
+        {/* FALLBACK */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
       </Routes>
     </BrowserRouter>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\routes\AppRouter.tsx ---
 
 
@@ -8342,8 +9259,8 @@ export interface Appointment extends BaseRecord {
   start_time: string; // ISO
   end_time?: string | null; // ISO
 
-  status: AppointmentStatus;
-  payment_status: PaymentStatus;
+  status: AppointmentStatus | string;
+  payment_status: PaymentStatus | string;
 
   payment_method?: string | null; // relation payment_methods
   total_amount?: number | null;
@@ -8353,6 +9270,16 @@ export interface Appointment extends BaseRecord {
   barber_id: string; // relation users
   service_id: string; // relation services
   shop_id: string; // relation shops
+
+  // --- CORREÇÃO IMPORTANTE ---
+  // Adicionamos 'expand' para o TypeScript reconhecer os objetos expandidos
+  expand?: {
+    client_id?: User;
+    barber_id?: User;
+    service_id?: Service;
+    shop_id?: Shop;
+    payment_method?: PaymentMethod;
+  };
 }
 
 // ------------------------------------
@@ -8451,5 +9378,4 @@ export interface ShopWithCompany {
   shop: any;
   company: any;
 }
-
 --- FIM DO ARQUIVO: src\shared\types.ts ---

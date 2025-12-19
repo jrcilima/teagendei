@@ -11,11 +11,11 @@ export default function BookPage() {
   const { slug } = useParams();
   
   // Dados da Loja
-  const [shop, setShop] = useState<any>(null); // any para aceitar o expand sem erros
+  const [shop, setShop] = useState<any>(null); // any para aceitar o expand sem erros de tipagem estrita
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Estado do Wizard
+  // Estado do Wizard (Passo a passo)
   const [step, setStep] = useState(1);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<User | null>(null);
@@ -42,7 +42,6 @@ export default function BookPage() {
         }
       } catch (err: any) {
         if (!isMounted) return;
-
         // Ignora erro de auto-cancelamento
         if (err.status === 0 || err.isAbort) return;
 
@@ -139,9 +138,9 @@ export default function BookPage() {
 
         {step === 3 && selectedService && (
           <StepDateTime 
-            shop={shop}                         // CORREÇÃO: Passa objeto shop
-            service={selectedService}           // CORREÇÃO: Passa objeto service
-            professional={selectedProfessional} // CORREÇÃO: Passa objeto user | null
+            shop={shop}
+            service={selectedService}
+            professional={selectedProfessional}
             onSelect={handleTimeSelect}
             onBack={handleBack}
           />

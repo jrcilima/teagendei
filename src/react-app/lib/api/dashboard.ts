@@ -1,78 +1,68 @@
-// src/react-app/lib/api/dashboard.ts
+import { pb } from "./pocketbase";
+import type { Appointment } from "@/shared/types";
 
-import {pb} from "./pocketbase";
-
-/* ------------------------------------------------------
-   Tipos do Dashboard
------------------------------------------------------- */
-
-export type TodayKpis = {
+// Interface para os dados do gráfico/cards (mantida para tipagem do estado)
+export interface DailyKpis {
   total_bookings: number;
   unique_clients: number;
   total_value: number;
-};
+}
 
-export type TodayBooking = {
+export interface DailyBooking {
   id: string;
+  client_id: string; // Adicionado para contagem correta
   client_name: string;
   professional_name: string;
   service_name: string;
   time: string;
-};
-
-/* ------------------------------------------------------
-   Função: KPIs do dia
------------------------------------------------------- */
-
-export async function fetchTodayKpis(shopId: string): Promise<TodayKpis> {
-  const today = new Date();
-  const dateStr = today.toISOString().split("T")[0]; // yyyy-mm-dd
-
-  const records = await pb.collection("appointments").getFullList({
-    filter: `shop_id = "${shopId}" && date = "${dateStr}"`,
-    expand: "client_id,professional_id,service_id",
-  });
-
-  const total_bookings = records.length;
-
-  const unique_clients = new Set(
-    records.map((r) => r.client_id)
-  ).size;
-
-  const total_value = records.reduce((sum, r) => {
-    const service = r.expand?.service_id;
-    const value = service?.price ?? 0;
-    return sum + Number(value);
-  }, 0);
-
-  return {
-    total_bookings,
-    unique_clients,
-    total_value,
-  };
+  status: string;
+  value: number;
+  raw_status: string;
 }
 
-/* ------------------------------------------------------
-   Função: Próximos atendimentos do dia
------------------------------------------------------- */
+function formatTimeVisual(isoString: string) {
+  if (!isoString) return "--:--";
+  return isoString.substring(11, 16);
+}
 
-export async function fetchTodayBookings(
-  shopId: string
-): Promise<TodayBooking[]> {
-  const today = new Date();
-  const dateStr = today.toISOString().split("T")[0];
+/**
+ * Busca lista de agendamentos.
+ * OBS: Não precisamos mais da função fetchDailyKpis separada,
+ * calcularemos os totais baseados no retorno desta função.
+ */
+export async function fetchDailyBookings(shopId: string, dateString: string): Promise<DailyBooking[]> {
+  const startOfDay = `${dateString} 00:00:00`;
+  const endOfDay = `${dateString} 23:59:59`;
 
-  const records = await pb.collection("appointments").getFullList({
-    filter: `shop_id = "${shopId}" && date = "${dateStr}"`,
-    sort: "start_time",
-    expand: "client_id,professional_id,service_id",
-  });
+  try {
+    const records = await pb.collection("appointments").getFullList<Appointment>({
+      filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != '0'`,
+      sort: "+start_time",
+      expand: "client_id,barber_id,service_id",
+    });
 
-  return records.map((r) => ({
-    id: r.id,
-    client_name: r.expand?.client_id?.name ?? "Cliente",
-    professional_name: r.expand?.professional_id?.name ?? "Profissional",
-    service_name: r.expand?.service_id?.name ?? "Serviço",
-    time: r.start_time ?? "",
-  }));
+    return records.map((record) => {
+      const expanded = (record as any).expand || {};
+      const time = formatTimeVisual(record.start_time);
+
+      return {
+        id: record.id,
+        client_id: record.client_id, // Importante para contar clientes únicos
+        client_name: expanded.client_id?.name || "Cliente",
+        professional_name: expanded.barber_id?.name || "Profissional",
+        service_name: expanded.service_id?.name || "Serviço",
+        time,
+        status: record.status,
+        raw_status: record.status,
+        value: record.total_amount || 0
+      };
+    });
+  } catch (err: any) {
+    // Se for cancelamento, relança o erro para o componente controlar
+    if (err.status === 0 || err.isAbort) {
+        throw err;
+    }
+    console.error("[Bookings] Erro ao buscar lista:", err);
+    return [];
+  }
 }

@@ -69,7 +69,8 @@ export default function SettingsPage() {
       setSelectedPayments(currentShop.accepted_payment_methods || []);
 
       if (currentShop.logo) {
-        const url = pb.files.getUrl(currentShop, currentShop.logo);
+        // CORREÇÃO: getUrl -> getURL
+        const url = pb.files.getURL(currentShop, currentShop.logo);
         setLogoPreview(url);
       } else {
         setLogoPreview(null);
@@ -89,7 +90,9 @@ export default function SettingsPage() {
       setHours(h);
       setSegments(s);
       setAllPaymentMethods(p);
-    } catch (err) {
+    } catch (err: any) {
+      // CORREÇÃO: Ignora cancelamento automático
+      if (err.status === 0 || err.isAbort) return;
       console.error(err);
     } finally {
       setLoading(false);
