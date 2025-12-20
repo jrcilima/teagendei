@@ -14,17 +14,17 @@ const getStatusLabel = (status: string) => {
     case AppointmentStatus.InProgress: return { text: "Em Andamento", color: "bg-purple-500/20 text-purple-400" };
     case AppointmentStatus.Completed: return { text: "Concluído", color: "bg-emerald-500/20 text-emerald-400" };
     case AppointmentStatus.Cancelled: return { text: "Cancelado", color: "bg-red-500/20 text-red-400" };
+    case AppointmentStatus.Blocked: return { text: "Bloqueio", color: "bg-red-500/20 text-red-400" };
     default: return { text: "Outro", color: "bg-slate-700 text-slate-300" };
   }
 };
 
-// CORREÇÃO: Removemos o 'Z' para tratar a data como Local Literal (evita cair para 05:00)
+// CORREÇÃO: Utiliza o construtor Date padrão para converter UTC (do banco) para Hora Local do navegador
 const formatDate = (iso: string) => {
   if (!iso) return "--";
   
-  // Corta o fuso horário (Z) para o JS não converter para UTC-3
-  const cleanIso = iso.replace("Z", "");
-  const date = new Date(cleanIso);
+  // O navegador lê o "Z" no final da string do PocketBase e converte para o fuso local automaticamente
+  const date = new Date(iso);
 
   const day = String(date.getDate()).padStart(2, '0');
   const month = date.toLocaleString('pt-BR', { month: 'long' });
@@ -84,9 +84,7 @@ export default function ClientPanelPage() {
 
   const now = new Date();
   
-  // Lógica corrigida para Próximos vs Histórico
-  // Para comparação lógica (maior/menor que hoje), ainda usamos new Date(iso) normal ou comparamos strings
-  // Mas aqui vamos usar a data do objeto direto para filtrar corretamente
+  // Filtra agendamentos futuros e passados
   const upcoming = appointments.filter(a => new Date(a.start_time) >= now && a.status !== AppointmentStatus.Cancelled);
   const history = appointments.filter(a => new Date(a.start_time) < now || a.status === AppointmentStatus.Cancelled);
 

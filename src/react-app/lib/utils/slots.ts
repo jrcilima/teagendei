@@ -13,14 +13,6 @@ function minutesToTime(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-// Helper: Limpa a data do PocketBase para garantir comparação local exata
-// Transforma "2025-12-19 08:00:00.000Z" em "2025-12-19T08:00:00"
-function normalizeDateStr(isoString: string): string {
-  if (!isoString) return "";
-  // Pega apenas os primeiros 19 caracteres (YYYY-MM-DDTHH:mm:ss) e troca espaço por T
-  return isoString.substring(0, 19).replace(" ", "T");
-}
-
 const WEEKDAY_MAP: Record<number, string> = {
   0: "dom", 1: "seg", 2: "ter", 3: "qua", 4: "qui", 5: "sex", 6: "sab",
 };
@@ -75,35 +67,32 @@ export function generateSlots(
 
     // 3. Verificar colisão com agendamentos existentes
     const isBusy = existingAppointments.some((appt) => {
-      // Normaliza a data do banco para ignorar fuso horário (trata como local)
-      const apptStartStr = normalizeDateStr(appt.start_time);
-      
-      // Se a data for inválida, ignora
-      if (!apptStartStr) return false;
+      // CORREÇÃO: Usamos o UTC completo do banco. O new Date() converte UTC -> Local automaticamente.
+      // Assim, 15:00 UTC vira 12:00 Local e bate com o slotStartMs (que é 12:00 Local).
+      if (!appt.start_time) return false;
 
-      const apptStartMs = new Date(apptStartStr).getTime();
+      const apptStartMs = new Date(appt.start_time).getTime();
       let apptEndMs = 0;
 
-      // Tenta pegar o end_time do agendamento. Se não tiver, calcula baseado no slot (fallback)
-      const apptEndStr = normalizeDateStr(appt.end_time || "");
-      if (apptEndStr) {
-        apptEndMs = new Date(apptEndStr).getTime();
+      if (appt.end_time) {
+        apptEndMs = new Date(appt.end_time).getTime();
       } else {
-        // Fallback: Se por algum motivo o banco não tem end_time, assume a duração do serviço atual
+        // Fallback: Se não tiver end_time, calcula baseado na duração padrão do serviço
+        // (Para bloqueios criados sem data final explícita, assumimos 30min ou serviceDuration)
         apptEndMs = apptStartMs + (serviceDuration * 60 * 1000);
       }
 
       // LÓGICA DE COLISÃO ROBUSTA (Intersecção de Intervalos)
       // Um slot está ocupado se:
       // (Inicio do Agendamento < Fim do Slot) E (Fim do Agendamento > Inicio do Slot)
+      // Isso cobre: Bloqueio maior que o slot, Bloqueio dentro do slot, etc.
       return (apptStartMs < slotEndMs && apptEndMs > slotStartMs);
     });
 
     slots.push({
       time: timeString,
-      // Retorna com espaço para compatibilidade visual se necessário, ou T
-      startISO: slotStartISO.replace("T", " "), 
-      endISO: slotEndISO.replace("T", " "),
+      startISO: slotStartISO, // Mantém ISO local para uso no front
+      endISO: slotEndISO,
       isAvailable: !isBusy,
     });
   }
