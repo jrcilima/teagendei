@@ -1,5 +1,5 @@
 CONTEXTO DO PROJETO - VERSÃO 1.0.92
-Data de Geração: 20/12/2025 12:38:49
+Data de Geração: 20/12/2025 14:32:26
 ### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
@@ -3804,14 +3804,12 @@ export default function StepConfirm({
 --- INICIO DO ARQUIVO: src\react-app\components\booking\StepDateTime.tsx ---
 Path: src\react-app\components\booking\StepDateTime.tsx
 ------------------------------
-// src/react-app/components/booking/StepDateTime.tsx
-
-import { useEffect, useState, useMemo } from "react";
-import type { Shop, Service, User, TimeSlot, ShopHour, Appointment } from "@/shared/types";
+import { useEffect, useState } from "react";
+import type { Shop, Service, User, TimeSlot, ShopHour } from "@/shared/types";
+// CORREÇÃO: Importando do lugar certo (availability.ts)
 import { getShopHours, getProfessionalAppointments } from "@/react-app/lib/api/availability";
 import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
 import { generateSlots } from "@/react-app/lib/utils/slots";
-import { AppointmentStatus } from "@/shared/types";
 
 type Props = {
   shop: Shop;
@@ -3822,16 +3820,16 @@ type Props = {
 };
 
 export default function StepDateTime({ shop, service, professional, onBack, onSelect }: Props) {
-  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [selectedDate, setSelectedDate] = useState<string>(""); // YYYY-MM-DD
   const [slots, setSlots] = useState<TimeSlot[]>([]);
   const [loading, setLoading] = useState(false);
   const [shopHours, setShopHours] = useState<ShopHour[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
   
+  // Estado para resolver o "Qualquer Profissional"
   const [effectiveProfessional, setEffectiveProfessional] = useState<User | null>(professional);
 
-  // 1. Inicialização:  Horários da Loja + Resolver Profissional
+  // 1. Inicialização: Horários da Loja + Resolver Profissional
   useEffect(() => {
     let isMounted = true;
 
@@ -3839,9 +3837,9 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
       try {
         const hours = await getShopHours(shop.id);
         if (isMounted) setShopHours(hours);
-      } catch (err:  any) {
+      } catch (err: any) {
         if (err.status !== 0 && !err.isAbort) {
-          console.error("Erro ao buscar horários:", err);
+            console.error("Erro ao buscar horários:", err);
         }
       }
 
@@ -3850,14 +3848,19 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         setSelectedDate(today);
       }
 
-      if (! professional) {
+      // Se professional for null (Opção "Qualquer"), buscamos um default da loja
+      // (Geralmente o primeiro da lista ou o dono, para fins de cálculo de slot)
+      if (!professional) {
         try {
           const profs = await getProfessionalsByShop(shop.id);
           if (isMounted && profs.length > 0) {
             setEffectiveProfessional(profs[0]);
+          } else if (isMounted) {
+             // Fallback se não achar ninguém, tenta usar o dono se disponível nos dados da loja
+             // Mas idealmente a loja deve ter profissionais.
           }
         } catch (err: any) {
-          if (err.status !== 0 && !err.isAbort) console.error(err);
+           if (err.status !== 0 && !err.isAbort) console.error(err);
         }
       } else {
         if (isMounted) setEffectiveProfessional(professional);
@@ -3871,24 +3874,23 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
 
   // 2. Quando muda a data ou o profissional efetivo, recalcula slots
   useEffect(() => {
-    if (! selectedDate || shopHours.length === 0 || ! effectiveProfessional) return;
+    if (!selectedDate || shopHours.length === 0 || !effectiveProfessional) return;
 
     let isMounted = true;
 
     async function loadSlots() {
       setLoading(true);
       try {
-        const allAppointments = await getProfessionalAppointments(effectiveProfessional! .id, selectedDate);
+        // CORREÇÃO: Usando a função correta getProfessionalAppointments
+        const appointments = await getProfessionalAppointments(effectiveProfessional!.id, selectedDate);
         
-        if (! isMounted) return;
-
-        setAppointments(allAppointments);
+        if (!isMounted) return;
 
         const generated = generateSlots(
           selectedDate,
           service.duration,
           shopHours,
-          allAppointments
+          appointments
         );
         
         setSlots(generated);
@@ -3905,66 +3907,6 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
     return () => { isMounted = false; };
   }, [selectedDate, shopHours, effectiveProfessional, service.duration]);
 
-  // ✅ CORREÇÃO CRÍTICA: Helper para verificar bloqueios
-  // Converte TUDO para timestamp em MILISSEGUNDOS para comparação precisa
-  const getBlockInfoForSlot = (slotTime:  string) => {
-    // 1. Cria o slot LOCAL
-    // "2025-01-20" + "12:30" = "2025-01-20T12:30:00"
-    const slotStartISO = `${selectedDate}T${slotTime}:00`;
-    const slotStart = new Date(slotStartISO).getTime(); // Converte LOCAL para ms
-    const slotEnd = slotStart + (service.duration * 60 * 1000); // Adiciona duração
-
-    console.log(`🔍 Verificando slot ${slotTime}:`, {
-      slotStartISO,
-      slotStart:  new Date(slotStart).toISOString(),
-      slotEnd: new Date(slotEnd).toISOString()
-    });
-
-    // 2. Verifica cada bloqueio
-    for (const appt of appointments) {
-      if (appt.status === AppointmentStatus.Blocked) {
-        // ✅ CORREÇÃO: Converte UTC do banco para ms também
-        const apptStart = new Date(appt.start_time).getTime();
-        const apptEnd = new Date(
-          appt.end_time || new Date(apptStart + 30 * 60 * 1000).toISOString()
-        ).getTime();
-
-        console.log(`📅 Comparando com bloqueio: `, {
-          apptStart: new Date(apptStart).toISOString(),
-          apptEnd: new Date(apptEnd).toISOString(),
-          start_time: appt.start_time,
-          end_time:  appt.end_time,
-          notes: appt.notes
-        });
-
-        // ✅ CORREÇÃO: Comparação correta de intervalos em ms
-        // Sobreposição: (slotStart < apptEnd) AND (slotEnd > apptStart)
-        if (slotStart < apptEnd && slotEnd > apptStart) {
-          console.log(`✅ BLOQUEIO DETECTADO!`);
-          
-          const startTime = new Date(apptStart).toLocaleTimeString("pt-BR", { 
-            hour: "2-digit", 
-            minute: "2-digit" 
-          });
-          const endTime = new Date(apptEnd).toLocaleTimeString("pt-BR", { 
-            hour: "2-digit", 
-            minute: "2-digit" 
-          });
-
-          return {
-            isBlocked: true,
-            reason: appt.notes || "Horário indisponível",
-            startTime,
-            endTime
-          };
-        }
-      }
-    }
-
-    console.log(`✅ Slot livre`);
-    return null;
-  };
-
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
       <div>
@@ -3972,7 +3914,7 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         <p className="text-xs uppercase tracking-[0.18em] text-emerald-300/80 mb-1">Passo 3 • Data e Hora</p>
         <h2 className="text-xl md:text-2xl font-semibold text-slate-50">Quando será o atendimento?</h2>
         <p className="text-sm text-slate-300 mt-1">
-          Profissional: <span className="text-emerald-300">{effectiveProfessional ?  effectiveProfessional.name : "Carregando..."}</span> • Duração: {service.duration} min
+          Profissional: <span className="text-emerald-300">{effectiveProfessional ? effectiveProfessional.name : "Carregando..."}</span> • Duração: {service.duration} min
         </p>
       </div>
 
@@ -3984,7 +3926,7 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
           value={selectedDate}
           min={new Date().toISOString().split("T")[0]}
           onChange={(e) => {
-            setSelectedDate(e. target.value);
+            setSelectedDate(e.target.value);
             setSelectedSlot(null);
           }}
           className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 color-scheme-dark font-bold tracking-wide"
@@ -3994,85 +3936,51 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
       {/* Grid de Horários */}
       <div className="space-y-2">
         <div className="flex justify-between items-end">
-          <label className="text-xs font-medium text-slate-400">Horários</label>
-          <div className="flex gap-3 text-[10px] text-slate-500">
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div> Livre</span>
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500/20 border border-red-500/50"></div> Ocupado</span>
-            <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500/20 border border-amber-500/50"></div> Bloqueado</span>
-          </div>
+             <label className="text-xs font-medium text-slate-400">Horários</label>
+             <div className="flex gap-3 text-[10px] text-slate-500">
+                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div> Livre</span>
+                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500/20 border border-red-500/50"></div> Ocupado</span>
+             </div>
         </div>
         
-        {! effectiveProfessional ? (
-          <div className="py-8 text-center text-slate-500 text-sm">Carregando disponibilidade...</div>
+        {!effectiveProfessional ? (
+           <div className="py-8 text-center text-slate-500 text-sm">Carregando disponibilidade...</div>
         ) : loading ? (
           <div className="py-8 text-center text-slate-500 text-sm animate-pulse">Calculando agenda...</div>
         ) : slots.length === 0 ? (
           <div className="py-8 text-center text-slate-500 text-sm bg-slate-950/30 rounded-xl border border-white/5">
-            Nenhum horário disponível nesta data. 
+            Nenhum horário disponível nesta data.
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Mostrar bloqueios de forma clara */}
-            {appointments.filter(a => a.status === AppointmentStatus.Blocked).length > 0 && (
-              <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl">
-                <p className="text-xs text-amber-400 font-bold mb-2 uppercase tracking-wider">⏳ Bloqueios de Agenda Neste Dia: </p>
-                <div className="space-y-2">
-                  {appointments
-                    .filter(a => a.status === AppointmentStatus. Blocked)
-                    .map(block => {
-                      const startTime = new Date(block.start_time).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-                      const endTime = new Date(block.end_time || block.start_time).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-                      return (
-                        <div key={block. id} className="bg-amber-900/20 p-2 rounded border border-amber-500/20 text-xs">
-                          <span className="text-amber-300 font-mono font-bold">{startTime} - {endTime}</span>
-                          <span className="text-amber-200 ml-2">{block.notes || "Indisponível"}</span>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-
-            {/* Grid de slots */}
-            <div className="grid grid-cols-4 gap-2 md:grid-cols-5 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
-              {slots.map((slot) => {
-                const isSelected = selectedSlot?. time === slot.time;
-                const blockInfo = getBlockInfoForSlot(slot. time); // ✅ Chama com correção
-
-                let btnClass = "py-2 px-1 rounded-lg text-sm font-bold transition relative border ";
-                let title = "";
-
-                if (blockInfo) {
-                  // BLOQUEADO (AMBER/AMARELO)
-                  btnClass += "bg-amber-500/20 border-amber-500/50 text-amber-300/60 cursor-not-allowed opacity-60";
-                  title = `Bloqueado: ${blockInfo.reason} (${blockInfo.startTime} - ${blockInfo.endTime})`;
-                } else if (! slot.isAvailable) {
-                  // OCUPADO (VERMELHO)
+          <div className="grid grid-cols-4 gap-2 md:grid-cols-5 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
+            {slots.map((slot) => {
+              const isSelected = selectedSlot?.time === slot.time;
+              
+              // LÓGICA DE ESTILOS (VERMELHO VS VERDE)
+              let btnClass = "py-2 px-1 rounded-lg text-sm font-bold transition relative border ";
+              
+              if (!slot.isAvailable) {
+                  // OCUPADO: Vermelho, riscado, opaco
                   btnClass += "bg-red-500/10 border-red-500/20 text-red-400/60 cursor-not-allowed line-through decoration-red-500/30";
-                  title = "Horário ocupado";
-                } else if (isSelected) {
-                  // SELECIONADO (VERDE)
+              } else if (isSelected) {
+                  // SELECIONADO: Verde Sólido, Destaque
                   btnClass += "bg-emerald-500 border-emerald-500 text-black shadow-lg shadow-emerald-500/20 scale-105 z-10";
-                  title = "Selecionado";
-                } else {
-                  // LIVRE (VERDE CLARO)
+              } else {
+                  // LIVRE: Verde transparente, Hover
                   btnClass += "bg-emerald-500/5 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/40 cursor-pointer";
-                  title = "Disponível";
-                }
+              }
 
-                return (
-                  <button
-                    key={slot.time}
-                    disabled={! slot.isAvailable || !!blockInfo}
-                    onClick={() => !blockInfo && slot.isAvailable && setSelectedSlot(slot)}
-                    className={btnClass}
-                    title={title}
-                  >
-                    {slot.time}
-                  </button>
-                );
-              })}
-            </div>
+              return (
+                <button
+                  key={slot.time}
+                  disabled={!slot.isAvailable}
+                  onClick={() => setSelectedSlot(slot)}
+                  className={btnClass}
+                >
+                  {slot.time}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -4081,7 +3989,7 @@ export default function StepDateTime({ shop, service, professional, onBack, onSe
         <button
           onClick={() => selectedSlot && onSelect(selectedSlot)}
           disabled={!selectedSlot}
-          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2. 5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
+          className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-2.5 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/20"
         >
           Confirmar Horário
           <span>⟶</span>
@@ -4381,10 +4289,10 @@ interface StaffBookingModalProps {
   onSuccess: () => void;
 }
 
-export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingModalProps) {
+export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingModalProps) {
   const { user } = useAuth();
   
-  // TIPO DE AÇÃO:  AGENDAR ou BLOQUEAR
+  // TIPO DE AÇÃO: AGENDAR ou BLOQUEAR
   const [modalType, setModalType] = useState<"appointment" | "block">("appointment");
 
   // Estados Comuns
@@ -4414,7 +4322,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
   const [slotLoading, setSlotLoading] = useState(false);
 
   useEffect(() => {
-    if (isOpen && user?. shop_id) {
+    if (isOpen && user?.shop_id) {
       getServicesByShop(user.shop_id).then(setServices);
       getProfessionalsByShop(user.shop_id).then(users => {
         setBarbers(users);
@@ -4426,16 +4334,19 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
   }, [isOpen, user?.shop_id]);
 
   useEffect(() => {
-    if (!selectedBarber || !date || !user?. shop_id) {
+    if (!selectedBarber || !date || !user?.shop_id) {
         setSlots([]);
         return;
     }
 
+    // Se for bloqueio, não precisamos de serviço para calcular slots livres, 
+    // mas precisamos de uma "duração base" para desenhar a grade. Usaremos 30min ou a duração do bloqueio.
     const durationForGrid = modalType === "appointment" 
         ? services.find(s => s.id === selectedService)?.duration || 30 
         : blockDuration;
 
-    if (modalType === "appointment" && ! selectedService) {
+    // Se for agendamento e não tiver serviço selecionado, não busca
+    if (modalType === "appointment" && !selectedService) {
         setSlots([]);
         return;
     }
@@ -4444,7 +4355,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
       setSlotLoading(true);
       try {
         const [hours, appointments] = await Promise.all([
-          getShopHours(user! .shop_id! ),
+          getShopHours(user!.shop_id!),
           getProfessionalAppointments(selectedBarber, date)
         ]);
 
@@ -4460,10 +4371,11 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
     fetchSlots();
   }, [selectedService, selectedBarber, date, user?.shop_id, services, modalType, blockDuration]);
 
+  // Busca Clientes (apenas se for agendamento)
   useEffect(() => {
-    if (modalType === "appointment" && clientMode === "registered" && clientSearch. length > 2) {
+    if (modalType === "appointment" && clientMode === "registered" && clientSearch.length > 2) {
       const timer = setTimeout(() => {
-        searchClients(clientSearch).then(res => setFoundClients(res. items as unknown as User[]));
+        searchClients(clientSearch).then(res => setFoundClients(res.items as unknown as User[]));
       }, 500);
       return () => clearTimeout(timer);
     } else {
@@ -4471,48 +4383,38 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
     }
   }, [clientSearch, clientMode, modalType]);
 
-  // ✅ FUNÇÃO CORRIGIDA: 
   async function handleConfirm() {
-    if (!user?. shop_id || !selectedSlot || !selectedBarber) return;
-    
-    // ✅ NOVO:  Calcular end_time AQUI, baseado na duração
-    let finalEndTime: string | undefined = undefined;
-    
-    if (selectedSlot && blockDuration) {
-      const startDate = new Date(selectedSlot);
-      const endDate = new Date(startDate.getTime() + blockDuration * 60 * 1000);
-      finalEndTime = endDate.toISOString();
-    }
+    if (!user?.shop_id || !selectedSlot || !selectedBarber) return;
     
     // Payload Base
-    const payload:  any = {
+    const payload: any = {
         shop_id: user.shop_id,
-        barber_id:  selectedBarber,
+        barber_id: selectedBarber,
         start_time: selectedSlot,
-        end_time: finalEndTime, // ✅ NOVO! 
-        status: modalType === "appointment" ? AppointmentStatus. Confirmed : AppointmentStatus. Blocked,
     };
 
     if (modalType === "appointment") {
         const serviceObj = services.find(s => s.id === selectedService);
-        if (! serviceObj) return;
+        if (!serviceObj) return;
 
         if (clientMode === "guest" && !guestName.trim()) return alert("Digite o nome do cliente.");
         if (clientMode === "registered" && !selectedClient) return alert("Selecione um cliente.");
 
+        payload.status = AppointmentStatus.Confirmed;
         payload.service_id = selectedService;
         payload.duration_minutes = serviceObj.duration;
-        payload. total_amount = serviceObj.price;
-        payload.client_id = clientMode === "registered" ? selectedClient?. id : undefined;
-        payload.customer_name = clientMode === "guest" ? guestName :  undefined;
-        payload.customer_phone = clientMode === "guest" ?  guestPhone : undefined;
-        payload.payment_status = "1";
+        payload.total_amount = serviceObj.price;
+        payload.client_id = clientMode === "registered" ? selectedClient?.id : undefined;
+        payload.customer_name = clientMode === "guest" ? guestName : undefined;
+        payload.customer_phone = clientMode === "guest" ? guestPhone : undefined;
     } else {
-        // ✅ BLOQUEIO
-        if (! blockReason.trim()) return alert("Digite o motivo do bloqueio (ex:  Almoço).");
+        // BLOQUEIO
+        if (!blockReason.trim()) return alert("Digite o motivo do bloqueio (ex: Almoço).");
         
+        payload.status = AppointmentStatus.Blocked; // Código 6
         payload.notes = blockReason;
-        payload.duration_minutes = blockDuration; // ✅ Mantém para compatibilidade
+        payload.duration_minutes = blockDuration;
+        // Sem serviço, sem cliente
     }
 
     setLoading(true);
@@ -4526,7 +4428,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
       setSelectedSlot(null);
       setGuestName("");
       setBlockReason("");
-    } catch (error:  any) {
+    } catch (error: any) {
       console.error(error);
       alert("Erro ao salvar.");
     } finally {
@@ -4545,13 +4447,13 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
           <div className="flex gap-4">
               <button 
                 onClick={() => setModalType("appointment")}
-                className={`text-lg font-bold pb-1 border-b-2 transition ${modalType === "appointment" ? "text-emerald-400 border-emerald-400" :  "text-slate-500 border-transparent"}`}
+                className={`text-lg font-bold pb-1 border-b-2 transition ${modalType === "appointment" ? "text-emerald-400 border-emerald-400" : "text-slate-500 border-transparent"}`}
               >
                   Novo Agendamento
               </button>
               <button 
                 onClick={() => setModalType("block")}
-                className={`text-lg font-bold pb-1 border-b-2 transition ${modalType === "block" ?  "text-red-400 border-red-400" : "text-slate-500 border-transparent"}`}
+                className={`text-lg font-bold pb-1 border-b-2 transition ${modalType === "block" ? "text-red-400 border-red-400" : "text-slate-500 border-transparent"}`}
               >
                   Bloquear Horário
               </button>
@@ -4566,18 +4468,18 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
             
             {/* 1. CONFIGURAÇÃO (VARIA POR TIPO) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {modalType === "appointment" ?  (
+                {modalType === "appointment" ? (
                     <div>
                         <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
                             <Scissors size={14} /> Serviço
                         </label>
                         <select 
                             value={selectedService} 
-                            onChange={e => setSelectedService(e. target.value)}
+                            onChange={e => setSelectedService(e.target.value)}
                             className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
                         >
-                            <option value="">Selecione... </option>
-                            {services. map(s => (
+                            <option value="">Selecione...</option>
+                            {services.map(s => (
                                 <option key={s.id} value={s.id}>{s.name} ({s.duration} min) - R$ {s.price}</option>
                             ))}
                         </select>
@@ -4608,7 +4510,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
                     >
                         <option value="">Selecione...</option>
                         {barbers.map(b => (
-                            <option key={b. id} value={b.id}>{b.name}</option>
+                            <option key={b.id} value={b.id}>{b.name}</option>
                         ))}
                     </select>
                 </div>
@@ -4621,7 +4523,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
                         <Clock size={14} /> Duração do Bloqueio (minutos)
                     </label>
                     <div className="flex gap-2">
-                        {[30, 60, 90, 120]. map(m => (
+                        {[30, 60, 90, 120].map(m => (
                             <button 
                                 key={m} 
                                 onClick={() => setBlockDuration(m)}
@@ -4634,7 +4536,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
                             type="number" 
                             value={blockDuration}
                             onChange={e => setBlockDuration(Number(e.target.value))}
-                            className="w-20 bg-slate-800 border border-slate-700 rounded-lg p-2 text-center text-white focus:ring-2 focus: ring-red-500 outline-none"
+                            className="w-20 bg-slate-800 border border-slate-700 rounded-lg p-2 text-center text-white focus:ring-2 focus:ring-red-500 outline-none"
                         />
                     </div>
                 </div>
@@ -4658,15 +4560,15 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
                         <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
                             <Clock size={14} /> Horários Disponíveis
                         </label>
-                        {slotLoading ?  (
-                            <div className="text-slate-500 text-sm animate-pulse">Calculando... </div>
+                        {slotLoading ? (
+                            <div className="text-slate-500 text-sm animate-pulse">Calculando...</div>
                         ) : slots.length > 0 ? (
                             <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                                 {slots.map((slot) => (
                                     <button
                                         key={slot.time}
                                         disabled={!slot.isAvailable}
-                                        onClick={() => setSelectedSlot(slot. startISO)}
+                                        onClick={() => setSelectedSlot(slot.startISO)}
                                         className={`text-xs py-2 rounded-lg border transition-all ${
                                             selectedSlot === slot.startISO
                                                 ? (modalType === "appointment" ? "bg-emerald-500 border-emerald-500" : "bg-red-500 border-red-500") + " text-white font-bold"
@@ -4681,7 +4583,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
                             </div>
                         ) : (
                             <div className="text-slate-500 text-sm italic border border-dashed border-slate-700 rounded p-2 text-center">
-                                {modalType === "appointment" && ! selectedService ?  "Selecione um serviço primeiro." : "Nenhum horário disponível. "}
+                                {modalType === "appointment" && !selectedService ? "Selecione um serviço primeiro." : "Nenhum horário disponível."}
                             </div>
                         )}
                     </div>
@@ -4694,17 +4596,17 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }:  StaffBookingM
                     <label className="block text-sm font-medium text-slate-400 mb-4">Dados do Cliente</label>
                     <div className="flex gap-4 mb-4">
                         <button onClick={() => { setClientMode("guest"); setSelectedClient(null); }} className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "guest" ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>Cliente Avulso</button>
-                        <button onClick={() => { setClientMode("registered"); setGuestName(""); }} className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "registered" ?  "bg-blue-500/20 border-blue-500 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>Cliente Cadastrado</button>
+                        <button onClick={() => { setClientMode("registered"); setGuestName(""); }} className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "registered" ? "bg-blue-500/20 border-blue-500 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>Cliente Cadastrado</button>
                     </div>
 
-                    {clientMode === "guest" ?  (
-                        <div className="grid grid-cols-1 sm: grid-cols-2 gap-4">
-                            <input type="text" placeholder="Nome *" value={guestName} onChange={e => setGuestName(e. target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500" />
-                            <input type="text" placeholder="Telefone" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus: border-emerald-500" />
+                    {clientMode === "guest" ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <input type="text" placeholder="Nome *" value={guestName} onChange={e => setGuestName(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500" />
+                            <input type="text" placeholder="Telefone" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500" />
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {! selectedClient ?  (
+                            {!selectedClient ? (
                                 <div className="relative">
                                     <Search className="absolute left-3 top-3 text-slate-500" size={16} />
                                     <input type="text" placeholder="Buscar cliente..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 pl-10 text-white w-full outline-none focus:border-blue-500" />
@@ -5334,12 +5236,10 @@ export const useTenant = (): TenantContextType => {
 --- INICIO DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
 Path: src\react-app\lib\api\appointments.ts
 ------------------------------
-// src/react-app/lib/api/appointments.ts
-
 import { pb } from "./pocketbase";
 import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
 
-// ✅ MANTÉM: função asAppointment original
+// Função auxiliar asAppointment (MANTIDA IGUAL)
 function asAppointment(record: any): Appointment {
   const expand = record.expand || {};
   return {
@@ -5357,19 +5257,18 @@ function asAppointment(record: any): Appointment {
     payment_status: record.payment_status,
     payment_method: record.payment_method, 
     notes: record.notes,
-    created:  record.created,
+    created: record.created,
     updated: record.updated,
     expand: {
       shop_id: expand.shop_id,
-      client_id: expand.client_id ?  { ...expand.client_id, avatar: expand.client_id.avatar ?  pb.files.getURL(expand.client_id, expand.client_id.avatar) : undefined } : undefined,
-      barber_id: expand.barber_id ?  { ...expand.barber_id, avatar: expand.barber_id.avatar ? pb.files. getURL(expand.barber_id, expand.barber_id.avatar) : undefined } : undefined,
+      client_id: expand.client_id ? { ...expand.client_id, avatar: expand.client_id.avatar ? pb.files.getURL(expand.client_id, expand.client_id.avatar) : undefined } : undefined,
+      barber_id: expand.barber_id ? { ...expand.barber_id, avatar: expand.barber_id.avatar ? pb.files.getURL(expand.barber_id, expand.barber_id.avatar) : undefined } : undefined,
       service_id: expand.service_id,
       payment_method: expand.payment_method
     }
   };
 }
 
-// ✅ MANTÉM: função original
 export async function getStaffAppointmentsByDate(staffId: string, date: string): Promise<Appointment[]> {
   const startOfDay = `${date} 00:00:00`;
   const endOfDay = `${date} 23:59:59`;
@@ -5381,112 +5280,95 @@ export async function getStaffAppointmentsByDate(staffId: string, date: string):
   return records.map(asAppointment);
 }
 
-// ✅ MANTÉM:  função original
 export async function updateAppointmentStatus(
     id: string, 
     status: AppointmentStatus, 
     paymentStatus?: PaymentStatus, 
     paymentMethodId?: string
 ): Promise<Appointment> {
-  const payload:  any = { status };
+  const payload: any = { status };
   if (paymentStatus) payload.payment_status = paymentStatus;
   if (paymentMethodId) payload.payment_method = paymentMethodId;
   const record = await pb.collection("appointments").update(id, payload);
   return asAppointment(record);
 }
 
-// ✅ MANTÉM: interface original
+// --- CRIAÇÃO COM ESTRATÉGIA "GHOST" (A PROVA DE FALHAS) ---
+
 export interface CreateStaffAppointmentDTO {
   shop_id: string;
   barber_id: string;
   start_time: string;
   status: string;
-  service_id?:  string;
+  service_id?: string;
   duration_minutes?: number; 
   notes?: string;
   client_id?: string; 
   customer_name?: string; 
   customer_phone?: string;
   total_amount?: number;
-  end_time?: string; // ✅ NOVO campo
 }
 
-// ✅ VERSÃO CORRIGIDA - Completa: 
 export async function createStaffAppointment(data: CreateStaffAppointmentDTO): Promise<Appointment> {
-  const isBlock = data.status === AppointmentStatus. Blocked;
+  const isBlock = data.status === AppointmentStatus.Blocked;
   const startIso = new Date(data.start_time).toISOString();
 
-  // ✅ CORREÇÃO:   Calcular end_time de forma robusta
-  let finalEndTime:  string | undefined = undefined;
-  
-  if (data.end_time) {
-    // ✅ Se veio end_time do front, usar direto
-    finalEndTime = data.end_time;
-  } else if (data.start_time && data.duration_minutes) {
-    // ✅ Se NOT veio end_time mas tem duration, calcular
+  // Calcula Fim
+  let finalEndTime = undefined;
+  if (data.start_time && data.duration_minutes) {
     const startDate = new Date(data.start_time);
-    const endDate = new Date(startDate.getTime() + data.duration_minutes * 60 * 1000);
-    finalEndTime = endDate.toISOString();
-  } else if (data.start_time && isBlock) {
-    // ✅ FALLBACK para bloqueio:   padrão 30 min se não especificar
-    const startDate = new Date(data.start_time);
-    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
-    finalEndTime = endDate.toISOString();
+    const endDate = new Date(startDate.getTime() + data.duration_minutes * 60000);
+    finalEndTime = endDate.toISOString(); 
   }
 
   // Monta Payload Base
   const payload: Record<string, any> = {
-    shop_id: data.shop_id,
-    barber_id:   data.barber_id,
-    start_time: startIso,
-    end_time: finalEndTime, // ✅ AGORA TEM!  
-    status: data.status,
-    notes: data.notes || "",
+     shop_id: data.shop_id,
+     barber_id: data.barber_id,
+     start_time: startIso,
+     end_time: finalEndTime,
+     status: data.status,
+     notes: data.notes || "",
   };
 
-  if (!  isBlock) {
-    // === AGENDAMENTO REAL ===
-    payload.total_amount = data.total_amount || 0;
-    payload. customer_name = data.customer_name || "";
-    payload.customer_phone = data.customer_phone || "";
-    payload.payment_status = "1";
+  if (!isBlock) {
+      // === FLUXO NORMAL (Agendamento Real) ===
+      payload.total_amount = data.total_amount || 0;
+      payload.customer_name = data.customer_name || "";
+      payload.customer_phone = data.customer_phone || "";
+      payload.payment_status = "1"; // "A Pagar"
 
-    if (data.client_id) payload.client_id = data.client_id;
-    if (data.service_id) payload.service_id = data.service_id;
+      if (data.client_id) payload.client_id = data.client_id;
+      if (data.service_id) payload.service_id = data.service_id;
 
   } else {
-    // === BLOQUEIO ===
-    console.log("👻 Criando Bloqueio de Agenda...");
+      // === FLUXO DE BLOQUEIO (MODO FANTASMA) ===
+      // O banco está rejeitando campos vazios com "no rows".
+      // Vamos enganar o banco preenchendo tudo com dados reais, mas marcando como Status 6.
+      
+      console.log("👻 Criando Bloqueio em Modo Fantasma...");
 
-    payload.client_id = data.barber_id;
-    
-    let serviceId = data.service_id;
-    if (!serviceId) {
+      // 1. CLIENTE: Usamos o próprio Barbeiro (ele é um User válido)
+      payload.client_id = data.barber_id;
+      
+      // 2. SERVIÇO: Buscamos o primeiro serviço disponível na loja
+      // Isso resolve o erro de "service_id" obrigatório
       try {
-        const allServices = await pb.collection('services')
-          .getFullList({ filter: `shop_id="${data.shop_id}"`, limit: 1 });
-        
-        if (allServices.length > 0) {
-          serviceId = allServices[0].id;
-        } else {
-          // Criar serviço genérico
-          const tempService = await pb.collection('services').create({
-            name: "[Bloqueio de Agenda]",
-            price: 0,
-            duration:   data.duration_minutes || 30,
-            shop_id: data.  shop_id,
-            is_active: false
-          });
-          serviceId = tempService.id;
-        }
+         const dummyService = await pb.collection('services').getFirstListItem(`shop_id="${data.shop_id}"`);
+         if (dummyService) {
+             payload.service_id = dummyService.id;
+         }
       } catch (e) {
-        console.error("Erro ao resolver service_id", e);
-        throw new Error("Não foi possível bloquear o horário");
+         console.warn("Sem serviços na loja. Enviando sem serviço...");
       }
-    }
 
-    payload.service_id = serviceId;
-    payload.total_amount = 0;
+      // 3. PAGAMENTO: NÃO enviamos payment_status se for bloqueio
+      // (Isso evita erro se for uma Relation e estivermos mandando string)
+      
+      // 4. NOTA: Forçamos a nota para identificar visualmente
+      if (!payload.notes) payload.notes = "BLOQUEIO DE AGENDA";
+      
+      payload.total_amount = 0;
   }
 
   console.log("🚀 Payload Enviado:", payload);
@@ -5494,18 +5376,18 @@ export async function createStaffAppointment(data: CreateStaffAppointmentDTO): P
   try {
     const record = await pb.collection("appointments").create(payload);
     return asAppointment(record);
-  } catch (err:   any) {
-    console.error("❌ ERRO ao criar agendamento:", err);
+  } catch (err: any) {
+    console.error("❌ ERRO FATAL:", err);
     throw err;
   }
 }
 
-// ✅ MANTÉM: função original
 export async function searchClients(query: string) {
   return await pb.collection("users").getList(1, 10, {
     filter: `(name ~ "${query}" || email ~ "${query}")`,
   });
 }
+
 --- FIM DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
 
 
@@ -7750,8 +7632,6 @@ export default function ClientPanelPage() {
 --- INICIO DO ARQUIVO: src\react-app\pages\dashboard\DashboardHome.tsx ---
 Path: src\react-app\pages\dashboard\DashboardHome.tsx
 ------------------------------
-// src/react-app/pages/dashboard/DashboardHome.tsx
-
 import { useEffect, useState } from "react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { 
@@ -7763,7 +7643,7 @@ import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight, Ban } fr
 export default function DashboardHome() {
   const { user } = useAuth();
   
-  // Estado de Data (Padrão:  Hoje)
+  // Estado de Data (Padrão: Hoje)
   const [selectedDate, setSelectedDate] = useState(() => {
     return new Date().toISOString().split("T")[0];
   });
@@ -7771,31 +7651,15 @@ export default function DashboardHome() {
   const [bookings, setBookings] = useState<DailyBooking[]>([]);
   const [stats, setStats] = useState({ revenue: 0, count: 0 });
   const [loading, setLoading] = useState(true);
-  const [dateCache, setDateCache] = useState<Record<string, DailyBooking[]>>({}); // ✅ NOVO:  Cache
 
   // Carrega dados sempre que a data ou loja mudar
   useEffect(() => {
     async function loadDashboard() {
-      if (!user?. shop_id) return;
-      
-      // ✅ NOVO: Verifica cache primeiro
-      if (dateCache[selectedDate]) {
-        const cached = dateCache[selectedDate];
-        const activeBookings = cached.filter(b => b.raw_status !== "6");
-        setBookings(cached);
-        setStats({
-          revenue: activeBookings.reduce((acc, b) => acc + b.value, 0),
-          count: activeBookings.length
-        });
-        return;
-      }
+      if (!user?.shop_id) return;
       
       setLoading(true);
       try {
         const dataBookings = await getDailyBookings(user.shop_id, selectedDate);
-
-        // ✅ NOVO: Armazena no cache
-        setDateCache(prev => ({ ...prev, [selectedDate]: dataBookings }));
 
         // CORREÇÃO: Filtra BLOQUEIOS (Status 6) dos cálculos de KPI
         const activeBookings = dataBookings.filter(b => b.raw_status !== "6");
@@ -7808,7 +7672,7 @@ export default function DashboardHome() {
           revenue: totalRevenue, // KPIs mostram apenas agendamentos reais
           count: totalCount
         });
-      } catch (error:  any) {
+      } catch (error: any) {
         if (error.status !== 0) {
             console.error("Erro ao carregar dashboard", error);
         }
@@ -7840,26 +7704,6 @@ export default function DashboardHome() {
     weekday: 'long', day: 'numeric', month: 'long'
   });
 
-  // ✅ NOVO: Helper para exibir bloqueios
-  const getBlockDisplay = (appointment: any) => {
-    if (appointment.raw_status !== "6") return null;
-
-    const startTime = new Date(appointment.start_time).toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-    const endTime = new Date(
-      new Date(appointment.start_time).getTime() + 
-      (appointment.duration_minutes || 30) * 60 * 1000
-    ).toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-    return { startTime, endTime };
-  };
-
   if (loading) {
     return (
         <div className="flex items-center justify-center min-h-[400px]">
@@ -7877,7 +7721,7 @@ export default function DashboardHome() {
             <p className="text-slate-400 capitalize">{displayDate}</p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-900 p-1. 5 rounded-xl border border-slate-800 shadow-sm">
+        <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 shadow-sm">
             <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
                 <ChevronLeft size={20} />
             </button>
@@ -7886,7 +7730,7 @@ export default function DashboardHome() {
                 <input 
                     type="date"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target. value)}
+                    onChange={(e) => setSelectedDate(e.target.value)}
                     className="bg-transparent border-none text-white text-sm font-medium focus:ring-0 cursor-pointer p-0 w-24 text-center [&::-webkit-calendar-picker-indicator]:hidden"
                 />
             </div>
@@ -7956,44 +7800,36 @@ export default function DashboardHome() {
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-slate-500 flex flex-col items-center gap-2">
                     <Calendar size={32} className="opacity-20" />
-                    <span>Nenhum agendamento encontrado para esta data. </span>
+                    <span>Nenhum agendamento encontrado para esta data.</span>
                   </td>
                 </tr>
               ) : (
                 bookings.map((booking) => {
                   const isBlock = booking.raw_status === "6";
-                  const blockDisplay = isBlock ? getBlockDisplay(booking) : null; // ✅ NOVO
                   
                   return (
-                    <tr key={booking. id} className={`transition cursor-default ${isBlock ? "bg-amber-950/20 hover:bg-amber-950/30" : "hover:bg-slate-800/50"}`}>
+                    <tr key={booking.id} className={`transition cursor-default ${isBlock ? "bg-red-950/10 hover:bg-red-950/20" : "hover:bg-slate-800/50"}`}>
                       <td className="px-6 py-4 font-mono text-white">
-                          {/* ✅ NOVO:   Mostrar intervalo de bloqueio */}
-                          {isBlock && blockDisplay ?  (
-                            <span className="text-amber-400 font-bold">
-                              {blockDisplay.startTime} - {blockDisplay.endTime}
-                            </span>
-                          ) : (
-                            booking.time
-                          )}
+                          {booking.time}
                       </td>
                       <td className="px-6 py-4 font-medium text-slate-200">
                         {booking.client_name}
-                        {! booking.client_id && ! isBlock && (
-                          <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1. 5 py-0.5 rounded border border-white/10">Avulso</span>
+                        {!booking.client_id && !isBlock && (
+                          <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10">Avulso</span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-slate-400 flex items-center gap-2">
-                        {isBlock && <Ban size={14} className="text-amber-400"/>}
+                        {isBlock && <Ban size={14} className="text-red-400"/>}
                         {booking.service_name}
                       </td>
                       <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
-                          ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :  
+                          ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
                             booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
                             booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
                             booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                            booking.status === 'Bloqueio' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                            booking.status === 'Bloqueio' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
                             'bg-slate-700 text-slate-300 border-slate-600'
                           }`}
                         >
@@ -8001,7 +7837,7 @@ export default function DashboardHome() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right font-medium text-slate-200">
-                        {isBlock ?  "—" : formatMoney(booking. value)}
+                        {isBlock ? "-" : formatMoney(booking.value)}
                       </td>
                     </tr>
                   )
@@ -8014,6 +7850,7 @@ export default function DashboardHome() {
     </div>
   );
 }
+
 --- FIM DO ARQUIVO: src\react-app\pages\dashboard\DashboardHome.tsx ---
 
 
