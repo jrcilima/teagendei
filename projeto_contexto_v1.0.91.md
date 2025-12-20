@@ -1,5 +1,5 @@
-CONTEXTO DO PROJETO - VERSÃO 1.0.90
-Data de Geração: 19/12/2025 22:13:15
+CONTEXTO DO PROJETO - VERSÃO 1.0.91
+Data de Geração: 19/12/2025 22:41:12
 ### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
@@ -8,7 +8,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── index.html
 ├── package.json
 ├── pb_schema.md
-├── projeto_contexto_v1.0.89.md
+├── projeto_contexto_v1.0.90.md
 ├── Projeto_TeAgendei_v2.1.md
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -2398,11 +2398,11 @@ Path: pb_schema.md
 --- FIM DO ARQUIVO: pb_schema.md ---
 
 
---- INICIO DO ARQUIVO: projeto_contexto_v1.0.89.md ---
-Path: projeto_contexto_v1.0.89.md
+--- INICIO DO ARQUIVO: projeto_contexto_v1.0.90.md ---
+Path: projeto_contexto_v1.0.90.md
 ------------------------------
 
---- FIM DO ARQUIVO: projeto_contexto_v1.0.89.md ---
+--- FIM DO ARQUIVO: projeto_contexto_v1.0.90.md ---
 
 
 --- INICIO DO ARQUIVO: Projeto_TeAgendei_v2.1.md ---
@@ -5994,14 +5994,6 @@ function minutesToTime(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-// Helper: Limpa a data do PocketBase para garantir comparação local exata
-// Transforma "2025-12-19 08:00:00.000Z" em "2025-12-19T08:00:00"
-function normalizeDateStr(isoString: string): string {
-  if (!isoString) return "";
-  // Pega apenas os primeiros 19 caracteres (YYYY-MM-DDTHH:mm:ss) e troca espaço por T
-  return isoString.substring(0, 19).replace(" ", "T");
-}
-
 const WEEKDAY_MAP: Record<number, string> = {
   0: "dom", 1: "seg", 2: "ter", 3: "qua", 4: "qui", 5: "sex", 6: "sab",
 };
@@ -6056,35 +6048,32 @@ export function generateSlots(
 
     // 3. Verificar colisão com agendamentos existentes
     const isBusy = existingAppointments.some((appt) => {
-      // Normaliza a data do banco para ignorar fuso horário (trata como local)
-      const apptStartStr = normalizeDateStr(appt.start_time);
-      
-      // Se a data for inválida, ignora
-      if (!apptStartStr) return false;
+      // CORREÇÃO: Usamos o UTC completo do banco. O new Date() converte UTC -> Local automaticamente.
+      // Assim, 15:00 UTC vira 12:00 Local e bate com o slotStartMs (que é 12:00 Local).
+      if (!appt.start_time) return false;
 
-      const apptStartMs = new Date(apptStartStr).getTime();
+      const apptStartMs = new Date(appt.start_time).getTime();
       let apptEndMs = 0;
 
-      // Tenta pegar o end_time do agendamento. Se não tiver, calcula baseado no slot (fallback)
-      const apptEndStr = normalizeDateStr(appt.end_time || "");
-      if (apptEndStr) {
-        apptEndMs = new Date(apptEndStr).getTime();
+      if (appt.end_time) {
+        apptEndMs = new Date(appt.end_time).getTime();
       } else {
-        // Fallback: Se por algum motivo o banco não tem end_time, assume a duração do serviço atual
+        // Fallback: Se não tiver end_time, calcula baseado na duração padrão do serviço
+        // (Para bloqueios criados sem data final explícita, assumimos 30min ou serviceDuration)
         apptEndMs = apptStartMs + (serviceDuration * 60 * 1000);
       }
 
       // LÓGICA DE COLISÃO ROBUSTA (Intersecção de Intervalos)
       // Um slot está ocupado se:
       // (Inicio do Agendamento < Fim do Slot) E (Fim do Agendamento > Inicio do Slot)
+      // Isso cobre: Bloqueio maior que o slot, Bloqueio dentro do slot, etc.
       return (apptStartMs < slotEndMs && apptEndMs > slotStartMs);
     });
 
     slots.push({
       time: timeString,
-      // Retorna com espaço para compatibilidade visual se necessário, ou T
-      startISO: slotStartISO.replace("T", " "), 
-      endISO: slotEndISO.replace("T", " "),
+      startISO: slotStartISO, // Mantém ISO local para uso no front
+      endISO: slotEndISO,
       isAvailable: !isBusy,
     });
   }
@@ -6900,17 +6889,17 @@ const getStatusLabel = (status: string) => {
     case AppointmentStatus.InProgress: return { text: "Em Andamento", color: "bg-purple-500/20 text-purple-400" };
     case AppointmentStatus.Completed: return { text: "Concluído", color: "bg-emerald-500/20 text-emerald-400" };
     case AppointmentStatus.Cancelled: return { text: "Cancelado", color: "bg-red-500/20 text-red-400" };
+    case AppointmentStatus.Blocked: return { text: "Bloqueio", color: "bg-red-500/20 text-red-400" };
     default: return { text: "Outro", color: "bg-slate-700 text-slate-300" };
   }
 };
 
-// CORREÇÃO: Removemos o 'Z' para tratar a data como Local Literal (evita cair para 05:00)
+// CORREÇÃO: Utiliza o construtor Date padrão para converter UTC (do banco) para Hora Local do navegador
 const formatDate = (iso: string) => {
   if (!iso) return "--";
   
-  // Corta o fuso horário (Z) para o JS não converter para UTC-3
-  const cleanIso = iso.replace("Z", "");
-  const date = new Date(cleanIso);
+  // O navegador lê o "Z" no final da string do PocketBase e converte para o fuso local automaticamente
+  const date = new Date(iso);
 
   const day = String(date.getDate()).padStart(2, '0');
   const month = date.toLocaleString('pt-BR', { month: 'long' });
@@ -6970,9 +6959,7 @@ export default function ClientPanelPage() {
 
   const now = new Date();
   
-  // Lógica corrigida para Próximos vs Histórico
-  // Para comparação lógica (maior/menor que hoje), ainda usamos new Date(iso) normal ou comparamos strings
-  // Mas aqui vamos usar a data do objeto direto para filtrar corretamente
+  // Filtra agendamentos futuros e passados
   const upcoming = appointments.filter(a => new Date(a.start_time) >= now && a.status !== AppointmentStatus.Cancelled);
   const history = appointments.filter(a => new Date(a.start_time) < now || a.status === AppointmentStatus.Cancelled);
 
@@ -7087,7 +7074,6 @@ export default function ClientPanelPage() {
     </div>
   );
 }
-
 --- FIM DO ARQUIVO: src\react-app\pages\client\ClientPanelPage.tsx ---
 
 
