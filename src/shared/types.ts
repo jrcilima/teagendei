@@ -158,11 +158,15 @@ export interface Appointment extends BaseRecord {
   total_amount?: number | null;
   notes?: string;
 
-  // ATUALIZAÇÃO: client_id opcional + campos avulsos
-  client_id?: string; 
-  customer_name?: string; // Novo: Nome do cliente avulso
-  customer_phone?: string; // Novo: Telefone do cliente avulso
-  
+  // Cancelamento
+  canceled_at?: string | null;
+  canceled_reason?: string | null;
+
+  // Client data
+  client_id?: string;
+  customer_name?: string;
+  customer_phone?: string;
+
   barber_id: string;
   service_id: string;
   shop_id: string;
@@ -196,12 +200,11 @@ export interface Subscription extends BaseRecord {
 export interface CreateAppointmentDTO {
   start_time: string;
   end_time?: string;
-  
-  // Opcionais para staff
+
   client_id?: string;
   customer_name?: string;
   customer_phone?: string;
-  
+
   barber_id: string;
   service_id: string;
   shop_id: string;

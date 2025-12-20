@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/react-app/contexts/AuthContext";
-// Importamos getShopById para pegar o slug da loja do cliente
 import { getShopById } from "@/react-app/lib/api/register";
 import { getMyAppointments, cancelMyAppointment } from "@/react-app/lib/api/client";
 import { Appointment, AppointmentStatus } from "@/shared/types";
@@ -19,19 +18,14 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-// CORREÇÃO: Utiliza o construtor Date padrão para converter UTC (do banco) para Hora Local do navegador
 const formatDate = (iso: string) => {
   if (!iso) return "--";
-  
-  // O navegador lê o "Z" no final da string do PocketBase e converte para o fuso local automaticamente
   const date = new Date(iso);
-
   const day = String(date.getDate()).padStart(2, '0');
   const month = date.toLocaleString('pt-BR', { month: 'long' });
   const year = date.getFullYear();
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
-  
   return `${day} de ${month} de ${year} às ${hours}:${minutes}`;
 };
 
@@ -50,14 +44,13 @@ export default function ClientPanelPage() {
         const data = await getMyAppointments(user.id);
         if (isMounted) {
           setAppointments(data);
-          
           if (user.shop_id) {
-             getShopById(user.shop_id).then(shop => {
-                 if (isMounted && shop) setBookingSlug(shop.slug);
-             }).catch(() => {});
+            getShopById(user.shop_id).then(shop => {
+              if (isMounted && shop) setBookingSlug(shop.slug);
+            }).catch(() => {});
           } else if (data.length > 0) {
-             const lastShop = data[0].expand?.shop_id;
-             if (lastShop?.slug) setBookingSlug(lastShop.slug);
+            const lastShop = data[0].expand?.shop_id;
+            if (lastShop?.slug) setBookingSlug(lastShop.slug);
           }
         }
       } catch (err: any) {
@@ -71,11 +64,13 @@ export default function ClientPanelPage() {
   }, [user?.id, user?.shop_id]);
 
   async function handleCancel(id: string) {
-    if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return;
+    const reason = window.prompt("Motivo do cancelamento (opcional):", "Cancelado pelo cliente") || "Cancelado pelo cliente";
     try {
-      await cancelMyAppointment(id);
-      setAppointments(prev => prev.map(appt => 
-        appt.id === id ? { ...appt, status: AppointmentStatus.Cancelled } : appt
+      await cancelMyAppointment(id, reason);
+      setAppointments(prev => prev.map(appt =>
+        appt.id === id
+          ? { ...appt, status: AppointmentStatus.Cancelled, canceled_reason: reason, canceled_at: new Date().toISOString() }
+          : appt
       ));
     } catch (error) {
       alert("Erro ao cancelar.");
@@ -83,8 +78,7 @@ export default function ClientPanelPage() {
   }
 
   const now = new Date();
-  
-  // Filtra agendamentos futuros e passados
+
   const upcoming = appointments.filter(a => new Date(a.start_time) >= now && a.status !== AppointmentStatus.Cancelled);
   const history = appointments.filter(a => new Date(a.start_time) < now || a.status === AppointmentStatus.Cancelled);
 
@@ -97,7 +91,6 @@ export default function ClientPanelPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 p-6">
       <div className="max-w-3xl mx-auto space-y-8">
-        
         <div className="flex justify-between items-end">
           <div>
             <h1 className="text-2xl font-bold text-white">Meus Agendamentos</h1>
@@ -123,13 +116,10 @@ export default function ClientPanelPage() {
                 const barberName = appt.expand?.barber_id?.name || "Profissional";
                 const { text, color } = getStatusLabel(appt.status);
 
-                // Lógica de Cancelamento (Antecedência)
                 const startTime = new Date(appt.start_time);
-                // Pega o tempo mínimo da loja (ou padrão 120 min / 2 horas)
-                const minAdvanceMinutes = appt.expand?.shop_id?.min_advance_time || 120; 
+                const minAdvanceMinutes = appt.expand?.shop_id?.min_advance_time || 120;
                 const diffMs = startTime.getTime() - now.getTime();
                 const canCancel = diffMs > (minAdvanceMinutes * 60 * 1000);
-
                 const isCancellableStatus = appt.status === AppointmentStatus.Pending || appt.status === AppointmentStatus.Confirmed;
 
                 return (
@@ -145,21 +135,24 @@ export default function ClientPanelPage() {
                       </div>
                       <h3 className="text-lg font-semibold text-white">{serviceName}</h3>
                       <p className="text-sm text-slate-400">{shopName} • com {barberName}</p>
+                      {appt.canceled_reason && (
+                        <p className="text-xs text-slate-500 mt-1">Motivo: {appt.canceled_reason}</p>
+                      )}
                     </div>
 
                     <div className="flex items-center">
                       {isCancellableStatus && (
                         canCancel ? (
-                            <button 
-                              onClick={() => handleCancel(appt.id)}
-                              className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-4 py-2 rounded-xl hover:bg-red-500/10 transition w-full sm:w-auto"
-                            >
-                              Cancelar
-                            </button>
+                          <button
+                            onClick={() => handleCancel(appt.id)}
+                            className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-4 py-2 rounded-xl hover:bg-red-500/10 transition w-full sm:w-auto"
+                          >
+                            Cancelar
+                          </button>
                         ) : (
-                            <span className="text-[10px] text-slate-500 italic bg-slate-800 px-2 py-1 rounded border border-white/5">
-                                Cancelamento indisponível<br/>(Antecedência mínima: {minAdvanceMinutes/60}h)
-                            </span>
+                          <span className="text-[10px] text-slate-500 italic bg-slate-800 px-2 py-1 rounded border border-white/5">
+                            Cancelamento indisponível<br/>(Antecedência mínima: {minAdvanceMinutes/60}h)
+                          </span>
                         )
                       )}
                     </div>
@@ -175,26 +168,31 @@ export default function ClientPanelPage() {
           <h2 className="text-lg font-semibold text-white mb-4 border-l-4 border-slate-600 pl-3">Histórico</h2>
           <div className="space-y-3 opacity-75">
             {history.map((appt: any) => {
-               const shopName = appt.expand?.shop_id?.name;
-               const serviceName = appt.expand?.service_id?.name;
-               const { text, color } = getStatusLabel(appt.status);
+              const shopName = appt.expand?.shop_id?.name;
+              const serviceName = appt.expand?.service_id?.name;
+              const { text, color } = getStatusLabel(appt.status);
 
-               return (
-                 <div key={appt.id} className="bg-slate-900/30 border border-white/5 rounded-xl p-4 flex justify-between items-center">
-                    <div>
-                       <p className="text-sm font-medium text-slate-300">{serviceName}</p>
-                       <p className="text-xs text-slate-500">{shopName} • {formatDate(appt.start_time)}</p>
-                    </div>
-                    <span className={`text-[10px] px-2 py-1 rounded ${color}`}>{text}</span>
-                 </div>
-               );
+              return (
+                <div key={appt.id} className="bg-slate-900/30 border border-white/5 rounded-xl p-4 flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-medium text-slate-300">{serviceName}</p>
+                    <p className="text-xs text-slate-500">{shopName} • {formatDate(appt.start_time)}</p>
+                    {appt.canceled_reason && (
+                      <p className="text-[11px] text-slate-500 mt-1">Motivo: {appt.canceled_reason}</p>
+                    )}
+                    {appt.canceled_at && (
+                      <p className="text-[11px] text-slate-600">Cancelado em: {formatDate(appt.canceled_at)}</p>
+                    )}
+                  </div>
+                  <span className={`text-[10px] px-2 py-1 rounded ${color}`}>{text}</span>
+                </div>
+              );
             })}
             {history.length === 0 && (
-                <p className="text-xs text-slate-600">Nenhum histórico disponível.</p>
+              <p className="text-xs text-slate-600">Nenhum histórico disponível.</p>
             )}
           </div>
         </section>
-
       </div>
     </div>
   );

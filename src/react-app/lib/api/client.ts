@@ -22,18 +22,19 @@ export async function getMyAppointments(userId: string): Promise<Appointment[]> 
 }
 
 export async function createAppointment(data: CreateAppointmentPayload): Promise<Appointment> {
-  // CORREÇÃO: Enviamos '1' (string) para payment_status, compatível com o Enum e Select do PB.
-  // status '1' = Pendente (Confirmação)
-  // payment_status '1' = A Pagar
-  
+  // status '1' = Pendente; payment_status '1' = A Pagar
   return await pb.collection("appointments").create<Appointment>({
     ...data,
-    status: "1", 
-    payment_status: "1" 
+    status: "1",
+    payment_status: "1",
   });
 }
 
-export async function cancelMyAppointment(id: string): Promise<void> {
-  // Status "0" = Cancelado
-  await pb.collection("appointments").update(id, { status: "0" });
+// Usa canceled_at e canceled_reason
+export async function cancelMyAppointment(id: string, reason?: string): Promise<void> {
+  await pb.collection("appointments").update(id, {
+    status: "0",
+    canceled_at: new Date().toISOString(),
+    canceled_reason: reason || "Cancelado pelo cliente",
+  });
 }
