@@ -311,7 +311,7 @@ export default function StaffAgendaPage() {
                               {paymentName}
                             </span>
                             {isCancelled && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 uppercase">Cancelado</span>}
-                            {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase">Concluído</span>}
+                            {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border-emerald-500/20 uppercase">Concluído</span>}
                           </div>
                         </>
                       )}
@@ -383,7 +383,9 @@ export default function StaffAgendaPage() {
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-3">Como o cliente pagou?</label>
             {availableMethods.length === 0 ? (
-              <p className="text-xs text-slate-500 text-center py-4">Nenhum método cadastrado na loja.</p>
+              <div className="text-xs text-slate-500 text-center py-4 bg-slate-900 border border-white/10 rounded-xl">
+                Nenhum método de pagamento cadastrado na loja. Cadastre em Configurações &gt; Financeiro.
+              </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 {availableMethods.map(method => (

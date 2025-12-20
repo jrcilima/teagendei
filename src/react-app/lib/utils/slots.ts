@@ -21,13 +21,16 @@ const WEEKDAY_MAP: Record<number, string> = {
  * GERA OS SLOTS DISPONÍVEIS
  * - Passo fixo (slotStepMinutes) para exibição
  * - Duração real = serviceDuration (para colisão e fim do slot)
+ * - minAdvanceMinutes / maxAdvanceMinutes: restringem janela de agendamento
  */
 export function generateSlots(
-  dateStr: string, // YYYY-MM-DD
-  serviceDuration: number,
+  dateStr: string,              // YYYY-MM-DD
+  serviceDuration: number,      // duração do serviço (min)
   shopHours: ShopHour[],
   existingAppointments: Appointment[],
-  slotStepMinutes = 5 // passo da grade
+  slotStepMinutes = 5,          // passo da grade (exibição)
+  minAdvanceMinutes?: number,   // antecedência mínima em minutos
+  maxAdvanceMinutes?: number    // antecedência máxima em minutos
 ): TimeSlot[] {
   const dateObj = new Date(dateStr + "T00:00:00");
   const weekday = WEEKDAY_MAP[dateObj.getDay()];
@@ -53,8 +56,20 @@ export function generateSlots(
     const slotStartDate = new Date(slotStartISO);
     const slotEndDate = new Date(slotEndISO);
 
-    // Ignora horários que já passaram hoje
+    // Regra: ignora horários que já passaram hoje
     if (slotStartDate < now) continue;
+
+    // Regra: antecedência mínima
+    if (typeof minAdvanceMinutes === "number") {
+      const diffMin = (slotStartDate.getTime() - now.getTime()) / 60000;
+      if (diffMin < minAdvanceMinutes) continue;
+    }
+
+    // Regra: antecedência máxima
+    if (typeof maxAdvanceMinutes === "number") {
+      const diffMin = (slotStartDate.getTime() - now.getTime()) / 60000;
+      if (diffMin > maxAdvanceMinutes) continue;
+    }
 
     const slotStartMs = slotStartDate.getTime();
     const slotEndMs = slotEndDate.getTime();
