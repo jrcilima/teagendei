@@ -19,7 +19,6 @@ export async function getDailyBookings(shopId: string, date: string): Promise<Da
   const endOfDay = `${date} 23:59:59`;
 
   // requestKey: null -> Desativa o cancelamento automático do PocketBase
-  // Isso resolve o erro "ClientResponseError 0: The request was autocancelled"
   const records = await pb.collection("appointments").getFullList({
     filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != "0"`,
     sort: "start_time",
@@ -28,27 +27,32 @@ export async function getDailyBookings(shopId: string, date: string): Promise<Da
   });
 
   return records.map((record) => {
+    // 1. CORREÇÃO DE HORA (UTC -> Local)
+    // Transforma a data UTC do banco na hora local do navegador do usuário
+    const localTime = new Date(record.start_time).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+
     // Lógica para pegar nome do cliente cadastrado OU avulso
     const clientName = record.expand?.client_id?.name || record.customer_name || "Cliente Avulso";
     const professionalName = record.expand?.barber_id?.name || "Profissional";
     const serviceName = record.expand?.service_id?.name || "Serviço";
     
-    // Formata hora (pega 11:30 de 2023-01-01 11:30:00)
-    const time = record.start_time.split(" ")[1].substring(0, 5);
-
-    // Label Status
+    // Label Status - CORREÇÃO: Adicionado Status 6 (Bloqueio)
     let statusLabel = "Pendente";
     if (record.status === "2") statusLabel = "Confirmado";
     if (record.status === "3") statusLabel = "Em Andamento";
     if (record.status === "4") statusLabel = "Concluído";
+    if (record.status === "6") statusLabel = "Bloqueio"; // <--- NOVO
 
     return {
       id: record.id,
       client_id: record.client_id || undefined, 
-      client_name: clientName,
+      client_name: record.status === "6" ? "BLOQUEIO" : clientName, // Se for bloqueio, esconde o nome "Barbeiro"
       professional_name: professionalName,
-      service_name: serviceName,
-      time,
+      service_name: record.status === "6" ? (record.notes || "Indisponível") : serviceName,
+      time: localTime, // <--- Usa a hora corrigida
       status: statusLabel,
       raw_status: record.status,
       value: record.total_amount || 0

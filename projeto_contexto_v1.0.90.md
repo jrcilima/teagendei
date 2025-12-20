@@ -1,5 +1,5 @@
-CONTEXTO DO PROJETO - VERSÃO 1.0.84
-Data de Geração: 19/12/2025 17:07:43
+CONTEXTO DO PROJETO - VERSÃO 1.0.90
+Data de Geração: 19/12/2025 22:13:15
 ### SEMPRE DIGITE OS CÓDIGOS, MESMO COM CORREÇÕES COMPLETO! NÃO SUGIRA CÓDIGOS PARA ALTERAR ALGUM JÁ CRIADO, SEMPRE O CÓDIGO COMPLETO.
 ==================================================
 
@@ -8,7 +8,7 @@ ESTRUTURA DE DIRETÓRIOS:
 ├── index.html
 ├── package.json
 ├── pb_schema.md
-├── projeto_contexto_v1.0.83.md
+├── projeto_contexto_v1.0.89.md
 ├── Projeto_TeAgendei_v2.1.md
 ├── tsconfig.json
 ├── tsconfig.node.json
@@ -45,8 +45,10 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   ├── api/
 │   │   │   │   ├── appointments.ts
 │   │   │   │   ├── availability.ts
+│   │   │   │   ├── booking.ts
 │   │   │   │   ├── client.ts
 │   │   │   │   ├── dashboard.ts
+│   │   │   │   ├── financial.ts
 │   │   │   │   ├── onboarding.ts
 │   │   │   │   ├── pocketbase.ts
 │   │   │   │   ├── register.ts
@@ -73,6 +75,7 @@ ESTRUTURA DE DIRETÓRIOS:
 │   │   │   │   ├── OwnerProfessionalStep.tsx
 │   │   │   │   ├── ShopStep.tsx
 │   │   │   ├── owner/
+│   │   │   │   ├── FinancialPage.tsx
 │   │   │   │   ├── ServicesPage.tsx
 │   │   │   │   ├── SettingsPage.tsx
 │   │   │   │   ├── ShopsPage.tsx
@@ -148,6 +151,7 @@ Path: package.json
     "pocketbase": "^0.26.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.10.1"
   },
   "devDependencies": {
@@ -340,9 +344,9 @@ Path: pb_schema.md
   },
   {
     "id": "_pb_users_auth_",
-    "listRule": "id = @request.auth.id || (shop_id = @request.auth.shop_id && role != 'cliente') || (@request.auth.role = 'dono' && company_id = @request.auth.company_id)",
-    "viewRule": "id = @request.auth.id || shop_id = @request.auth.shop_id || (@request.auth.role = 'dono' && company_id = @request.auth.company_id)",
-    "createRule": "",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "id = @request.auth.id",
     "updateRule": "id = @request.auth.id || (company_id != \"\" && company_id = @request.auth.company_id && @request.auth.role = \"dono\")",
     "deleteRule": "id = @request.auth.id || (company_id != \"\" && company_id = @request.auth.company_id && @request.auth.role = \"dono\")",
     "name": "users",
@@ -1006,11 +1010,11 @@ Path: pb_schema.md
   },
   {
     "id": "pbc_1037645436",
-    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id || @request.auth.id != \"\"",
-    "viewRule": "shop_id.owner_id = @request.auth.id || client_id = @request.auth.id || barber_id = @request.auth.id",
-    "createRule": "client_id = @request.auth.id",
-    "updateRule": "shop_id.company_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
-    "deleteRule": null,
+    "listRule": "shop_id = @request.auth.shop_id || client_id = @request.auth.id || barber_id = @request.auth.id",
+    "viewRule": "shop_id = @request.auth.shop_id || client_id = @request.auth.id || barber_id = @request.auth.id",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "shop_id = @request.auth.shop_id || client_id = @request.auth.id",
+    "deleteRule": "shop_id = @request.auth.shop_id",
     "name": "appointments",
     "type": "base",
     "fields": [
@@ -1161,7 +1165,7 @@ Path: pb_schema.md
         "minSelect": 0,
         "name": "service_id",
         "presentable": false,
-        "required": true,
+        "required": false,
         "system": false,
         "type": "relation"
       },
@@ -1228,8 +1232,7 @@ Path: pb_schema.md
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX `idx_unique_active_booking` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`\n) WHERE status != 0",
-      "CREATE UNIQUE INDEX `idx_unique_client_booking` ON `appointments` (\n  `start_time`,\n  `client_id`\n) WHERE status != '0'"
+      "CREATE UNIQUE INDEX `idx_unique_active_booking` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`\n) WHERE status != 0"
     ],
     "system": false
   },
@@ -2012,9 +2015,9 @@ Path: pb_schema.md
   },
   {
     "id": "pbc_3896301928",
-    "listRule": "is_active = true || owner_id = @request.auth.id || company_id.owner_id = @request.auth.id || id = @request.auth.shop_id",
-    "viewRule": "is_active = true || owner_id = @request.auth.id || company_id.owner_id = @request.auth.id || id = @request.auth.shop_id",
-    "createRule": "@request.auth.id != \"\"",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "company_id.owner_id = @request.auth.id",
     "updateRule": "company_id.owner_id = @request.auth.id",
     "deleteRule": null,
     "name": "shops",
@@ -2395,11 +2398,11 @@ Path: pb_schema.md
 --- FIM DO ARQUIVO: pb_schema.md ---
 
 
---- INICIO DO ARQUIVO: projeto_contexto_v1.0.83.md ---
-Path: projeto_contexto_v1.0.83.md
+--- INICIO DO ARQUIVO: projeto_contexto_v1.0.89.md ---
+Path: projeto_contexto_v1.0.89.md
 ------------------------------
 
---- FIM DO ARQUIVO: projeto_contexto_v1.0.83.md ---
+--- FIM DO ARQUIVO: projeto_contexto_v1.0.89.md ---
 
 
 --- INICIO DO ARQUIVO: Projeto_TeAgendei_v2.1.md ---
@@ -3243,6 +3246,7 @@ export default function StepConfirm({
     </div>
   );
 }
+
 --- FIM DO ARQUIVO: src\react-app\components\booking\StepConfirm.tsx ---
 
 
@@ -3719,7 +3723,7 @@ export default function Modal({ isOpen, onClose, title, children }: Props) {
 Path: src\react-app\components\dashboard\StaffBookingModal.tsx
 ------------------------------
 import { useState, useEffect } from "react";
-import { X, User as UserIcon, Calendar, Clock, Scissors, Search } from "lucide-react";
+import { X, User as UserIcon, Calendar, Clock, Scissors, Search, Ban, CheckCircle } from "lucide-react";
 import { useAuth } from "@/react-app/contexts/AuthContext";
 import { getServicesByShop } from "@/react-app/lib/api/services";
 import { getProfessionalsByShop } from "@/react-app/lib/api/staff";
@@ -3737,15 +3741,16 @@ interface StaffBookingModalProps {
 export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingModalProps) {
   const { user } = useAuth();
   
-  const [selectedService, setSelectedService] = useState<string>("");
+  // TIPO DE AÇÃO: AGENDAR ou BLOQUEAR
+  const [modalType, setModalType] = useState<"appointment" | "block">("appointment");
+
+  // Estados Comuns
   const [selectedBarber, setSelectedBarber] = useState<string>("");
   const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   
-  const [services, setServices] = useState<Service[]>([]);
-  const [barbers, setBarbers] = useState<User[]>([]);
-  const [slots, setSlots] = useState<TimeSlot[]>([]);
-  
+  // Estados para Agendamento
+  const [selectedService, setSelectedService] = useState<string>("");
   const [clientMode, setClientMode] = useState<"registered" | "guest">("guest");
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
@@ -3753,6 +3758,15 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
   const [foundClients, setFoundClients] = useState<User[]>([]);
   const [selectedClient, setSelectedClient] = useState<User | null>(null);
 
+  // Estados para Bloqueio
+  const [blockReason, setBlockReason] = useState("");
+  const [blockDuration, setBlockDuration] = useState(60); // Padrão 1 hora
+
+  // Dados Carregados
+  const [services, setServices] = useState<Service[]>([]);
+  const [barbers, setBarbers] = useState<User[]>([]);
+  const [slots, setSlots] = useState<TimeSlot[]>([]);
+  
   const [loading, setLoading] = useState(false);
   const [slotLoading, setSlotLoading] = useState(false);
 
@@ -3769,7 +3783,19 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
   }, [isOpen, user?.shop_id]);
 
   useEffect(() => {
-    if (!selectedService || !selectedBarber || !date || !user?.shop_id) {
+    if (!selectedBarber || !date || !user?.shop_id) {
+        setSlots([]);
+        return;
+    }
+
+    // Se for bloqueio, não precisamos de serviço para calcular slots livres, 
+    // mas precisamos de uma "duração base" para desenhar a grade. Usaremos 30min ou a duração do bloqueio.
+    const durationForGrid = modalType === "appointment" 
+        ? services.find(s => s.id === selectedService)?.duration || 30 
+        : blockDuration;
+
+    // Se for agendamento e não tiver serviço selecionado, não busca
+    if (modalType === "appointment" && !selectedService) {
         setSlots([]);
         return;
     }
@@ -3777,15 +3803,12 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
     async function fetchSlots() {
       setSlotLoading(true);
       try {
-        const srv = services.find(s => s.id === selectedService);
-        if (!srv) return;
-
         const [hours, appointments] = await Promise.all([
           getShopHours(user!.shop_id!),
           getProfessionalAppointments(selectedBarber, date)
         ]);
 
-        const generated = generateSlots(date, srv.duration, hours, appointments);
+        const generated = generateSlots(date, durationForGrid, hours, appointments);
         setSlots(generated);
       } catch (err) {
         console.error(err);
@@ -3795,10 +3818,11 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
     }
 
     fetchSlots();
-  }, [selectedService, selectedBarber, date, user?.shop_id, services]);
+  }, [selectedService, selectedBarber, date, user?.shop_id, services, modalType, blockDuration]);
 
+  // Busca Clientes (apenas se for agendamento)
   useEffect(() => {
-    if (clientMode === "registered" && clientSearch.length > 2) {
+    if (modalType === "appointment" && clientMode === "registered" && clientSearch.length > 2) {
       const timer = setTimeout(() => {
         searchClients(clientSearch).then(res => setFoundClients(res.items as unknown as User[]));
       }, 500);
@@ -3806,62 +3830,56 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
     } else {
         setFoundClients([]);
     }
-  }, [clientSearch, clientMode]);
+  }, [clientSearch, clientMode, modalType]);
 
   async function handleConfirm() {
-    if (!user?.shop_id || !selectedSlot || !selectedService || !selectedBarber) return;
+    if (!user?.shop_id || !selectedSlot || !selectedBarber) return;
     
-    if (clientMode === "guest" && !guestName.trim()) {
-      alert("Digite o nome do cliente.");
-      return;
-    }
-    if (clientMode === "registered" && !selectedClient) {
-      alert("Selecione um cliente da lista.");
-      return;
-    }
+    // Payload Base
+    const payload: any = {
+        shop_id: user.shop_id,
+        barber_id: selectedBarber,
+        start_time: selectedSlot,
+    };
 
-    const serviceObj = services.find(s => s.id === selectedService);
-    if (!serviceObj) return;
+    if (modalType === "appointment") {
+        const serviceObj = services.find(s => s.id === selectedService);
+        if (!serviceObj) return;
+
+        if (clientMode === "guest" && !guestName.trim()) return alert("Digite o nome do cliente.");
+        if (clientMode === "registered" && !selectedClient) return alert("Selecione um cliente.");
+
+        payload.status = AppointmentStatus.Confirmed;
+        payload.service_id = selectedService;
+        payload.duration_minutes = serviceObj.duration;
+        payload.total_amount = serviceObj.price;
+        payload.client_id = clientMode === "registered" ? selectedClient?.id : undefined;
+        payload.customer_name = clientMode === "guest" ? guestName : undefined;
+        payload.customer_phone = clientMode === "guest" ? guestPhone : undefined;
+    } else {
+        // BLOQUEIO
+        if (!blockReason.trim()) return alert("Digite o motivo do bloqueio (ex: Almoço).");
+        
+        payload.status = AppointmentStatus.Blocked; // Código 6
+        payload.notes = blockReason;
+        payload.duration_minutes = blockDuration;
+        // Sem serviço, sem cliente
+    }
 
     setLoading(true);
     try {
-      await createStaffAppointment({
-        shop_id: user.shop_id,
-        barber_id: selectedBarber,
-        service_id: selectedService,
-        start_time: selectedSlot, 
-        duration_minutes: serviceObj.duration, 
-        total_amount: serviceObj.price, 
-        status: AppointmentStatus.Confirmed, 
-        client_id: clientMode === "registered" ? selectedClient?.id : undefined,
-        customer_name: clientMode === "guest" ? guestName : undefined,
-        customer_phone: clientMode === "guest" ? guestPhone : undefined,
-      });
-      
-      alert("Agendamento criado com sucesso!");
+      await createStaffAppointment(payload);
+      alert(modalType === "appointment" ? "Agendado com sucesso!" : "Horário bloqueado!");
       onSuccess();
       onClose();
       
+      // Reset
       setSelectedSlot(null);
       setGuestName("");
-      setGuestPhone("");
-      setSelectedClient(null);
-      setClientSearch("");
+      setBlockReason("");
     } catch (error: any) {
-      // TRATAMENTO DE ERRO MELHORADO:
-      // Se tiver data, formata bonito. Se não, mostra mensagem genérica.
-      let msg = "Erro desconhecido";
-      if (error?.data && Object.keys(error.data).length > 0) {
-        // Pega a primeira chave de erro (ex: client_id) e a mensagem
-        const field = Object.keys(error.data)[0];
-        const detail = error.data[field]?.message;
-        msg = `Campo '${field}': ${detail}`;
-      } else if (error?.message) {
-        msg = error.message;
-      }
-
-      console.error("Erro completo:", error);
-      alert(`Erro ao criar agendamento:\n${msg}`);
+      console.error(error);
+      alert("Erro ao salvar.");
     } finally {
       setLoading(false);
     }
@@ -3875,7 +3893,20 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
         
         {/* HEADER */}
         <div className="flex justify-between items-center p-6 border-b border-slate-800">
-          <h2 className="text-xl font-bold text-white">Novo Agendamento</h2>
+          <div className="flex gap-4">
+              <button 
+                onClick={() => setModalType("appointment")}
+                className={`text-lg font-bold pb-1 border-b-2 transition ${modalType === "appointment" ? "text-emerald-400 border-emerald-400" : "text-slate-500 border-transparent"}`}
+              >
+                  Novo Agendamento
+              </button>
+              <button 
+                onClick={() => setModalType("block")}
+                className={`text-lg font-bold pb-1 border-b-2 transition ${modalType === "block" ? "text-red-400 border-red-400" : "text-slate-500 border-transparent"}`}
+              >
+                  Bloquear Horário
+              </button>
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
             <X size={24} />
           </button>
@@ -3884,23 +3915,39 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
         {/* CONTENT */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
             
-            {/* SERVIÇO E PROFISSIONAL */}
+            {/* 1. CONFIGURAÇÃO (VARIA POR TIPO) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
-                        <Scissors size={14} /> Serviço
-                    </label>
-                    <select 
-                        value={selectedService} 
-                        onChange={e => setSelectedService(e.target.value)}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                    >
-                        <option value="">Selecione...</option>
-                        {services.map(s => (
-                            <option key={s.id} value={s.id}>{s.name} ({s.duration} min) - R$ {s.price}</option>
-                        ))}
-                    </select>
-                </div>
+                {modalType === "appointment" ? (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                            <Scissors size={14} /> Serviço
+                        </label>
+                        <select 
+                            value={selectedService} 
+                            onChange={e => setSelectedService(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        >
+                            <option value="">Selecione...</option>
+                            {services.map(s => (
+                                <option key={s.id} value={s.id}>{s.name} ({s.duration} min) - R$ {s.price}</option>
+                            ))}
+                        </select>
+                    </div>
+                ) : (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                            <Ban size={14} /> Motivo do Bloqueio
+                        </label>
+                        <input 
+                            type="text" 
+                            placeholder="Ex: Almoço, Médico..."
+                            value={blockReason} 
+                            onChange={e => setBlockReason(e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-red-500 outline-none"
+                        />
+                    </div>
+                )}
+
                 <div>
                     <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
                          <UserIcon size={14} /> Profissional
@@ -3918,7 +3965,33 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
                 </div>
             </div>
 
-            {/* DATA E HORÁRIO */}
+             {/* DURAÇÃO MANUAL PARA BLOQUEIO */}
+             {modalType === "block" && (
+                <div>
+                     <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
+                        <Clock size={14} /> Duração do Bloqueio (minutos)
+                    </label>
+                    <div className="flex gap-2">
+                        {[30, 60, 90, 120].map(m => (
+                            <button 
+                                key={m} 
+                                onClick={() => setBlockDuration(m)}
+                                className={`px-4 py-2 rounded-lg text-sm border ${blockDuration === m ? "bg-red-500/20 border-red-500 text-red-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}
+                            >
+                                {m} min
+                            </button>
+                        ))}
+                        <input 
+                            type="number" 
+                            value={blockDuration}
+                            onChange={e => setBlockDuration(Number(e.target.value))}
+                            className="w-20 bg-slate-800 border border-slate-700 rounded-lg p-2 text-center text-white focus:ring-2 focus:ring-red-500 outline-none"
+                        />
+                    </div>
+                </div>
+             )}
+
+            {/* 2. DATA E HORÁRIO */}
             <div className="border-t border-slate-800 pt-6">
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                     <div className="w-full sm:w-1/3">
@@ -3934,7 +4007,7 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
                     </div>
                     <div className="flex-1">
                         <label className="block text-sm font-medium text-slate-400 mb-2 flex items-center gap-2">
-                            <Clock size={14} /> Horários
+                            <Clock size={14} /> Horários Disponíveis
                         </label>
                         {slotLoading ? (
                             <div className="text-slate-500 text-sm animate-pulse">Calculando...</div>
@@ -3947,9 +4020,9 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
                                         onClick={() => setSelectedSlot(slot.startISO)}
                                         className={`text-xs py-2 rounded-lg border transition-all ${
                                             selectedSlot === slot.startISO
-                                                ? "bg-emerald-500 border-emerald-500 text-white font-bold"
+                                                ? (modalType === "appointment" ? "bg-emerald-500 border-emerald-500" : "bg-red-500 border-red-500") + " text-white font-bold"
                                                 : slot.isAvailable
-                                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:border-emerald-500/50"
+                                                ? "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500"
                                                 : "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
                                         }`}
                                     >
@@ -3959,109 +4032,63 @@ export function StaffBookingModal({ isOpen, onClose, onSuccess }: StaffBookingMo
                             </div>
                         ) : (
                             <div className="text-slate-500 text-sm italic border border-dashed border-slate-700 rounded p-2 text-center">
-                                Selecione serviço, profissional e data.
+                                {modalType === "appointment" && !selectedService ? "Selecione um serviço primeiro." : "Nenhum horário disponível."}
                             </div>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* CLIENTE */}
-            <div className="border-t border-slate-800 pt-6">
-                 <label className="block text-sm font-medium text-slate-400 mb-4">Dados do Cliente</label>
-                 
-                 <div className="flex gap-4 mb-4">
-                    <button 
-                        onClick={() => { setClientMode("guest"); setSelectedClient(null); }}
-                        className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "guest" ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}
-                    >
-                        Cliente Avulso (Sem conta)
-                    </button>
-                    <button 
-                         onClick={() => { setClientMode("registered"); setGuestName(""); }}
-                         className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "registered" ? "bg-blue-500/20 border-blue-500 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}
-                    >
-                        Cliente Cadastrado
-                    </button>
-                 </div>
+            {/* 3. CLIENTE (Apenas para Agendamento) */}
+            {modalType === "appointment" && (
+                <div className="border-t border-slate-800 pt-6">
+                    <label className="block text-sm font-medium text-slate-400 mb-4">Dados do Cliente</label>
+                    <div className="flex gap-4 mb-4">
+                        <button onClick={() => { setClientMode("guest"); setSelectedClient(null); }} className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "guest" ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>Cliente Avulso</button>
+                        <button onClick={() => { setClientMode("registered"); setGuestName(""); }} className={`flex-1 py-2 text-sm rounded-lg border transition ${clientMode === "registered" ? "bg-blue-500/20 border-blue-500 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-400"}`}>Cliente Cadastrado</button>
+                    </div>
 
-                 {clientMode === "guest" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <input 
-                            type="text" 
-                            placeholder="Nome do Cliente *"
-                            value={guestName}
-                            onChange={e => setGuestName(e.target.value)}
-                            className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500"
-                        />
-                         <input 
-                            type="text" 
-                            placeholder="Telefone (Opcional)"
-                            value={guestPhone}
-                            onChange={e => setGuestPhone(e.target.value)}
-                            className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500"
-                        />
-                    </div>
-                 ) : (
-                    <div className="space-y-3">
-                         {!selectedClient ? (
-                            <div className="relative">
-                                <Search className="absolute left-3 top-3 text-slate-500" size={16} />
-                                <input 
-                                    type="text" 
-                                    placeholder="Buscar cliente por nome ou email..."
-                                    value={clientSearch}
-                                    onChange={e => setClientSearch(e.target.value)}
-                                    className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 pl-10 text-white w-full outline-none focus:border-blue-500"
-                                />
-                                {foundClients.length > 0 && (
-                                    <div className="absolute top-full left-0 right-0 bg-slate-800 border border-slate-700 mt-1 rounded-lg shadow-xl z-10 max-h-40 overflow-y-auto">
-                                        {foundClients.map(c => (
-                                            <button 
-                                                key={c.id} 
-                                                onClick={() => { setSelectedClient(c); setFoundClients([]); setClientSearch(""); }}
-                                                className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-slate-200 border-b border-slate-700 last:border-0"
-                                            >
-                                                <div className="font-bold">{c.name || "Sem Nome"}</div>
-                                                <div className="text-xs text-slate-500">{c.email}</div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                         ) : (
-                             <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg">
-                                 <div className="flex items-center gap-3">
-                                     <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xs">
-                                         {(selectedClient.name || "C").charAt(0).toUpperCase()}
-                                     </div>
-                                     <div>
-                                         <p className="text-sm font-bold text-white">{selectedClient.name}</p>
-                                         <p className="text-xs text-blue-300">{selectedClient.email}</p>
-                                     </div>
-                                 </div>
-                                 <button onClick={() => setSelectedClient(null)} className="text-xs text-slate-400 hover:text-white underline">
-                                     Trocar
-                                 </button>
-                             </div>
-                         )}
-                    </div>
-                 )}
-            </div>
+                    {clientMode === "guest" ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <input type="text" placeholder="Nome *" value={guestName} onChange={e => setGuestName(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500" />
+                            <input type="text" placeholder="Telefone" value={guestPhone} onChange={e => setGuestPhone(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-white w-full outline-none focus:border-emerald-500" />
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {!selectedClient ? (
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-3 text-slate-500" size={16} />
+                                    <input type="text" placeholder="Buscar cliente..." value={clientSearch} onChange={e => setClientSearch(e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 pl-10 text-white w-full outline-none focus:border-blue-500" />
+                                    {foundClients.length > 0 && (
+                                        <div className="absolute top-full bg-slate-800 border border-slate-700 mt-1 rounded-lg shadow-xl z-10 w-full max-h-40 overflow-y-auto">
+                                            {foundClients.map(c => (
+                                                <button key={c.id} onClick={() => { setSelectedClient(c); setFoundClients([]); setClientSearch(""); }} className="w-full text-left px-4 py-2 hover:bg-slate-700 text-sm text-slate-200 border-b border-slate-700 last:border-0">{c.name || "Sem Nome"}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="flex justify-between bg-blue-500/10 border border-blue-500/30 p-3 rounded-lg text-white text-sm">
+                                    <span>{selectedClient.name}</span>
+                                    <button onClick={() => setSelectedClient(null)} className="underline text-slate-400">Trocar</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
 
         </div>
 
         {/* FOOTER */}
         <div className="p-6 border-t border-slate-800 flex justify-end gap-3 bg-slate-900/50">
-            <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white transition text-sm">
-                Cancelar
-            </button>
+            <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-white transition text-sm">Cancelar</button>
             <button 
                 onClick={handleConfirm}
-                disabled={loading || !selectedSlot || (clientMode === "guest" && !guestName)}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || !selectedSlot}
+                className={`px-6 py-2 rounded-lg font-medium text-white transition disabled:opacity-50 ${modalType === "appointment" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"}`}
             >
-                {loading ? "Criando..." : "Confirmar Agendamento"}
+                {loading ? "Salvando..." : modalType === "appointment" ? "Confirmar Agendamento" : "Confirmar Bloqueio"}
             </button>
         </div>
 
@@ -4171,64 +4198,92 @@ export default function Header() {
 Path: src\react-app\components\layout\Sidebar.tsx
 ------------------------------
 import { Link, useLocation } from "react-router-dom";
-import { useAuth } from "@/react-app/contexts/AuthContext";
+import { 
+  LayoutDashboard, 
+  Store, 
+  Scissors, 
+  Users, 
+  Settings, 
+  X,
+  DollarSign,
+  Calendar // Import do ícone Calendar
+} from "lucide-react";
 
-export default function Sidebar() {
-  const { pathname } = useLocation();
-  const { user } = useAuth();
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
 
-  const menu = [
-    { label: "Visão Geral", path: "/owner/dashboard", icon: "📊" },
-    { label: "Serviços", path: "/owner/services", icon: "✂️" },
-    { label: "Profissionais", path: "/owner/staff", icon: "👥" },
-    { label: "Unidades", path: "/owner/shops", icon: "🏪" },
-    { label: "Configurações", path: "/owner/settings", icon: "⚙️" },
+export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
+  const location = useLocation();
+
+  const menuItems = [
+    { label: "Visão Geral", path: "/owner/dashboard", icon: LayoutDashboard },
+    { label: "Minha Agenda", path: "/staff/agenda", icon: Calendar }, // VOLTOU: Link para a agenda
+    { label: "Financeiro", path: "/owner/financial", icon: DollarSign },
+    { label: "Minhas Lojas", path: "/owner/shops", icon: Store },
+    { label: "Serviços", path: "/owner/services", icon: Scissors },
+    { label: "Profissionais", path: "/owner/staff", icon: Users },
+    { label: "Configurações", path: "/owner/settings", icon: Settings },
   ];
 
-  // Se o dono também for profissional, mostra a agenda dele
-  if (user?.is_professional) {
-    menu.splice(1, 0, { label: "Minha Agenda", path: "/staff/agenda", icon: "📅" });
-  }
-
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-slate-900 border-r border-white/5 h-screen fixed left-0 top-0 z-20">
-      <div className="h-16 flex items-center px-6 border-b border-white/5">
-        <div className="h-8 w-8 bg-emerald-500 rounded-lg flex items-center justify-center text-slate-950 font-bold mr-3">
-          T
-        </div>
-        <span className="font-semibold text-white tracking-wide">TeaAgendei</span>
-      </div>
+    <>
+      {/* OVERLAY MOBILE */}
+      {mobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/80 z-20 md:hidden backdrop-blur-sm"
+          onClick={onCloseMobile}
+        />
+      )}
 
-      <nav className="flex-1 py-6 px-3 space-y-1">
-        {menu.map((item) => {
-          const isActive = pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
-                isActive
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : "text-slate-400 hover:text-slate-100 hover:bg-white/5"
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="p-4 border-t border-white/5">
-        <div className="bg-slate-950/50 rounded-xl p-3">
-          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Plano Atual</p>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-white">Trial Grátis</span>
-            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">Ativo</span>
+      {/* SIDEBAR CONTAINER */}
+      <aside className={`
+        fixed md:fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 border-r border-white/5 flex flex-col transition-transform duration-300
+        ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+      `}>
+        {/* LOGO AREA */}
+        <div className="h-16 flex items-center justify-between px-6 border-b border-white/5">
+          <div className="flex items-center gap-2 font-bold text-xl tracking-tighter text-white">
+            <span className="text-emerald-500 text-2xl">✂</span> TeAgendei
           </div>
+          {onCloseMobile && (
+            <button onClick={onCloseMobile} className="md:hidden text-slate-400 hover:text-white">
+              <X size={24} />
+            </button>
+          )}
         </div>
-      </div>
-    </aside>
+
+        {/* MENU ITEMS */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+          {menuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+            
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={onCloseMobile}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition group ${
+                  isActive
+                    ? "bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 shadow-lg shadow-emerald-900/10"
+                    : "text-slate-400 hover:bg-white/5 hover:text-white border border-transparent"
+                }`}
+              >
+                <Icon size={18} className={isActive ? "text-emerald-400" : "text-slate-500 group-hover:text-slate-300"} />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        
+        {/* FOOTER VERSÃO */}
+        <div className="p-4 border-t border-white/5 text-center">
+            <p className="text-[10px] text-slate-600 font-mono">v1.0.85</p>
+        </div>
+      </aside>
+    </>
   );
 }
 --- FIM DO ARQUIVO: src\react-app\components\layout\Sidebar.tsx ---
@@ -4633,12 +4688,9 @@ Path: src\react-app\lib\api\appointments.ts
 import { pb } from "./pocketbase";
 import { Appointment, AppointmentStatus, PaymentStatus } from "@/shared/types";
 
-// ... (mantenha as funções asAppointment, getStaffAppointmentsByDate, updateAppointmentStatus iguais) ...
-// Vou repetir o arquivo completo para garantir que nada se perca:
-
+// Função auxiliar asAppointment (MANTIDA IGUAL)
 function asAppointment(record: any): Appointment {
   const expand = record.expand || {};
-
   return {
     id: record.id,
     shop_id: record.shop_id,
@@ -4658,14 +4710,8 @@ function asAppointment(record: any): Appointment {
     updated: record.updated,
     expand: {
       shop_id: expand.shop_id,
-      client_id: expand.client_id ? {
-        ...expand.client_id,
-        avatar: expand.client_id.avatar ? pb.files.getURL(expand.client_id, expand.client_id.avatar) : undefined
-      } : undefined,
-      barber_id: expand.barber_id ? {
-        ...expand.barber_id,
-        avatar: expand.barber_id.avatar ? pb.files.getURL(expand.barber_id, expand.barber_id.avatar) : undefined
-      } : undefined,
+      client_id: expand.client_id ? { ...expand.client_id, avatar: expand.client_id.avatar ? pb.files.getURL(expand.client_id, expand.client_id.avatar) : undefined } : undefined,
+      barber_id: expand.barber_id ? { ...expand.barber_id, avatar: expand.barber_id.avatar ? pb.files.getURL(expand.barber_id, expand.barber_id.avatar) : undefined } : undefined,
       service_id: expand.service_id,
       payment_method: expand.payment_method
     }
@@ -4675,52 +4721,48 @@ function asAppointment(record: any): Appointment {
 export async function getStaffAppointmentsByDate(staffId: string, date: string): Promise<Appointment[]> {
   const startOfDay = `${date} 00:00:00`;
   const endOfDay = `${date} 23:59:59`;
-
   const records = await pb.collection("appointments").getFullList<Appointment>({
     filter: `barber_id = "${staffId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}"`,
     sort: "start_time",
     expand: "client_id,service_id,shop_id,barber_id,payment_method",
   });
-
   return records.map(asAppointment);
 }
 
 export async function updateAppointmentStatus(
     id: string, 
     status: AppointmentStatus, 
-    paymentStatus?: PaymentStatus,
+    paymentStatus?: PaymentStatus, 
     paymentMethodId?: string
 ): Promise<Appointment> {
   const payload: any = { status };
   if (paymentStatus) payload.payment_status = paymentStatus;
   if (paymentMethodId) payload.payment_method = paymentMethodId;
-
   const record = await pb.collection("appointments").update(id, payload);
   return asAppointment(record);
 }
 
-// --- NOVAS FUNÇÕES (WALK-IN) ---
+// --- CRIAÇÃO COM ESTRATÉGIA "GHOST" (A PROVA DE FALHAS) ---
 
 export interface CreateStaffAppointmentDTO {
   shop_id: string;
   barber_id: string;
-  service_id: string;
   start_time: string;
-  duration_minutes?: number;
-  total_amount?: number;
   status: string;
+  service_id?: string;
+  duration_minutes?: number; 
+  notes?: string;
   client_id?: string; 
   customer_name?: string; 
   customer_phone?: string;
+  total_amount?: number;
 }
 
 export async function createStaffAppointment(data: CreateStaffAppointmentDTO): Promise<Appointment> {
-  // Validação Frontend
-  if (!data.client_id && !data.customer_name) {
-    throw new Error("Informe um cliente cadastrado ou o nome do cliente avulso.");
-  }
+  const isBlock = data.status === AppointmentStatus.Blocked;
+  const startIso = new Date(data.start_time).toISOString();
 
-  // 1. Calcula End Time
+  // Calcula Fim
   let finalEndTime = undefined;
   if (data.start_time && data.duration_minutes) {
     const startDate = new Date(data.start_time);
@@ -4728,33 +4770,63 @@ export async function createStaffAppointment(data: CreateStaffAppointmentDTO): P
     finalEndTime = endDate.toISOString(); 
   }
 
-  // 2. Monta Payload (Objeto Vazio Inicialmente)
-  const payload: any = {
+  // Monta Payload Base
+  const payload: Record<string, any> = {
      shop_id: data.shop_id,
      barber_id: data.barber_id,
-     service_id: data.service_id,
-     start_time: data.start_time,
+     start_time: startIso,
      end_time: finalEndTime,
      status: data.status,
-     total_amount: data.total_amount,
-     // Campos Avulsos: Enviamos apenas se tiver texto, senão não envia a chave
-     customer_name: data.customer_name || undefined,
-     customer_phone: data.customer_phone || undefined,
+     notes: data.notes || "",
   };
 
-  // CORREÇÃO CRÍTICA: Só adiciona client_id no payload se ele existir.
-  // Enviar client_id: "" causa erro 400 no PocketBase para campos Relation.
-  if (data.client_id) {
-    payload.client_id = data.client_id;
+  if (!isBlock) {
+      // === FLUXO NORMAL (Agendamento Real) ===
+      payload.total_amount = data.total_amount || 0;
+      payload.customer_name = data.customer_name || "";
+      payload.customer_phone = data.customer_phone || "";
+      payload.payment_status = "1"; // "A Pagar"
+
+      if (data.client_id) payload.client_id = data.client_id;
+      if (data.service_id) payload.service_id = data.service_id;
+
+  } else {
+      // === FLUXO DE BLOQUEIO (MODO FANTASMA) ===
+      // O banco está rejeitando campos vazios com "no rows".
+      // Vamos enganar o banco preenchendo tudo com dados reais, mas marcando como Status 6.
+      
+      console.log("👻 Criando Bloqueio em Modo Fantasma...");
+
+      // 1. CLIENTE: Usamos o próprio Barbeiro (ele é um User válido)
+      payload.client_id = data.barber_id;
+      
+      // 2. SERVIÇO: Buscamos o primeiro serviço disponível na loja
+      // Isso resolve o erro de "service_id" obrigatório
+      try {
+         const dummyService = await pb.collection('services').getFirstListItem(`shop_id="${data.shop_id}"`);
+         if (dummyService) {
+             payload.service_id = dummyService.id;
+         }
+      } catch (e) {
+         console.warn("Sem serviços na loja. Enviando sem serviço...");
+      }
+
+      // 3. PAGAMENTO: NÃO enviamos payment_status se for bloqueio
+      // (Isso evita erro se for uma Relation e estivermos mandando string)
+      
+      // 4. NOTA: Forçamos a nota para identificar visualmente
+      if (!payload.notes) payload.notes = "BLOQUEIO DE AGENDA";
+      
+      payload.total_amount = 0;
   }
 
-  console.log("🚀 Payload Enviado:", payload); // Para debug
+  console.log("🚀 Payload Enviado:", payload);
 
   try {
     const record = await pb.collection("appointments").create(payload);
     return asAppointment(record);
   } catch (err: any) {
-    console.error("❌ ERRO POCKETBASE:", err.data);
+    console.error("❌ ERRO FATAL:", err);
     throw err;
   }
 }
@@ -4764,6 +4836,7 @@ export async function searchClients(query: string) {
     filter: `(name ~ "${query}" || email ~ "${query}")`,
   });
 }
+
 --- FIM DO ARQUIVO: src\react-app\lib\api\appointments.ts ---
 
 
@@ -4798,6 +4871,123 @@ export async function getProfessionalAppointments(
   });
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\availability.ts ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\lib\api\booking.ts ---
+Path: src\react-app\lib\api\booking.ts
+------------------------------
+import { pb } from "./pocketbase";
+import { ProfessionalOption, Service, TimeSlot } from "@/shared/types";
+
+// Auxiliares de Tempo
+function timeToMinutes(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function dateToMinutes(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function minutesToTime(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+export async function getProfessionalsByShop(shopId: string): Promise<ProfessionalOption[]> {
+  const records = await pb.collection("users").getFullList({
+    filter: `shop_id = "${shopId}" && (role = "staff" || role = "dono")`,
+  });
+
+  return records.map((rec) => ({
+    id: rec.id,
+    name: rec.name,
+    avatar: rec.avatar ? pb.files.getURL(rec, rec.avatar) : undefined,
+  }));
+}
+
+export async function getShopServices(shopId: string): Promise<Service[]> {
+  return await pb.collection("services").getFullList<Service>({
+    filter: `shop_id = "${shopId}"`,
+  });
+}
+
+/**
+ * LÓGICA DE CÁLCULO DE SLOTS
+ * Resolve: Fuso Horário e Bloqueio de Duração
+ */
+export async function getAvailableSlots(
+  shopId: string,
+  date: string, // YYYY-MM-DD
+  professionalId: string,
+  serviceDurationMinutes: number
+): Promise<TimeSlot[]> {
+  
+  // Configuração da Loja (Futuramente virá do banco)
+  const SHOP_OPEN = "08:00";
+  const SHOP_CLOSE = "20:00";
+  const SLOT_INTERVAL = 30; // 30 em 30 min
+
+  const startOfDay = `${date} 00:00:00`;
+  const endOfDay = `${date} 23:59:59`;
+
+  // Busca Agendamentos e Bloqueios (Status 6)
+  // Status 0 (Rascunho) e 5 (Cancelado) são ignorados
+  const appointments = await pb.collection("appointments").getFullList({
+    filter: `barber_id = "${professionalId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != "5" && status != "0"`,
+  });
+
+  // Mapeia Intervalos Ocupados (Convertendo UTC -> Local)
+  const busyIntervals = appointments.map((appt) => {
+    // O construtor new Date() lê o "Z" (UTC) do PocketBase e converte 
+    // automaticamente para o fuso horário do navegador do usuário.
+    const startObj = new Date(appt.start_time);
+    const endObj = new Date(appt.end_time);
+
+    return {
+      start: dateToMinutes(startObj),
+      end: dateToMinutes(endObj),
+    };
+  });
+
+  const slots: TimeSlot[] = [];
+  const startMinutes = timeToMinutes(SHOP_OPEN);
+  const endMinutes = timeToMinutes(SHOP_CLOSE);
+
+  // Gera Slots
+  for (let current = startMinutes; current < endMinutes; current += SLOT_INTERVAL) {
+    const slotStart = current;
+    const slotEnd = current + serviceDurationMinutes;
+
+    // Se o serviço termina depois que a loja fecha, ignora
+    if (slotEnd > endMinutes) continue;
+
+    // VERIFICAÇÃO DE COLISÃO (CORRIGIDA)
+    // Verifica se o intervalo do Slot (Inicio ao Fim) bate em algum ocupado
+    const isBusy = busyIntervals.some((busy) => {
+      // Lógica de Interseção de Intervalos:
+      // (Slot começa antes do Ocupado terminar) E (Slot termina depois do Ocupado começar)
+      return slotStart < busy.end && slotEnd > busy.start;
+    });
+
+    const timeLabel = minutesToTime(current);
+    
+    // Constrói ISO para salvamento (Data + Hora Local)
+    const slotDateIso = new Date(`${date}T${timeLabel}:00`).toISOString();
+    const endDateIso = new Date(new Date(slotDateIso).getTime() + serviceDurationMinutes * 60000).toISOString();
+
+    slots.push({
+      time: timeLabel,
+      startISO: slotDateIso,
+      endISO: endDateIso,
+      isAvailable: !isBusy,
+    });
+  }
+
+  return slots;
+}
+--- FIM DO ARQUIVO: src\react-app\lib\api\booking.ts ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\lib\api\client.ts ---
@@ -4842,6 +5032,7 @@ export async function cancelMyAppointment(id: string): Promise<void> {
   // Status "0" = Cancelado
   await pb.collection("appointments").update(id, { status: "0" });
 }
+
 --- FIM DO ARQUIVO: src\react-app\lib\api\client.ts ---
 
 
@@ -4869,7 +5060,6 @@ export async function getDailyBookings(shopId: string, date: string): Promise<Da
   const endOfDay = `${date} 23:59:59`;
 
   // requestKey: null -> Desativa o cancelamento automático do PocketBase
-  // Isso resolve o erro "ClientResponseError 0: The request was autocancelled"
   const records = await pb.collection("appointments").getFullList({
     filter: `shop_id = "${shopId}" && start_time >= "${startOfDay}" && start_time <= "${endOfDay}" && status != "0"`,
     sort: "start_time",
@@ -4878,27 +5068,32 @@ export async function getDailyBookings(shopId: string, date: string): Promise<Da
   });
 
   return records.map((record) => {
+    // 1. CORREÇÃO DE HORA (UTC -> Local)
+    // Transforma a data UTC do banco na hora local do navegador do usuário
+    const localTime = new Date(record.start_time).toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+
     // Lógica para pegar nome do cliente cadastrado OU avulso
     const clientName = record.expand?.client_id?.name || record.customer_name || "Cliente Avulso";
     const professionalName = record.expand?.barber_id?.name || "Profissional";
     const serviceName = record.expand?.service_id?.name || "Serviço";
     
-    // Formata hora (pega 11:30 de 2023-01-01 11:30:00)
-    const time = record.start_time.split(" ")[1].substring(0, 5);
-
-    // Label Status
+    // Label Status - CORREÇÃO: Adicionado Status 6 (Bloqueio)
     let statusLabel = "Pendente";
     if (record.status === "2") statusLabel = "Confirmado";
     if (record.status === "3") statusLabel = "Em Andamento";
     if (record.status === "4") statusLabel = "Concluído";
+    if (record.status === "6") statusLabel = "Bloqueio"; // <--- NOVO
 
     return {
       id: record.id,
       client_id: record.client_id || undefined, 
-      client_name: clientName,
+      client_name: record.status === "6" ? "BLOQUEIO" : clientName, // Se for bloqueio, esconde o nome "Barbeiro"
       professional_name: professionalName,
-      service_name: serviceName,
-      time,
+      service_name: record.status === "6" ? (record.notes || "Indisponível") : serviceName,
+      time: localTime, // <--- Usa a hora corrigida
       status: statusLabel,
       raw_status: record.status,
       value: record.total_amount || 0
@@ -4906,6 +5101,81 @@ export async function getDailyBookings(shopId: string, date: string): Promise<Da
   });
 }
 --- FIM DO ARQUIVO: src\react-app\lib\api\dashboard.ts ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\lib\api\financial.ts ---
+Path: src\react-app\lib\api\financial.ts
+------------------------------
+import { pb } from "./pocketbase";
+import { Appointment, AppointmentStatus } from "@/shared/types";
+
+export interface FinancialSummary {
+  totalRevenue: number;      // Dinheiro no caixa (Concluído)
+  totalPending: number;      // Dinheiro previsto (Confirmado/Pendente)
+  countCompleted: number;
+  countPending: number;
+  byMethod: Record<string, number>; // Ex: { "Pix": 500, "Cartão": 200 }
+  dailyData: Record<string, number>; // Ex: { "2023-12-01": 150 }
+}
+
+export async function getFinancialData(shopId: string, month: number, year: number) {
+  // 1. Define o intervalo de datas (Do dia 1 até o último dia do mês)
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0, 23, 59, 59);
+
+  // Formata para UTC String que o PocketBase aceita
+  const startStr = startDate.toISOString().replace("T", " ").substring(0, 19);
+  const endStr = endDate.toISOString().replace("T", " ").substring(0, 19);
+
+  // 2. Busca agendamentos (Status != 0 Cancelado)
+  const records = await pb.collection("appointments").getFullList<Appointment>({
+    filter: `shop_id = "${shopId}" && start_time >= "${startStr}" && start_time <= "${endStr}" && status != "0"`,
+    expand: "payment_method",
+    requestKey: null // Importante para não cancelar requisições rápidas
+  });
+
+  // 3. Processa os dados no Javascript
+  const summary: FinancialSummary = {
+    totalRevenue: 0,
+    totalPending: 0,
+    countCompleted: 0,
+    countPending: 0,
+    byMethod: {},
+    dailyData: {}
+  };
+
+  records.forEach(appt => {
+    const val = appt.total_amount || 0;
+    const dateKey = appt.start_time.split(" ")[0]; // Pega YYYY-MM-DD
+    
+    // Nome do método de pagamento ou "Não informado"
+    const methodName = appt.expand?.payment_method?.name || "A Receber/Outros";
+
+    // Consideramos "Receita Realizada" apenas o que foi CONCLUÍDO (Status 4)
+    // O resto (Pendente, Confirmado, Em Andamento) é "Previsão"
+    const isRealized = appt.status === AppointmentStatus.Completed;
+
+    if (isRealized) {
+      summary.totalRevenue += val;
+      summary.countCompleted++;
+
+      // Soma por método de pagamento
+      if (!summary.byMethod[methodName]) summary.byMethod[methodName] = 0;
+      summary.byMethod[methodName] += val;
+
+      // Soma por dia
+      if (!summary.dailyData[dateKey]) summary.dailyData[dateKey] = 0;
+      summary.dailyData[dateKey] += val;
+
+    } else {
+      summary.totalPending += val;
+      summary.countPending++;
+    }
+  });
+
+  return summary;
+}
+--- FIM DO ARQUIVO: src\react-app\lib\api\financial.ts ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\lib\api\onboarding.ts ---
@@ -6817,6 +7087,7 @@ export default function ClientPanelPage() {
     </div>
   );
 }
+
 --- FIM DO ARQUIVO: src\react-app\pages\client\ClientPanelPage.tsx ---
 
 
@@ -6829,7 +7100,7 @@ import {
   getDailyBookings, 
   type DailyBooking 
 } from "@/react-app/lib/api/dashboard";
-import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight, Ban } from "lucide-react";
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -6850,20 +7121,20 @@ export default function DashboardHome() {
       
       setLoading(true);
       try {
-        // OTIMIZAÇÃO: Chamamos apenas UMA vez a API
         const dataBookings = await getDailyBookings(user.shop_id, selectedDate);
 
-        // Calculamos os KPIs localmente (economiza requisições e evita erros)
-        const totalRevenue = dataBookings.reduce((acc, curr) => acc + curr.value, 0);
-        const totalCount = dataBookings.length;
+        // CORREÇÃO: Filtra BLOQUEIOS (Status 6) dos cálculos de KPI
+        const activeBookings = dataBookings.filter(b => b.raw_status !== "6");
 
-        setBookings(dataBookings);
+        const totalRevenue = activeBookings.reduce((acc, curr) => acc + curr.value, 0);
+        const totalCount = activeBookings.length;
+
+        setBookings(dataBookings); // A lista mostra tudo (inclusive bloqueios)
         setStats({
-          revenue: totalRevenue,
+          revenue: totalRevenue, // KPIs mostram apenas agendamentos reais
           count: totalCount
         });
       } catch (error: any) {
-        // Ignora erro de cancelamento se ainda ocorrer (navegação rápida)
         if (error.status !== 0) {
             console.error("Erro ao carregar dashboard", error);
         }
@@ -6888,11 +7159,9 @@ export default function DashboardHome() {
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
-  // Formata valor para BRL
   const formatMoney = (val: number) => 
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  // Formata data para exibição
   const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", {
     weekday: 'long', day: 'numeric', month: 'long'
   });
@@ -6935,7 +7204,6 @@ export default function DashboardHome() {
 
       {/* CARDS DE KPI */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Faturamento */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-emerald-500/30 transition">
           <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500">
             <DollarSign size={24} />
@@ -6946,7 +7214,6 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Atendimentos */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-blue-500/30 transition">
           <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
             <Users size={24} />
@@ -6957,7 +7224,6 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Ticket Médio */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-purple-500/30 transition">
           <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500">
             <Calendar size={24} />
@@ -6975,7 +7241,7 @@ export default function DashboardHome() {
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">
           <h2 className="font-bold text-white flex items-center gap-2">
-            <Clock size={18} className="text-slate-400" /> Agendamentos do Dia
+            <Clock size={18} className="text-slate-400" /> Agenda do Dia
           </h2>
         </div>
         
@@ -6984,8 +7250,8 @@ export default function DashboardHome() {
             <thead className="bg-slate-950/50 text-slate-200 uppercase text-xs font-bold">
               <tr>
                 <th className="px-6 py-4">Horário</th>
-                <th className="px-6 py-4">Cliente</th>
-                <th className="px-6 py-4">Serviço</th>
+                <th className="px-6 py-4">Cliente / Tipo</th>
+                <th className="px-6 py-4">Serviço / Nota</th>
                 <th className="px-6 py-4">Profissional</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Valor</th>
@@ -7000,37 +7266,44 @@ export default function DashboardHome() {
                   </td>
                 </tr>
               ) : (
-                bookings.map((booking) => (
-                  <tr key={booking.id} className="hover:bg-slate-800/50 transition cursor-default">
-                    <td className="px-6 py-4 font-mono text-white">
-                        {booking.time}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-200">
-                      {booking.client_name}
-                      {/* Badge para Avulso */}
-                      {!booking.client_id && (
-                        <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10" title="Cliente sem cadastro">Avulso</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">{booking.service_name}</td>
-                    <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
-                        ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
-                          booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
-                          booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                          booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                          'bg-slate-700 text-slate-300 border-slate-600'
-                        }`}
-                      >
-                        {booking.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-medium text-slate-200">
-                      {formatMoney(booking.value)}
-                    </td>
-                  </tr>
-                ))
+                bookings.map((booking) => {
+                  const isBlock = booking.raw_status === "6";
+                  
+                  return (
+                    <tr key={booking.id} className={`transition cursor-default ${isBlock ? "bg-red-950/10 hover:bg-red-950/20" : "hover:bg-slate-800/50"}`}>
+                      <td className="px-6 py-4 font-mono text-white">
+                          {booking.time}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-200">
+                        {booking.client_name}
+                        {!booking.client_id && !isBlock && (
+                          <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10">Avulso</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 flex items-center gap-2">
+                        {isBlock && <Ban size={14} className="text-red-400"/>}
+                        {booking.service_name}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
+                          ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                            booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                            booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                            booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                            booking.status === 'Bloqueio' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                            'bg-slate-700 text-slate-300 border-slate-600'
+                          }`}
+                        >
+                          {booking.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-200">
+                        {isBlock ? "-" : formatMoney(booking.value)}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -7039,6 +7312,7 @@ export default function DashboardHome() {
     </div>
   );
 }
+
 --- FIM DO ARQUIVO: src\react-app\pages\dashboard\DashboardHome.tsx ---
 
 
@@ -7665,6 +7939,219 @@ export default function ShopStep({ onDone }: Props) {
 }
 
 --- FIM DO ARQUIVO: src\react-app\pages\onboarding\ShopStep.tsx ---
+
+
+--- INICIO DO ARQUIVO: src\react-app\pages\owner\FinancialPage.tsx ---
+Path: src\react-app\pages\owner\FinancialPage.tsx
+------------------------------
+import { useEffect, useState } from "react";
+import { useAuth } from "@/react-app/contexts/AuthContext";
+import { getFinancialData, FinancialSummary } from "@/react-app/lib/api/financial";
+import { DollarSign, TrendingUp, Calendar, CreditCard, AlertCircle } from "lucide-react";
+
+export default function FinancialPage() {
+  const { user } = useAuth();
+  
+  // Padrão: Mês e Ano atuais
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
+  
+  const [data, setData] = useState<FinancialSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const formatMoney = (val: number) => 
+    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+
+  useEffect(() => {
+    async function load() {
+      if (!user?.shop_id) return;
+      setLoading(true);
+      try {
+        const result = await getFinancialData(user.shop_id, month, year);
+        setData(result);
+      } catch (error) {
+        console.error("Erro financeiro", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [user?.shop_id, month, year]);
+
+  return (
+    <div className="space-y-8 pb-10">
+      
+      {/* HEADER E FILTROS */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-1">Gerenciamento Financeiro</h1>
+          <p className="text-slate-400">Acompanhe o fluxo de caixa e previsões.</p>
+        </div>
+
+        <div className="flex gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-sm">
+          <select 
+            value={month} 
+            onChange={e => setMonth(Number(e.target.value))}
+            className="bg-slate-800 text-white border-none rounded-lg p-2 text-sm focus:ring-0 cursor-pointer outline-none"
+          >
+            {Array.from({ length: 12 }, (_, i) => (
+              <option key={i + 1} value={i + 1}>
+                {new Date(0, i).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}
+              </option>
+            ))}
+          </select>
+          <select 
+            value={year} 
+            onChange={e => setYear(Number(e.target.value))}
+            className="bg-slate-800 text-white border-none rounded-lg p-2 text-sm focus:ring-0 cursor-pointer outline-none"
+          >
+            <option value={2024}>2024</option>
+            <option value={2025}>2025</option>
+            <option value={2026}>2026</option>
+          </select>
+        </div>
+      </div>
+
+      {loading || !data ? (
+         <div className="h-64 flex items-center justify-center text-slate-500 animate-pulse">
+            Carregando dados financeiros...
+         </div>
+      ) : (
+        <>
+          {/* CARDS KPI */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* Realizado */}
+            <div className="bg-slate-900 border border-emerald-500/30 p-6 rounded-2xl relative overflow-hidden group hover:border-emerald-500/50 transition">
+                <div className="absolute -right-6 -top-6 text-emerald-500/5 group-hover:text-emerald-500/10 transition-all transform rotate-12">
+                    <DollarSign size={150} />
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg">
+                        <DollarSign size={24} />
+                    </div>
+                    <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">Receita Realizada</span>
+                </div>
+                <div className="text-3xl font-bold text-white mb-1">{formatMoney(data.totalRevenue)}</div>
+                <div className="text-xs text-emerald-400 font-medium">
+                    {data.countCompleted} atendimentos finalizados
+                </div>
+            </div>
+
+            {/* Pendente/Futuro */}
+            <div className="bg-slate-900 border border-yellow-500/30 p-6 rounded-2xl relative overflow-hidden group hover:border-yellow-500/50 transition">
+                <div className="absolute -right-6 -top-6 text-yellow-500/5 group-hover:text-yellow-500/10 transition-all transform rotate-12">
+                    <Calendar size={150} />
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-yellow-500/10 text-yellow-500 rounded-lg">
+                        <Calendar size={24} />
+                    </div>
+                    <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">A Receber (Previsão)</span>
+                </div>
+                <div className="text-3xl font-bold text-slate-200 mb-1">{formatMoney(data.totalPending)}</div>
+                <div className="text-xs text-yellow-500 font-medium">
+                    {data.countPending} agendamentos em aberto
+                </div>
+            </div>
+
+            {/* Ticket Médio */}
+            <div className="bg-slate-900 border border-indigo-500/30 p-6 rounded-2xl relative overflow-hidden group hover:border-indigo-500/50 transition">
+                <div className="absolute -right-6 -top-6 text-indigo-500/5 group-hover:text-indigo-500/10 transition-all transform rotate-12">
+                    <TrendingUp size={150} />
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+                        <TrendingUp size={24} />
+                    </div>
+                    <span className="text-slate-400 font-bold uppercase text-xs tracking-wider">Ticket Médio</span>
+                </div>
+                <div className="text-3xl font-bold text-white mb-1">
+                    {formatMoney(data.countCompleted > 0 ? data.totalRevenue / data.countCompleted : 0)}
+                </div>
+                <div className="text-xs text-indigo-400 font-medium">
+                    Média por cliente
+                </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            {/* PAGAMENTOS (BARRA DE PROGRESSO) */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                    <CreditCard size={20} className="text-slate-400"/> Receita por Método
+                </h3>
+                
+                <div className="space-y-5">
+                    {Object.keys(data.byMethod).length === 0 ? (
+                        <div className="text-center py-10 text-slate-500 bg-slate-950/50 rounded-xl border border-dashed border-slate-800">
+                             <AlertCircle className="mx-auto mb-2 opacity-50" />
+                             Nenhum pagamento concluído neste mês.
+                        </div>
+                    ) : (
+                        Object.entries(data.byMethod)
+                            .sort(([, a], [, b]) => b - a)
+                            .map(([method, value]) => {
+                                const percent = (value / data.totalRevenue) * 100;
+                                return (
+                                    <div key={method}>
+                                        <div className="flex justify-between text-sm mb-1.5">
+                                            <span className="text-slate-300 font-medium">{method}</span>
+                                            <span className="text-slate-200 font-mono">{formatMoney(value)} <span className="text-xs text-slate-500 ml-1">({percent.toFixed(0)}%)</span></span>
+                                        </div>
+                                        <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-white/5">
+                                            <div 
+                                                className="bg-emerald-500 h-full rounded-full transition-all duration-1000 ease-out" 
+                                                style={{ width: `${percent}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                )
+                            })
+                    )}
+                </div>
+            </div>
+
+            {/* HISTÓRICO DIÁRIO */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                     <Calendar size={20} className="text-slate-400"/> Detalhamento Diário
+                </h3>
+                <div className="h-[300px] overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                     {Object.keys(data.dailyData).length === 0 ? (
+                        <div className="text-center py-10 text-slate-500 bg-slate-950/50 rounded-xl border border-dashed border-slate-800">
+                            Sem movimentações financeiras.
+                        </div>
+                     ) : (
+                        Object.entries(data.dailyData)
+                            .sort(([dateA], [dateB]) => dateB.localeCompare(dateA)) // Mais recente primeiro
+                            .map(([day, value]) => {
+                                const [y, m, d] = day.split("-");
+                                const formattedDay = `${d}/${m}`;
+                                return (
+                                    <div key={day} className="flex items-center justify-between p-3 rounded-xl bg-slate-950/50 border border-white/5 hover:border-emerald-500/30 transition">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-slate-800 text-slate-300 px-2.5 py-1 rounded text-xs font-mono font-bold">
+                                                {formattedDay}
+                                            </div>
+                                            <span className="text-sm text-slate-400">Total Faturado</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-emerald-400 font-mono">{formatMoney(value)}</span>
+                                    </div>
+                                )
+                            })
+                     )}
+                </div>
+            </div>
+
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+--- FIM DO ARQUIVO: src\react-app\pages\owner\FinancialPage.tsx ---
 
 
 --- INICIO DO ARQUIVO: src\react-app\pages\owner\ServicesPage.tsx ---
@@ -8784,13 +9271,17 @@ import { getStaffAppointmentsByDate, updateAppointmentStatus } from "@/react-app
 import { getPaymentMethods } from "@/react-app/lib/api/shops"; 
 import { Appointment, AppointmentStatus, PaymentStatus, PaymentMethod } from "@/shared/types";
 import Modal from "@/react-app/components/common/Modal"; 
-// IMPORTANTE: Importar o novo Modal
 import { StaffBookingModal } from "@/react-app/components/dashboard/StaffBookingModal";
+import { Ban, Clock } from "lucide-react";
 
-// Helper Time Visual
+// CORREÇÃO: Time Visual (Converte UTC do banco para hora local do navegador)
+// Antes estava cortando a string (substring), o que mostrava a hora UTC (+3h)
 const formatTime = (isoString: string) => {
   if (!isoString) return "--:--";
-  return isoString.substring(11, 16);
+  return new Date(isoString).toLocaleTimeString("pt-BR", {
+    hour: "2-digit", 
+    minute: "2-digit"
+  });
 };
 
 // Helper Money
@@ -8811,17 +9302,14 @@ export default function StaffAgendaPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- Estados do Modal de Finalização ---
+  // Estados dos Modais
   const [isFinishModalOpen, setFinishModalOpen] = useState(false);
   const [apptToFinish, setApptToFinish] = useState<Appointment | null>(null);
   const [availableMethods, setAvailableMethods] = useState<PaymentMethod[]>([]);
   const [finalPaymentMethod, setFinalPaymentMethod] = useState("");
   const [finishing, setFinishing] = useState(false);
-
-  // --- Estado do Modal de Novo Agendamento ---
   const [isBookingModalOpen, setBookingModalOpen] = useState(false);
 
-  // Carrega Agendamentos
   async function loadAgenda() {
       if (!user) return;
       setLoading(true);
@@ -8838,23 +9326,17 @@ export default function StaffAgendaPage() {
 
   useEffect(() => {
     let isMounted = true;
-    
-    // Wrapper para verificar montagem
     async function load() {
         if(isMounted) await loadAgenda();
     }
     load();
 
-    // Carrega métodos de pagamento
     if (user?.company_id) {
         getPaymentMethods(user.company_id).then(methods => {
             if(isMounted) setAvailableMethods(methods);
-        }).catch(err => {
-            if (err.status !== 0) console.error("Erro pagamentos", err);
-        });
+        }).catch(err => { if (err.status !== 0) console.error(err); });
     }
     
-    // Auto-refresh a cada 1 min
     const interval = setInterval(() => { if(isMounted) loadAgenda(); }, 60000);
     return () => { isMounted = false; clearInterval(interval); };
   }, [user?.id, selectedDate, user?.company_id]);
@@ -8862,19 +9344,22 @@ export default function StaffAgendaPage() {
 
   // --- CÁLCULOS DO DASHBOARD (KPIS DIÁRIOS) ---
   const dailyStats = useMemo(() => {
-    const totalCount = appointments.filter(a => a.status !== AppointmentStatus.Cancelled).length;
+    const activeAppts = appointments.filter(a => a.status !== AppointmentStatus.Cancelled);
     
-    const totalRevenue = appointments
-        .filter(a => a.status !== AppointmentStatus.Cancelled)
+    // CORREÇÃO: Não conta bloqueios (Status 6) nos KPIs de atendimento
+    const realAppointments = activeAppts.filter(a => a.status !== AppointmentStatus.Blocked);
+    
+    const totalCount = realAppointments.length;
+    
+    const totalRevenue = realAppointments
         .reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
         
-    const completedCount = appointments.filter(a => a.status === AppointmentStatus.Completed).length;
+    const completedCount = realAppointments.filter(a => a.status === AppointmentStatus.Completed).length;
 
     return { totalCount, totalRevenue, completedCount };
   }, [appointments]);
 
 
-  // Controles de Data
   const handlePrevDay = () => {
     const date = new Date(selectedDate + "T00:00:00");
     date.setDate(date.getDate() - 1);
@@ -8886,7 +9371,6 @@ export default function StaffAgendaPage() {
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
-  // Alteração Simples de Status
   async function handleStatusChange(id: string, newStatus: AppointmentStatus) {
     setAppointments(prev => prev.map(appt => 
       appt.id === id ? { ...appt, status: newStatus } : appt
@@ -8899,7 +9383,6 @@ export default function StaffAgendaPage() {
     }
   }
 
-  // --- Fluxo de Finalização com Pagamento ---
   const openFinishModal = (appt: Appointment) => {
     setApptToFinish(appt);
     setFinalPaymentMethod(appt.payment_method || (availableMethods[0]?.id || ""));
@@ -8916,7 +9399,6 @@ export default function StaffAgendaPage() {
             PaymentStatus.PAGO, 
             finalPaymentMethod
         );
-
         setAppointments(prev => prev.map(appt => 
             appt.id === apptToFinish.id ? { 
                 ...appt, 
@@ -8929,7 +9411,6 @@ export default function StaffAgendaPage() {
                 }
             } : appt
         ));
-
         setFinishModalOpen(false);
         setApptToFinish(null);
     } catch (error) {
@@ -8954,7 +9435,6 @@ export default function StaffAgendaPage() {
   return (
     <div className="space-y-8 pb-20">
       
-      {/* HEADER PESSOAL */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
            <h1 className="text-3xl font-bold text-white mb-1">Olá, {user?.name?.split(' ')[0]} 👋</h1>
@@ -8962,15 +9442,13 @@ export default function StaffAgendaPage() {
         </div>
         
         <div className="flex gap-3">
-             {/* BOTÃO NOVO AGENDAMENTO */}
             <button 
                 onClick={() => setBookingModalOpen(true)}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold px-4 py-2 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-2"
             >
-                + Novo Agendamento
+                + Agenda / Bloqueio
             </button>
 
-            {/* Seletor de Data Estilizado */}
             <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
                 <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
                 <div className="px-2 text-center">
@@ -8987,7 +9465,6 @@ export default function StaffAgendaPage() {
         </div>
       </div>
 
-      {/* CARDS DE RESUMO DO DIA */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-indigo-600/10 border border-indigo-500/20 p-4 rounded-2xl flex flex-col justify-between h-28">
              <div className="text-indigo-400 text-sm font-medium">Agendamentos</div>
@@ -9017,7 +9494,6 @@ export default function StaffAgendaPage() {
          Agenda <span className="text-slate-500 text-base font-normal capitalize">({displayDate})</span>
       </h2>
 
-      {/* LISTA TIMELINE */}
       {loading ? (
         <div className="flex justify-center py-20 text-slate-500">Carregando agenda...</div>
       ) : appointments.length === 0 ? (
@@ -9028,13 +9504,20 @@ export default function StaffAgendaPage() {
       ) : (
         <div className="relative border-l border-white/10 ml-4 space-y-8">
           {appointments.map((appt: any) => {
-            // Lógica para mostrar nome do cliente OU nome do avulso
-            const clientName = appt.expand?.client_id?.name || appt.customer_name || "Cliente Avulso";
-            const serviceName = appt.expand?.service_id?.name || "Serviço";
-            const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
             const status = appt.status;
+            // Verifica explicitamente se é status 6 (Bloqueio)
+            const isBlocked = status === AppointmentStatus.Blocked;
+
+            const clientName = isBlocked 
+                ? "BLOQUEIO DE AGENDA" 
+                : (appt.expand?.client_id?.name || appt.customer_name || "Cliente Avulso");
+
+            const serviceName = isBlocked 
+                ? (appt.notes || "Indisponível") 
+                : (appt.expand?.service_id?.name || "Serviço");
+
+            const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
             
-            // Estilos dinâmicos
             const isCompleted = status === AppointmentStatus.Completed;
             const isCancelled = status === AppointmentStatus.Cancelled;
             const isInProgress = status === AppointmentStatus.InProgress;
@@ -9042,8 +9525,14 @@ export default function StaffAgendaPage() {
             let cardBg = "bg-slate-900";
             let borderColor = "border-white/5";
             let timeColor = "text-slate-400";
+            let titleColor = "text-slate-100";
 
-            if (isInProgress) {
+            if (isBlocked) {
+                cardBg = "bg-red-950/20";
+                borderColor = "border-red-500/20";
+                timeColor = "text-red-400";
+                titleColor = "text-red-200";
+            } else if (isInProgress) {
                 cardBg = "bg-indigo-900/20";
                 borderColor = "border-indigo-500/50";
                 timeColor = "text-indigo-400";
@@ -9055,60 +9544,76 @@ export default function StaffAgendaPage() {
 
             return (
               <div key={appt.id} className="relative pl-8">
-                {/* Bolinha da Timeline */}
-                <div className={`absolute -left-[5px] top-6 w-2.5 h-2.5 rounded-full border-2 border-slate-950 ${isInProgress ? 'bg-indigo-500 animate-pulse' : isCompleted ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
+                <div className={`absolute -left-[5px] top-6 w-2.5 h-2.5 rounded-full border-2 border-slate-950 
+                    ${isBlocked ? 'bg-red-500' : isInProgress ? 'bg-indigo-500 animate-pulse' : isCompleted ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+                </div>
                 
                 <div className={`p-5 rounded-2xl border ${borderColor} ${cardBg} transition hover:border-white/10 ${isCancelled ? 'opacity-50 grayscale' : ''}`}>
                     <div className="flex flex-col md:flex-row gap-4 justify-between">
                         
-                        {/* Info Principal */}
                         <div>
-                            <div className={`text-sm font-bold font-mono mb-1 ${timeColor}`}>{formatTime(appt.start_time)}</div>
-                            <h3 className="text-lg font-bold text-slate-100">{clientName}</h3>
-                            <p className="text-slate-400 text-sm">{serviceName}</p>
-                            {appt.customer_phone && <p className="text-xs text-slate-500 mt-1">📞 {appt.customer_phone}</p>}
-                            
-                            {/* Tags */}
-                            <div className="flex gap-2 mt-3">
-                                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-white/5 uppercase tracking-wide">
-                                    {paymentName}
-                                </span>
-                                {isCancelled && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 uppercase">Cancelado</span>}
-                                {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase">Concluído</span>}
+                            <div className={`text-sm font-bold font-mono mb-1 ${timeColor} flex items-center gap-2`}>
+                                <Clock size={14} />
+                                {/* CORREÇÃO: Exibe a hora convertida para local */}
+                                {formatTime(appt.start_time)}
+                                {isBlocked && <span className="text-[10px] uppercase ml-1 border border-red-500/30 px-1 rounded bg-red-500/10">Bloqueado</span>}
                             </div>
+                            
+                            <h3 className={`text-lg font-bold ${titleColor}`}>{clientName}</h3>
+                            <p className="text-slate-400 text-sm flex items-center gap-2">
+                                {isBlocked && <Ban size={14} />} {serviceName}
+                            </p>
+                            
+                            {!isBlocked && (
+                                <>
+                                    {appt.customer_phone && <p className="text-xs text-slate-500 mt-1">📞 {appt.customer_phone}</p>}
+                                    <div className="flex gap-2 mt-3">
+                                        <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-white/5 uppercase tracking-wide">
+                                            {paymentName}
+                                        </span>
+                                        {isCancelled && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 uppercase">Cancelado</span>}
+                                        {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase">Concluído</span>}
+                                    </div>
+                                </>
+                            )}
                         </div>
 
-                        {/* Ações e Valor */}
                         <div className="flex flex-col justify-between items-end gap-4">
-                            <p className="text-xl font-bold text-white">{formatMoney(appt.total_amount || 0)}</p>
+                            {!isBlocked && <p className="text-xl font-bold text-white">{formatMoney(appt.total_amount || 0)}</p>}
                             
                             <div className="flex gap-2">
                                 {!isCancelled && !isCompleted && (
                                     <>
                                         {status !== AppointmentStatus.InProgress && (
                                             <button 
-                                                onClick={() => { if(confirm("Cancelar?")) handleStatusChange(appt.id, AppointmentStatus.Cancelled) }}
-                                                className="px-3 py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 text-xs font-medium transition"
+                                                onClick={() => { if(confirm(isBlocked ? "Remover este bloqueio?" : "Cancelar este agendamento?")) handleStatusChange(appt.id, AppointmentStatus.Cancelled) }}
+                                                className={`px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1
+                                                    ${isBlocked ? "text-red-300 hover:text-red-100 bg-red-500/20 hover:bg-red-500/30" : "text-slate-500 hover:text-red-400 hover:bg-red-500/10"}
+                                                `}
                                             >
-                                                Cancelar
+                                                {isBlocked ? "🔓 Desbloquear" : "Cancelar"}
                                             </button>
                                         )}
                                         
-                                        {status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed ? (
-                                            <button 
-                                                onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
-                                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 transition"
-                                            >
-                                                Iniciar Atendimento
-                                            </button>
-                                        ) : status === AppointmentStatus.InProgress ? (
-                                            <button 
-                                                onClick={() => openFinishModal(appt)}
-                                                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition animate-pulse"
-                                            >
-                                                Finalizar & Receber
-                                            </button>
-                                        ) : null}
+                                        {!isBlocked && (
+                                            <>
+                                                {(status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed) ? (
+                                                    <button 
+                                                        onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
+                                                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 transition"
+                                                    >
+                                                        Iniciar
+                                                    </button>
+                                                ) : status === AppointmentStatus.InProgress ? (
+                                                    <button 
+                                                        onClick={() => openFinishModal(appt)}
+                                                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition animate-pulse"
+                                                    >
+                                                        Finalizar
+                                                    </button>
+                                                ) : null}
+                                            </>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -9121,7 +9626,6 @@ export default function StaffAgendaPage() {
         </div>
       )}
 
-      {/* MODAL DE FINALIZAÇÃO */}
       <Modal 
         isOpen={isFinishModalOpen} 
         onClose={() => setFinishModalOpen(false)} 
@@ -9168,7 +9672,6 @@ export default function StaffAgendaPage() {
         </div>
       </Modal>
 
-      {/* MODAL DE NOVO AGENDAMENTO (STAFF) */}
       <StaffBookingModal 
          isOpen={isBookingModalOpen}
          onClose={() => setBookingModalOpen(false)}
@@ -9178,6 +9681,7 @@ export default function StaffAgendaPage() {
     </div>
   );
 }
+
 --- FIM DO ARQUIVO: src\react-app\pages\staff\StaffAgendaPage.tsx ---
 
 
@@ -9387,6 +9891,7 @@ import SettingsPage from "../pages/owner/SettingsPage";
 import ServicesPage from "../pages/owner/ServicesPage";
 import ShopsPage from "../pages/owner/ShopsPage";
 import StaffPage from "../pages/owner/StaffPage";
+import FinancialPage from "../pages/owner/FinancialPage"; // IMPORTAR AQUI
 
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../components/layout/AppLayout";
@@ -9418,12 +9923,21 @@ export default function AppRouter() {
 
         {/* --- ROTAS DO PAINEL DO DONO (Layout AppLayout) --- */}
         <Route element={<AppLayout />}>
-          {/* CORREÇÃO: O Dashboard deve ficar APENAS aqui dentro para ter Sidebar e Header */}
           <Route
             path="/owner/dashboard"
             element={
               <ProtectedRoute allowedRoles={["dono"]}>
                 <DashboardHome />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* NOVA ROTA FINANCEIRA */}
+          <Route
+            path="/owner/financial"
+            element={
+              <ProtectedRoute allowedRoles={["dono"]}>
+                <FinancialPage />
               </ProtectedRoute>
             }
           />
@@ -9499,6 +10013,7 @@ export default function AppRouter() {
     </BrowserRouter>
   );
 }
+
 --- FIM DO ARQUIVO: src\react-app\routes\AppRouter.tsx ---
 
 

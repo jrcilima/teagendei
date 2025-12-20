@@ -4,13 +4,17 @@ import { getStaffAppointmentsByDate, updateAppointmentStatus } from "@/react-app
 import { getPaymentMethods } from "@/react-app/lib/api/shops"; 
 import { Appointment, AppointmentStatus, PaymentStatus, PaymentMethod } from "@/shared/types";
 import Modal from "@/react-app/components/common/Modal"; 
-// IMPORTANTE: Importar o novo Modal
 import { StaffBookingModal } from "@/react-app/components/dashboard/StaffBookingModal";
+import { Ban, Clock } from "lucide-react";
 
-// Helper Time Visual
+// CORREÇÃO: Time Visual (Converte UTC do banco para hora local do navegador)
+// Antes estava cortando a string (substring), o que mostrava a hora UTC (+3h)
 const formatTime = (isoString: string) => {
   if (!isoString) return "--:--";
-  return isoString.substring(11, 16);
+  return new Date(isoString).toLocaleTimeString("pt-BR", {
+    hour: "2-digit", 
+    minute: "2-digit"
+  });
 };
 
 // Helper Money
@@ -31,17 +35,14 @@ export default function StaffAgendaPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // --- Estados do Modal de Finalização ---
+  // Estados dos Modais
   const [isFinishModalOpen, setFinishModalOpen] = useState(false);
   const [apptToFinish, setApptToFinish] = useState<Appointment | null>(null);
   const [availableMethods, setAvailableMethods] = useState<PaymentMethod[]>([]);
   const [finalPaymentMethod, setFinalPaymentMethod] = useState("");
   const [finishing, setFinishing] = useState(false);
-
-  // --- Estado do Modal de Novo Agendamento ---
   const [isBookingModalOpen, setBookingModalOpen] = useState(false);
 
-  // Carrega Agendamentos
   async function loadAgenda() {
       if (!user) return;
       setLoading(true);
@@ -58,23 +59,17 @@ export default function StaffAgendaPage() {
 
   useEffect(() => {
     let isMounted = true;
-    
-    // Wrapper para verificar montagem
     async function load() {
         if(isMounted) await loadAgenda();
     }
     load();
 
-    // Carrega métodos de pagamento
     if (user?.company_id) {
         getPaymentMethods(user.company_id).then(methods => {
             if(isMounted) setAvailableMethods(methods);
-        }).catch(err => {
-            if (err.status !== 0) console.error("Erro pagamentos", err);
-        });
+        }).catch(err => { if (err.status !== 0) console.error(err); });
     }
     
-    // Auto-refresh a cada 1 min
     const interval = setInterval(() => { if(isMounted) loadAgenda(); }, 60000);
     return () => { isMounted = false; clearInterval(interval); };
   }, [user?.id, selectedDate, user?.company_id]);
@@ -82,19 +77,22 @@ export default function StaffAgendaPage() {
 
   // --- CÁLCULOS DO DASHBOARD (KPIS DIÁRIOS) ---
   const dailyStats = useMemo(() => {
-    const totalCount = appointments.filter(a => a.status !== AppointmentStatus.Cancelled).length;
+    const activeAppts = appointments.filter(a => a.status !== AppointmentStatus.Cancelled);
     
-    const totalRevenue = appointments
-        .filter(a => a.status !== AppointmentStatus.Cancelled)
+    // CORREÇÃO: Não conta bloqueios (Status 6) nos KPIs de atendimento
+    const realAppointments = activeAppts.filter(a => a.status !== AppointmentStatus.Blocked);
+    
+    const totalCount = realAppointments.length;
+    
+    const totalRevenue = realAppointments
         .reduce((acc, curr) => acc + (curr.total_amount || 0), 0);
         
-    const completedCount = appointments.filter(a => a.status === AppointmentStatus.Completed).length;
+    const completedCount = realAppointments.filter(a => a.status === AppointmentStatus.Completed).length;
 
     return { totalCount, totalRevenue, completedCount };
   }, [appointments]);
 
 
-  // Controles de Data
   const handlePrevDay = () => {
     const date = new Date(selectedDate + "T00:00:00");
     date.setDate(date.getDate() - 1);
@@ -106,7 +104,6 @@ export default function StaffAgendaPage() {
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
-  // Alteração Simples de Status
   async function handleStatusChange(id: string, newStatus: AppointmentStatus) {
     setAppointments(prev => prev.map(appt => 
       appt.id === id ? { ...appt, status: newStatus } : appt
@@ -119,7 +116,6 @@ export default function StaffAgendaPage() {
     }
   }
 
-  // --- Fluxo de Finalização com Pagamento ---
   const openFinishModal = (appt: Appointment) => {
     setApptToFinish(appt);
     setFinalPaymentMethod(appt.payment_method || (availableMethods[0]?.id || ""));
@@ -136,7 +132,6 @@ export default function StaffAgendaPage() {
             PaymentStatus.PAGO, 
             finalPaymentMethod
         );
-
         setAppointments(prev => prev.map(appt => 
             appt.id === apptToFinish.id ? { 
                 ...appt, 
@@ -149,7 +144,6 @@ export default function StaffAgendaPage() {
                 }
             } : appt
         ));
-
         setFinishModalOpen(false);
         setApptToFinish(null);
     } catch (error) {
@@ -174,7 +168,6 @@ export default function StaffAgendaPage() {
   return (
     <div className="space-y-8 pb-20">
       
-      {/* HEADER PESSOAL */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
            <h1 className="text-3xl font-bold text-white mb-1">Olá, {user?.name?.split(' ')[0]} 👋</h1>
@@ -182,15 +175,13 @@ export default function StaffAgendaPage() {
         </div>
         
         <div className="flex gap-3">
-             {/* BOTÃO NOVO AGENDAMENTO */}
             <button 
                 onClick={() => setBookingModalOpen(true)}
                 className="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold px-4 py-2 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center gap-2"
             >
-                + Novo Agendamento
+                + Agenda / Bloqueio
             </button>
 
-            {/* Seletor de Data Estilizado */}
             <div className="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-white/10 shadow-lg">
                 <button onClick={handlePrevDay} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">←</button>
                 <div className="px-2 text-center">
@@ -207,7 +198,6 @@ export default function StaffAgendaPage() {
         </div>
       </div>
 
-      {/* CARDS DE RESUMO DO DIA */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-indigo-600/10 border border-indigo-500/20 p-4 rounded-2xl flex flex-col justify-between h-28">
              <div className="text-indigo-400 text-sm font-medium">Agendamentos</div>
@@ -237,7 +227,6 @@ export default function StaffAgendaPage() {
          Agenda <span className="text-slate-500 text-base font-normal capitalize">({displayDate})</span>
       </h2>
 
-      {/* LISTA TIMELINE */}
       {loading ? (
         <div className="flex justify-center py-20 text-slate-500">Carregando agenda...</div>
       ) : appointments.length === 0 ? (
@@ -248,13 +237,20 @@ export default function StaffAgendaPage() {
       ) : (
         <div className="relative border-l border-white/10 ml-4 space-y-8">
           {appointments.map((appt: any) => {
-            // Lógica para mostrar nome do cliente OU nome do avulso
-            const clientName = appt.expand?.client_id?.name || appt.customer_name || "Cliente Avulso";
-            const serviceName = appt.expand?.service_id?.name || "Serviço";
-            const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
             const status = appt.status;
+            // Verifica explicitamente se é status 6 (Bloqueio)
+            const isBlocked = status === AppointmentStatus.Blocked;
+
+            const clientName = isBlocked 
+                ? "BLOQUEIO DE AGENDA" 
+                : (appt.expand?.client_id?.name || appt.customer_name || "Cliente Avulso");
+
+            const serviceName = isBlocked 
+                ? (appt.notes || "Indisponível") 
+                : (appt.expand?.service_id?.name || "Serviço");
+
+            const paymentName = appt.expand?.payment_method?.name || (appt.payment_method ? "Pagamento Definido" : "Não escolhido");
             
-            // Estilos dinâmicos
             const isCompleted = status === AppointmentStatus.Completed;
             const isCancelled = status === AppointmentStatus.Cancelled;
             const isInProgress = status === AppointmentStatus.InProgress;
@@ -262,8 +258,14 @@ export default function StaffAgendaPage() {
             let cardBg = "bg-slate-900";
             let borderColor = "border-white/5";
             let timeColor = "text-slate-400";
+            let titleColor = "text-slate-100";
 
-            if (isInProgress) {
+            if (isBlocked) {
+                cardBg = "bg-red-950/20";
+                borderColor = "border-red-500/20";
+                timeColor = "text-red-400";
+                titleColor = "text-red-200";
+            } else if (isInProgress) {
                 cardBg = "bg-indigo-900/20";
                 borderColor = "border-indigo-500/50";
                 timeColor = "text-indigo-400";
@@ -275,60 +277,76 @@ export default function StaffAgendaPage() {
 
             return (
               <div key={appt.id} className="relative pl-8">
-                {/* Bolinha da Timeline */}
-                <div className={`absolute -left-[5px] top-6 w-2.5 h-2.5 rounded-full border-2 border-slate-950 ${isInProgress ? 'bg-indigo-500 animate-pulse' : isCompleted ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
+                <div className={`absolute -left-[5px] top-6 w-2.5 h-2.5 rounded-full border-2 border-slate-950 
+                    ${isBlocked ? 'bg-red-500' : isInProgress ? 'bg-indigo-500 animate-pulse' : isCompleted ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+                </div>
                 
                 <div className={`p-5 rounded-2xl border ${borderColor} ${cardBg} transition hover:border-white/10 ${isCancelled ? 'opacity-50 grayscale' : ''}`}>
                     <div className="flex flex-col md:flex-row gap-4 justify-between">
                         
-                        {/* Info Principal */}
                         <div>
-                            <div className={`text-sm font-bold font-mono mb-1 ${timeColor}`}>{formatTime(appt.start_time)}</div>
-                            <h3 className="text-lg font-bold text-slate-100">{clientName}</h3>
-                            <p className="text-slate-400 text-sm">{serviceName}</p>
-                            {appt.customer_phone && <p className="text-xs text-slate-500 mt-1">📞 {appt.customer_phone}</p>}
-                            
-                            {/* Tags */}
-                            <div className="flex gap-2 mt-3">
-                                <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-white/5 uppercase tracking-wide">
-                                    {paymentName}
-                                </span>
-                                {isCancelled && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 uppercase">Cancelado</span>}
-                                {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase">Concluído</span>}
+                            <div className={`text-sm font-bold font-mono mb-1 ${timeColor} flex items-center gap-2`}>
+                                <Clock size={14} />
+                                {/* CORREÇÃO: Exibe a hora convertida para local */}
+                                {formatTime(appt.start_time)}
+                                {isBlocked && <span className="text-[10px] uppercase ml-1 border border-red-500/30 px-1 rounded bg-red-500/10">Bloqueado</span>}
                             </div>
+                            
+                            <h3 className={`text-lg font-bold ${titleColor}`}>{clientName}</h3>
+                            <p className="text-slate-400 text-sm flex items-center gap-2">
+                                {isBlocked && <Ban size={14} />} {serviceName}
+                            </p>
+                            
+                            {!isBlocked && (
+                                <>
+                                    {appt.customer_phone && <p className="text-xs text-slate-500 mt-1">📞 {appt.customer_phone}</p>}
+                                    <div className="flex gap-2 mt-3">
+                                        <span className="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-white/5 uppercase tracking-wide">
+                                            {paymentName}
+                                        </span>
+                                        {isCancelled && <span className="px-2 py-0.5 rounded text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 uppercase">Cancelado</span>}
+                                        {isCompleted && <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 uppercase">Concluído</span>}
+                                    </div>
+                                </>
+                            )}
                         </div>
 
-                        {/* Ações e Valor */}
                         <div className="flex flex-col justify-between items-end gap-4">
-                            <p className="text-xl font-bold text-white">{formatMoney(appt.total_amount || 0)}</p>
+                            {!isBlocked && <p className="text-xl font-bold text-white">{formatMoney(appt.total_amount || 0)}</p>}
                             
                             <div className="flex gap-2">
                                 {!isCancelled && !isCompleted && (
                                     <>
                                         {status !== AppointmentStatus.InProgress && (
                                             <button 
-                                                onClick={() => { if(confirm("Cancelar?")) handleStatusChange(appt.id, AppointmentStatus.Cancelled) }}
-                                                className="px-3 py-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 text-xs font-medium transition"
+                                                onClick={() => { if(confirm(isBlocked ? "Remover este bloqueio?" : "Cancelar este agendamento?")) handleStatusChange(appt.id, AppointmentStatus.Cancelled) }}
+                                                className={`px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1
+                                                    ${isBlocked ? "text-red-300 hover:text-red-100 bg-red-500/20 hover:bg-red-500/30" : "text-slate-500 hover:text-red-400 hover:bg-red-500/10"}
+                                                `}
                                             >
-                                                Cancelar
+                                                {isBlocked ? "🔓 Desbloquear" : "Cancelar"}
                                             </button>
                                         )}
                                         
-                                        {status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed ? (
-                                            <button 
-                                                onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
-                                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 transition"
-                                            >
-                                                Iniciar Atendimento
-                                            </button>
-                                        ) : status === AppointmentStatus.InProgress ? (
-                                            <button 
-                                                onClick={() => openFinishModal(appt)}
-                                                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition animate-pulse"
-                                            >
-                                                Finalizar & Receber
-                                            </button>
-                                        ) : null}
+                                        {!isBlocked && (
+                                            <>
+                                                {(status === AppointmentStatus.Pending || status === AppointmentStatus.Confirmed) ? (
+                                                    <button 
+                                                        onClick={() => handleStatusChange(appt.id, AppointmentStatus.InProgress)}
+                                                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/20 transition"
+                                                    >
+                                                        Iniciar
+                                                    </button>
+                                                ) : status === AppointmentStatus.InProgress ? (
+                                                    <button 
+                                                        onClick={() => openFinishModal(appt)}
+                                                        className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-lg shadow-emerald-500/20 transition animate-pulse"
+                                                    >
+                                                        Finalizar
+                                                    </button>
+                                                ) : null}
+                                            </>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -341,7 +359,6 @@ export default function StaffAgendaPage() {
         </div>
       )}
 
-      {/* MODAL DE FINALIZAÇÃO */}
       <Modal 
         isOpen={isFinishModalOpen} 
         onClose={() => setFinishModalOpen(false)} 
@@ -388,7 +405,6 @@ export default function StaffAgendaPage() {
         </div>
       </Modal>
 
-      {/* MODAL DE NOVO AGENDAMENTO (STAFF) */}
       <StaffBookingModal 
          isOpen={isBookingModalOpen}
          onClose={() => setBookingModalOpen(false)}

@@ -4,7 +4,7 @@ import {
   getDailyBookings, 
   type DailyBooking 
 } from "@/react-app/lib/api/dashboard";
-import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, DollarSign, Users, Clock, ChevronLeft, ChevronRight, Ban } from "lucide-react";
 
 export default function DashboardHome() {
   const { user } = useAuth();
@@ -25,20 +25,20 @@ export default function DashboardHome() {
       
       setLoading(true);
       try {
-        // OTIMIZAÇÃO: Chamamos apenas UMA vez a API
         const dataBookings = await getDailyBookings(user.shop_id, selectedDate);
 
-        // Calculamos os KPIs localmente (economiza requisições e evita erros)
-        const totalRevenue = dataBookings.reduce((acc, curr) => acc + curr.value, 0);
-        const totalCount = dataBookings.length;
+        // CORREÇÃO: Filtra BLOQUEIOS (Status 6) dos cálculos de KPI
+        const activeBookings = dataBookings.filter(b => b.raw_status !== "6");
 
-        setBookings(dataBookings);
+        const totalRevenue = activeBookings.reduce((acc, curr) => acc + curr.value, 0);
+        const totalCount = activeBookings.length;
+
+        setBookings(dataBookings); // A lista mostra tudo (inclusive bloqueios)
         setStats({
-          revenue: totalRevenue,
+          revenue: totalRevenue, // KPIs mostram apenas agendamentos reais
           count: totalCount
         });
       } catch (error: any) {
-        // Ignora erro de cancelamento se ainda ocorrer (navegação rápida)
         if (error.status !== 0) {
             console.error("Erro ao carregar dashboard", error);
         }
@@ -63,11 +63,9 @@ export default function DashboardHome() {
     setSelectedDate(date.toISOString().split('T')[0]);
   };
 
-  // Formata valor para BRL
   const formatMoney = (val: number) => 
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 
-  // Formata data para exibição
   const displayDate = new Date(selectedDate + "T00:00:00").toLocaleDateString("pt-BR", {
     weekday: 'long', day: 'numeric', month: 'long'
   });
@@ -110,7 +108,6 @@ export default function DashboardHome() {
 
       {/* CARDS DE KPI */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Faturamento */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-emerald-500/30 transition">
           <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500">
             <DollarSign size={24} />
@@ -121,7 +118,6 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Atendimentos */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-blue-500/30 transition">
           <div className="p-3 bg-blue-500/10 rounded-xl text-blue-500">
             <Users size={24} />
@@ -132,7 +128,6 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Ticket Médio */}
         <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex items-center gap-4 hover:border-purple-500/30 transition">
           <div className="p-3 bg-purple-500/10 rounded-xl text-purple-500">
             <Calendar size={24} />
@@ -150,7 +145,7 @@ export default function DashboardHome() {
       <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/20">
         <div className="p-6 border-b border-slate-800 flex justify-between items-center">
           <h2 className="font-bold text-white flex items-center gap-2">
-            <Clock size={18} className="text-slate-400" /> Agendamentos do Dia
+            <Clock size={18} className="text-slate-400" /> Agenda do Dia
           </h2>
         </div>
         
@@ -159,8 +154,8 @@ export default function DashboardHome() {
             <thead className="bg-slate-950/50 text-slate-200 uppercase text-xs font-bold">
               <tr>
                 <th className="px-6 py-4">Horário</th>
-                <th className="px-6 py-4">Cliente</th>
-                <th className="px-6 py-4">Serviço</th>
+                <th className="px-6 py-4">Cliente / Tipo</th>
+                <th className="px-6 py-4">Serviço / Nota</th>
                 <th className="px-6 py-4">Profissional</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Valor</th>
@@ -175,37 +170,44 @@ export default function DashboardHome() {
                   </td>
                 </tr>
               ) : (
-                bookings.map((booking) => (
-                  <tr key={booking.id} className="hover:bg-slate-800/50 transition cursor-default">
-                    <td className="px-6 py-4 font-mono text-white">
-                        {booking.time}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-slate-200">
-                      {booking.client_name}
-                      {/* Badge para Avulso */}
-                      {!booking.client_id && (
-                        <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10" title="Cliente sem cadastro">Avulso</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">{booking.service_name}</td>
-                    <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
-                        ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
-                          booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
-                          booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                          booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                          'bg-slate-700 text-slate-300 border-slate-600'
-                        }`}
-                      >
-                        {booking.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-medium text-slate-200">
-                      {formatMoney(booking.value)}
-                    </td>
-                  </tr>
-                ))
+                bookings.map((booking) => {
+                  const isBlock = booking.raw_status === "6";
+                  
+                  return (
+                    <tr key={booking.id} className={`transition cursor-default ${isBlock ? "bg-red-950/10 hover:bg-red-950/20" : "hover:bg-slate-800/50"}`}>
+                      <td className="px-6 py-4 font-mono text-white">
+                          {booking.time}
+                      </td>
+                      <td className="px-6 py-4 font-medium text-slate-200">
+                        {booking.client_name}
+                        {!booking.client_id && !isBlock && (
+                          <span className="ml-2 text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded border border-white/10">Avulso</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 flex items-center gap-2">
+                        {isBlock && <Ban size={14} className="text-red-400"/>}
+                        {booking.service_name}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400">{booking.professional_name}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-[10px] uppercase font-bold tracking-wide border
+                          ${booking.status === 'Confirmado' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 
+                            booking.status === 'Pendente' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                            booking.status === 'Concluído' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                            booking.status === 'Em Andamento' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                            booking.status === 'Bloqueio' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                            'bg-slate-700 text-slate-300 border-slate-600'
+                          }`}
+                        >
+                          {booking.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-200">
+                        {isBlock ? "-" : formatMoney(booking.value)}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

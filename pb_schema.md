@@ -173,9 +173,9 @@
   },
   {
     "id": "_pb_users_auth_",
-    "listRule": "id = @request.auth.id || (shop_id = @request.auth.shop_id && role != 'cliente') || (@request.auth.role = 'dono' && company_id = @request.auth.company_id)",
-    "viewRule": "id = @request.auth.id || shop_id = @request.auth.shop_id || (@request.auth.role = 'dono' && company_id = @request.auth.company_id)",
-    "createRule": "",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "id = @request.auth.id",
     "updateRule": "id = @request.auth.id || (company_id != \"\" && company_id = @request.auth.company_id && @request.auth.role = \"dono\")",
     "deleteRule": "id = @request.auth.id || (company_id != \"\" && company_id = @request.auth.company_id && @request.auth.role = \"dono\")",
     "name": "users",
@@ -839,11 +839,11 @@
   },
   {
     "id": "pbc_1037645436",
-    "listRule": "shop_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id || @request.auth.id != \"\"",
-    "viewRule": "shop_id.owner_id = @request.auth.id || client_id = @request.auth.id || barber_id = @request.auth.id",
-    "createRule": "client_id = @request.auth.id",
-    "updateRule": "shop_id.company_id.owner_id = @request.auth.id || barber_id = @request.auth.id || client_id = @request.auth.id",
-    "deleteRule": null,
+    "listRule": "shop_id = @request.auth.shop_id || client_id = @request.auth.id || barber_id = @request.auth.id",
+    "viewRule": "shop_id = @request.auth.shop_id || client_id = @request.auth.id || barber_id = @request.auth.id",
+    "createRule": "@request.auth.id != \"\"",
+    "updateRule": "shop_id = @request.auth.shop_id || client_id = @request.auth.id",
+    "deleteRule": "shop_id = @request.auth.shop_id",
     "name": "appointments",
     "type": "base",
     "fields": [
@@ -994,7 +994,7 @@
         "minSelect": 0,
         "name": "service_id",
         "presentable": false,
-        "required": true,
+        "required": false,
         "system": false,
         "type": "relation"
       },
@@ -1061,8 +1061,7 @@
       }
     ],
     "indexes": [
-      "CREATE UNIQUE INDEX `idx_unique_active_booking` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`\n) WHERE status != 0",
-      "CREATE UNIQUE INDEX `idx_unique_client_booking` ON `appointments` (\n  `start_time`,\n  `client_id`\n) WHERE status != '0'"
+      "CREATE UNIQUE INDEX `idx_unique_active_booking` ON `appointments` (\n  `shop_id`,\n  `barber_id`,\n  `start_time`\n) WHERE status != 0"
     ],
     "system": false
   },
@@ -1845,9 +1844,9 @@
   },
   {
     "id": "pbc_3896301928",
-    "listRule": "is_active = true || owner_id = @request.auth.id || company_id.owner_id = @request.auth.id || id = @request.auth.shop_id",
-    "viewRule": "is_active = true || owner_id = @request.auth.id || company_id.owner_id = @request.auth.id || id = @request.auth.shop_id",
-    "createRule": "@request.auth.id != \"\"",
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "company_id.owner_id = @request.auth.id",
     "updateRule": "company_id.owner_id = @request.auth.id",
     "deleteRule": null,
     "name": "shops",

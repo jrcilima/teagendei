@@ -17,6 +17,7 @@ import SettingsPage from "../pages/owner/SettingsPage";
 import ServicesPage from "../pages/owner/ServicesPage";
 import ShopsPage from "../pages/owner/ShopsPage";
 import StaffPage from "../pages/owner/StaffPage";
+import FinancialPage from "../pages/owner/FinancialPage"; // IMPORTAR AQUI
 
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "../components/layout/AppLayout";
@@ -48,12 +49,21 @@ export default function AppRouter() {
 
         {/* --- ROTAS DO PAINEL DO DONO (Layout AppLayout) --- */}
         <Route element={<AppLayout />}>
-          {/* CORREÇÃO: O Dashboard deve ficar APENAS aqui dentro para ter Sidebar e Header */}
           <Route
             path="/owner/dashboard"
             element={
               <ProtectedRoute allowedRoles={["dono"]}>
                 <DashboardHome />
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* NOVA ROTA FINANCEIRA */}
+          <Route
+            path="/owner/financial"
+            element={
+              <ProtectedRoute allowedRoles={["dono"]}>
+                <FinancialPage />
               </ProtectedRoute>
             }
           />
